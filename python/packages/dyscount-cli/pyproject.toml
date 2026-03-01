@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dyscount-cli"
+version = "0.1.0"
+description = "CLI for Dyscount task queue system"
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12.0",
+    "uvicorn>=0.27.0",
+    "dyscount-core",
+    "dyscount-api",
+]
+
+[project.scripts]
+dyscount = "dyscount_cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dyscount_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/"]
