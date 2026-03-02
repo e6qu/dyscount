@@ -195,6 +195,7 @@ class TableMetadata(BaseModel):
     LatestStreamLabel: Optional[str] = None
     SSEDescription: Optional[SSEDescription] = None
     DeletionProtectionEnabled: Optional[bool] = None
+    TimeToLiveDescription: Optional[Dict[str, Any]] = None
 
     def get_key_schema_dict(self) -> Dict[str, str]:
         """Get key schema as a dict mapping attribute name to key type.

@@ -954,3 +954,84 @@ class ListTagsOfResourceResponse(BaseModel):
     
     tags: list[dict[str, str]] = Field(default_factory=list, alias="Tags")
     next_token: Optional[str] = Field(None, alias="NextToken")
+
+
+
+# =============================================================================
+# Time-to-Live (TTL) Operations
+# =============================================================================
+
+class TimeToLiveSpecification(BaseModel):
+    """Represents the TTL configuration for a table.
+    
+    Attributes:
+        AttributeName: The name of the TTL attribute (required)
+        Enabled: Whether TTL is enabled (required)
+    """
+    model_config = {"populate_by_name": True}
+    
+    attribute_name: str = Field(..., alias="AttributeName")
+    enabled: bool = Field(..., alias="Enabled")
+
+
+class UpdateTimeToLiveRequest(BaseModel):
+    """Request model for UpdateTimeToLive operation.
+    
+    Enables or disables TTL on a table.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        TimeToLiveSpecification: The TTL configuration (required)
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., alias="TableName")
+    time_to_live_specification: TimeToLiveSpecification = Field(..., alias="TimeToLiveSpecification")
+
+
+class TimeToLiveDescription(BaseModel):
+    """Describes the TTL configuration of a table.
+    
+    Attributes:
+        AttributeName: The name of the TTL attribute
+        TimeToLiveStatus: The status of TTL (ENABLING, DISABLING, ENABLED, DISABLED)
+    """
+    model_config = {"populate_by_name": True}
+    
+    attribute_name: Optional[str] = Field(None, alias="AttributeName")
+    time_to_live_status: str = Field(..., alias="TimeToLiveStatus")
+
+
+class UpdateTimeToLiveResponse(BaseModel):
+    """Response model for UpdateTimeToLive operation.
+    
+    Attributes:
+        TimeToLiveSpecification: The updated TTL configuration
+    """
+    model_config = {"populate_by_name": True}
+    
+    time_to_live_specification: TimeToLiveSpecification = Field(..., alias="TimeToLiveSpecification")
+
+
+class DescribeTimeToLiveRequest(BaseModel):
+    """Request model for DescribeTimeToLive operation.
+    
+    Describes the TTL configuration of a table.
+    
+    Attributes:
+        TableName: The name of the table (required)
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., alias="TableName")
+
+
+class DescribeTimeToLiveResponse(BaseModel):
+    """Response model for DescribeTimeToLive operation.
+    
+    Attributes:
+        TimeToLiveDescription: The TTL configuration description
+    """
+    model_config = {"populate_by_name": True}
+    
+    time_to_live_description: TimeToLiveDescription = Field(..., alias="TimeToLiveDescription")
