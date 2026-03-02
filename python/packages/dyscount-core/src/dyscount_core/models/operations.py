@@ -348,3 +348,49 @@ class PutItemResponse(BaseModel):
     attributes: dict[str, Any] | None = Field(None, alias="Attributes")
     consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
     item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
+
+
+# =============================================================================
+# DeleteItem (Data Plane)
+# =============================================================================
+
+class DeleteItemRequest(BaseModel):
+    """Request model for DeleteItem operation.
+    
+    Deletes a single item in a table by primary key.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: A map of attribute names to AttributeValue objects representing the primary key (required)
+        ConditionExpression: A condition that must be satisfied
+        ExpressionAttributeNames: One or more substitution tokens for attribute names
+        ExpressionAttributeValues: One or more values that can be substituted
+        ReturnConsumedCapacity: Whether to return consumed capacity
+        ReturnItemCollectionMetrics: Whether to return item collection metrics
+        ReturnValues: Use ALL_OLD to get the deleted item attributes
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: dict[str, Any] = Field(..., alias="Key")
+    condition_expression: str | None = Field(None, alias="ConditionExpression")
+    expression_attribute_names: dict[str, str] | None = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: dict[str, Any] | None = Field(None, alias="ExpressionAttributeValues")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+    return_item_collection_metrics: str | None = Field(None, alias="ReturnItemCollectionMetrics")
+    return_values: str | None = Field(None, alias="ReturnValues")
+
+
+class DeleteItemResponse(BaseModel):
+    """Response model for DeleteItem operation.
+    
+    Attributes:
+        Attributes: The attribute values as they appeared before the DeleteItem operation
+        ConsumedCapacity: The capacity units consumed
+        ItemCollectionMetrics: Information about item collections
+    """
+    model_config = {"populate_by_name": True}
+    
+    attributes: dict[str, Any] | None = Field(None, alias="Attributes")
+    consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
+    item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
