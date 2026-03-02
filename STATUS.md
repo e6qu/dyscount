@@ -97,8 +97,9 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 | test_transact_write_items.py | 17 | ✅ All passing |
 | test_create_table_gsi.py | 14 | ✅ All passing |
 | test_update_table_gsi.py | 12 | ✅ All passing |
+| test_tagging.py | 15 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Total** | **294** | **✅ 294 tests passing** |
+| **Total** | **309** | **✅ 309 tests passing** |
 
 ## Implemented Operations
 
@@ -122,27 +123,18 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 - ✅ TransactGetItems - Atomic read (up to 100 items)
 - ✅ TransactWriteItems - Atomic write (up to 100 items)
 
-## Files Created in M1 Phase 5
+## Files Created in M1 Phase 6
 
-### Transaction Operations (T3-T4)
-- `models/operations.py` - TransactGetItemsRequest/Response, TransactWriteItemsRequest/Response
-- `tests/test_transact_get_items.py` - 10 TransactGetItems tests
-- `tests/test_transact_write_items.py` - 17 TransactWriteItems tests
+### Metrics & Observability
+- `metrics.py` - Prometheus metrics endpoint and collectors
+- Configured in `main.py` with conditional enablement
 
-### GSI Support (T5-T6)
-- `tests/test_create_table_gsi.py` - 14 GSI/LSI CreateTable tests
-- `tests/test_update_table_gsi.py` - 12 UpdateTable GSI tests
-- `services/table_service.py` - update_table() with GSI support
-- `storage/table_manager.py` - _update_metadata(), _add_gsi(), _remove_gsi()
-- `api/routes/tables.py` - handle_update_table() route
-
-### Updated Files
-- `services/item_service.py` - transact_get_items() and transact_write_items() methods
-- `api/routes/tables.py` - handle_transact_get_items() and handle_transact_write_items() handlers
-- `storage/table_manager.py` - GSI/LSI support in create_table()
-- `services/table_service.py` - GSI/LSI validation in create_table()
-- `models/table.py` - Fixed GlobalSecondaryIndex.ProvisionedThroughput type
-- `models/operations.py` - Fixed UpdateTableRequest field types
+### Tagging Operations
+- `models/operations.py` - TagResource, UntagResource, ListTagsOfResource models
+- `services/table_service.py` - Tagging service methods
+- `storage/table_manager.py` - _store_tags(), _remove_tags(), _get_tags()
+- `api/routes/tables.py` - Tagging route handlers
+- `tests/test_tagging.py` - 15 comprehensive tagging tests
 
 ## Specifications Available
 
@@ -168,6 +160,7 @@ None.
 1. ✅ **M1P5-T3 COMPLETE** - TransactGetItems implemented
 2. ✅ **M1P5-T4 COMPLETE** - TransactWriteItems implemented
 3. ✅ **M1P5-T5** - GSI CreateTable support complete
-4. 🔄 **M1P5-T6** - UpdateTable for GSI (next)
+4. ✅ **M1P5-T6** - UpdateTable for GSI complete
+5. 🔄 **M1P6** - Auth, Metrics & Tagging (in progress)
 
 See `DO_NEXT.md` for details.
