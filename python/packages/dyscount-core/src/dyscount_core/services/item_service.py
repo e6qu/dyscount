@@ -8,6 +8,8 @@ from dyscount_core.models.errors import (
     ValidationException,
 )
 from dyscount_core.models.operations import (
+    PutItemRequest,
+    PutItemResponse,
     ConsumedCapacity,
     GetItemRequest,
     GetItemResponse,
@@ -140,3 +142,90 @@ class ItemService:
     async def close(self):
         """Close any open resources."""
         await self.table_manager.close()
+
+    def _validate_item(self, item: dict[str, Any], table_name: str) -> None:
+        """Validate the item format.
+        
+        Args:
+            item: The item dict with AttributeValue format
+            table_name: Name of the table (for error messages)
+        """
+        if not item:
+            raise ValidationException("Item cannot be empty")
+        
+        if not isinstance(item, dict):
+            raise ValidationException("Item must be a map")
+        
+        # Each value should be an AttributeValue (dict with single type key)
+        for attr_name, attr_value in item.items():
+            if not isinstance(attr_value, dict):
+                raise ValidationException(
+                    f"Item attribute '{attr_name}' must be an AttributeValue map"
+                )
+            
+            # Check that exactly one type is specified
+            valid_types = {'S', 'N', 'B', 'BOOL', 'NULL', 'M', 'L', 'SS', 'NS', 'BS'}
+            type_keys = [k for k in attr_value if k in valid_types]
+            
+            if len(type_keys) != 1:
+                raise ValidationException(
+                    f"Item attribute '{attr_name}' must have exactly one type descriptor, "
+                    f"got: {type_keys}"
+                )
+    
+    async def put_item(self, request: PutItemRequest) -> PutItemResponse:
+        """Put an item into a table.
+        
+        Args:
+            request: PutItemRequest with table name and item
+        
+        Returns:
+            PutItemResponse with old attributes if ReturnValues=ALL_OLD
+        
+        Raises:
+            ResourceNotFoundException: If table does not exist
+            ValidationException: If request is invalid
+        """
+        from dyscount_core.models.operations import PutItemResponse
+        
+        # Validate table name
+        self._validate_table_name(request.table_name)
+        
+        # Validate item
+        self._validate_item(request.item, request.table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(request.table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {request.table_name}"
+            )
+        
+        # Put the item
+        try:
+            old_item = await self.table_manager.put_item(
+                table_name=request.table_name,
+                item=request.item,
+            )
+        except ValueError as e:
+            if "key" in str(e).lower():
+                raise ValidationException(str(e)) from None
+            raise
+        
+        # Calculate consumed capacity
+        # Write operation = 1 WCU
+        consumed_capacity = self._calculate_consumed_capacity(
+            request.table_name,
+            capacity_units=1.0,
+        )
+        consumed_capacity.write_capacity_units = 1.0
+        
+        # Build response
+        response = PutItemResponse(
+            consumed_capacity=consumed_capacity,
+        )
+        
+        # Handle ReturnValues
+        if request.return_values == "ALL_OLD" and old_item is not None:
+            response.attributes = old_item
+        
+        return response

@@ -438,19 +438,15 @@ class TableManager:
             sk_bytes = self._serialize_key_value(sort_key_value)
             sk_type = self._get_key_type(sort_key_value)
         
+        # Use empty blob for NULL sk lookup
+        if sk_bytes is None:
+            sk_bytes = b''
+        
         # Query the database
-        if sk_bytes is not None:
-            # Composite key lookup
-            cursor = await conn.execute(
-                "SELECT item_data FROM items WHERE pk = ? AND sk = ?",
-                (pk_bytes, sk_bytes)
-            )
-        else:
-            # Partition key only lookup
-            cursor = await conn.execute(
-                "SELECT item_data FROM items WHERE pk = ? AND sk IS NULL",
-                (pk_bytes,)
-            )
+        cursor = await conn.execute(
+            "SELECT item_data FROM items WHERE pk = ? AND sk = ?",
+            (pk_bytes, sk_bytes)
+        )
         
         row = await cursor.fetchone()
         
@@ -500,3 +496,101 @@ class TableManager:
                 return "B"
         
         raise ValueError(f"Invalid key value format: {key_value}")
+
+    async def put_item(
+        self,
+        table_name: str,
+        item: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Put an item into a table.
+        
+        Creates a new item or replaces an existing item.
+        
+        Args:
+            table_name: Name of the table
+            item: Item data as dict of attribute name to AttributeValue
+        
+        Returns:
+            Previous item data if item existed, None otherwise
+        
+        Raises:
+            ValueError: If table does not exist
+        """
+        import msgpack
+        
+        db_path = self._get_db_path(table_name)
+        
+        if not db_path.exists():
+            raise ValueError(f"Table does not exist: {table_name}")
+        
+        # Get table metadata to understand key schema
+        conn = await self.connection_manager.get_connection(db_path)
+        metadata = await self._load_metadata(conn, table_name)
+        
+        if metadata is None:
+            raise ValueError(f"Table metadata not found: {table_name}")
+        
+        # Extract partition key and sort key from item
+        key_schema = metadata.KeySchema
+        partition_key_name = key_schema[0].AttributeName
+        partition_key_value = item.get(partition_key_name)
+        
+        if partition_key_value is None:
+            raise ValueError(f"Missing partition key attribute: {partition_key_name}")
+        
+        # Serialize partition key
+        pk_bytes = self._serialize_key_value(partition_key_value)
+        pk_type = self._get_key_type(partition_key_value)
+        
+        # Handle sort key if present
+        sk_bytes = None
+        sk_type = None
+        if len(key_schema) > 1:
+            sort_key_name = key_schema[1].AttributeName
+            sort_key_value = item.get(sort_key_name)
+            
+            if sort_key_value is None:
+                raise ValueError(f"Missing sort key attribute: {sort_key_name}")
+            
+            sk_bytes = self._serialize_key_value(sort_key_value)
+            sk_type = self._get_key_type(sort_key_value)
+        
+        # Use empty blob for NULL sk lookup
+        lookup_sk = sk_bytes if sk_bytes is not None else b''
+        
+        # Check if item already exists (for returning old values)
+        cursor = await conn.execute(
+            "SELECT item_data FROM items WHERE pk = ? AND sk = ?",
+            (pk_bytes, lookup_sk)
+        )
+        
+        row = await cursor.fetchone()
+        old_item = None
+        if row is not None:
+            old_item = msgpack.unpackb(row[0], raw=False)
+        
+        # Serialize item data
+        item_data = msgpack.packb(item, use_bin_type=True)
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        
+        # Use empty blob for NULL sk to make UPSERT work correctly
+        if sk_bytes is None:
+            sk_bytes = b''
+            sk_type = ''
+        
+        # Insert or replace item
+        await conn.execute(
+            """
+            INSERT INTO items (pk, sk, pk_type, sk_type, item_data, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT(pk, sk) DO UPDATE SET
+                item_data = excluded.item_data,
+                updated_at = excluded.updated_at,
+                version = items.version + 1
+            """,
+            (pk_bytes, sk_bytes, pk_type, sk_type, item_data, now_ms, now_ms)
+        )
+        
+        await conn.commit()
+        
+        return old_item
