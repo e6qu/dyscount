@@ -1,93 +1,54 @@
-# Do Next - M1 Phase 2 COMPLETE ✅
+# Do Next - M1 Phase 3 IN PROGRESS
 
-## ✅ All Tasks M1P2-T1 to T10 Complete
+## ✅ Previous Milestones Complete
 
-### Completed Summary
-- ✅ Python monorepo with uv workspace
-- ✅ dyscount-core package (models, storage, config, services)
-- ✅ dyscount-api package (FastAPI HTTP server with 5 operations)
-- ✅ dyscount-cli package (Typer CLI with serve/config commands)
-- ✅ CreateTable, DeleteTable, ListTables, DescribeTable, DescribeEndpoints
-- ✅ 84 comprehensive tests
-- ✅ Multi-stage Dockerfile
-- ✅ Full error handling per DynamoDB spec
+### M1 Phase 1: Foundation ✅
+- Repository structure
+- Documentation
 
----
-
-## 🎉 M1 Phase 2: Control Plane - COMPLETE
-
-**Status**: ✅ Ready for Git Commit and PR
-
-### Test Results
-```
-84 passed in 1.81s
-
-test_models.py          58 tests ✅
-test_api_basic.py        2 tests ✅
-test_cli.py              4 tests ✅
-test_create_table.py     7 tests ✅
-test_delete_table.py     4 tests ✅
-test_list_tables.py      5 tests ✅
-test_describe_table.py   4 tests ✅
-```
-
-### Operations Implemented
-| Operation | Status | Tests |
-|-----------|--------|-------|
-| CreateTable | ✅ Complete | 7 |
-| DeleteTable | ✅ Complete | 4 |
-| ListTables | ✅ Complete | 5 |
-| DescribeTable | ✅ Complete | 3 |
-| DescribeEndpoints | ✅ Complete | 1 |
+### M1 Phase 2: Control Plane ✅ 
+- Python monorepo with uv workspace
+- 5 DynamoDB operations implemented
+- 84 tests passing
+- CI/CD workflows added
 
 ---
 
-## 🔄 Git Workflow - Ready for Commit
+## 🚀 Current Phase: M1 Phase 3 - Data Plane
 
-### Current Branch
-`phase/M1-P2-python-control-plane`
+**Status**: 🟡 In Progress
 
-### Changes to Commit
-- All Python package code (core, api, cli)
-- 84 tests
-- Dockerfile
-- Task files moved to done/
+### Phase 3 Tasks
 
-### Commit Message Template
-```
-feat: M1 Phase 2 - Python Control Plane Implementation
+| Task | Operation | Status | Est. Effort |
+|------|-----------|--------|-------------|
+| M1P3-T1 | GetItem | Planned | 1 day |
+| M1P3-T2 | PutItem | Planned | 1.5 days |
+| M1P3-T3 | DeleteItem | Planned | 1 day |
+| M1P3-T4 | UpdateItem | Planned | 3 days |
+| M1P3-T5 | Condition Expressions | Planned | 2 days |
+| M1P3-T6 | E2E Tests | Planned | 1 day |
 
-Implement 5 DynamoDB Control Plane operations:
-- CreateTable with validation and SQLite backend
-- DeleteTable with connection cleanup
-- ListTables with pagination support
-- DescribeTable with full metadata
-- DescribeEndpoints for service discovery
-
-Features:
-- FastAPI HTTP server with X-Amz-Target routing
-- Structured JSON logging with structlog
-- Pydantic models for all DynamoDB types
-- SQLite storage (one file per table)
-- Comprehensive error handling per DynamoDB spec
-- 84 unit and integration tests
-- Multi-stage Dockerfile with uv
-
-Test: uv run pytest tests/ -v (84 passed)
-```
+**Total Estimated Effort**: ~9.5 days
 
 ---
 
-## 🚀 Next Phase: M1 Phase 3 - Data Plane
+## 📋 Immediate Next Steps
 
-Once PR is merged, proceed with:
+1. **Create feature branch** from main:
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b phase/M1-P3-data-plane
+   ```
 
-| Task | Operation | Description |
-|------|-----------|-------------|
-| M1P3-T1 | GetItem | Retrieve single item by key |
-| M1P3-T2 | PutItem | Create or replace item |
-| M1P3-T3 | DeleteItem | Delete single item |
-| M1P3-T4 | UpdateItem | Update item with expressions |
+2. **Implement T1: GetItem**
+   - Add GetItem models
+   - Implement storage.get_item()
+   - Add API route
+   - Write tests
+
+3. **Create PR** after T1-T3 complete
 
 ---
 
@@ -95,12 +56,17 @@ Once PR is merged, proceed with:
 
 | Milestone | Phases | Progress |
 |-----------|--------|----------|
-| M1: Foundation | 10 | 🟡 45% |
+| M1: Foundation | 10 | 🟡 55% (2/10 complete, 1 in progress) |
 | M2: Advanced | 4 | ⚪ 0% |
 | M3: Global/Streams | 3 | ⚪ 0% |
 | M4: Import/Export | 3 | ⚪ 0% |
-| **Total** | **20** | **20%** |
+| **Total** | **20** | **25%** |
 
 ---
 
-**Say "commit" to proceed with git commit and PR creation.**
+## 📝 Notes
+
+- CI/CD workflows are active (PR #2 merged)
+- All Phase 3 task files created in `python/tasks/todo/`
+- Expression parsing is the most complex part of this phase
+- Consider incremental PRs (T1-T3 first, then T4-T6)
