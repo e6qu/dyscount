@@ -1,125 +1,77 @@
-# Do Next - M1 COMPLETE, Starting M2
+# Do Next - M2 IN PROGRESS
 
-## ✅ Previous Milestones Complete
+## ✅ Completed Milestones
 
-### M1 Phase 1: Foundation ✅
-- Repository structure
-- Documentation
-- 9 specifications created (~249KB)
+### M1: Foundation (All 9 Phases) ✅
+- 36 DynamoDB operations implemented
+- 389 tests across 4 languages (Python, Go, Rust, Zig)
+- 100% complete
 
-### M1 Phase 2: Python Control Plane ✅ 
-- Python monorepo with uv workspace
-- 5 DynamoDB operations implemented
-- 84 tests passing
-
-### M1 Phase 3: Python Data Plane ✅
-- GetItem, PutItem, DeleteItem, UpdateItem
-- Condition Expressions
-- E2E Tests
-- 208 tests passing
-
-### M1 Phase 4: Query & Scan ✅
-- Query with KeyConditionExpression
-- Scan with FilterExpression
-- Pagination support
-- 233 tests passing
-
-### M1 Phase 5: Batch, Transactions & Indexes ✅
-- BatchGetItem, BatchWriteItem
-- TransactGetItems, TransactWriteItems
-- GSI/LSI support
-- 294 tests passing
-
-### M1 Phase 6: Metrics & Tagging ✅
-- Prometheus metrics endpoint
-- TagResource, UntagResource, ListTagsOfResource
-- AWS SigV4 deferred to later phase
-- 309 tests passing
-
-### M1 Phase 7: Go Implementation ✅
-- Full Go implementation (control + data plane)
-- 50 tests passing
-
-### M1 Phase 8: Rust Implementation ✅
-- Full Rust implementation (control + data plane)
-- 21 tests passing
-
-### M1 Phase 9: Zig Implementation ✅
-- Zig control plane implementation
-- 9 tests passing
+### M2 Phase 1: Time-to-Live (TTL) ✅
+- UpdateTimeToLive - Enable/disable TTL on tables
+- DescribeTimeToLive - Get TTL configuration
+- Background cleanup process for expired items
+- 12 TTL tests passing
 
 ---
 
-## 🚀 Current Phase: M2 - Advanced Operations
+## 🚀 Current Phase: M2 Phase 2 - Backup & Restore
 
-**Status**: ⚪ **STARTING**
+**Status**: 🟡 **IN PROGRESS**
 
-### M2 Phase 1: Time-to-Live (TTL)
-
-| Task | Operation | Status | Est. Effort |
-|------|-----------|--------|-------------|
-| M2P1-T1 | TTL Implementation | Planned | 2 days |
-| M2P1-T2 | Expiration Management | Planned | 1.5 days |
-
-**Total Effort**: ~3.5 days
-
-### M2 Phase 2: Backup & Restore
+### M2 Phase 2 Tasks
 
 | Task | Operation | Status | Est. Effort |
 |------|-----------|--------|-------------|
 | M2P2-T1 | CreateBackup | Planned | 2 days |
 | M2P2-T2 | RestoreTableFromBackup | Planned | 2 days |
 | M2P2-T3 | ListBackups | Planned | 1 day |
+| M2P2-T4 | DeleteBackup | Planned | 1 day |
 
-**Total Effort**: ~5 days
+**Total Effort**: ~6 days
 
-### M2 Phase 3: Point-in-Time Recovery
-
-| Task | Operation | Status | Est. Effort |
-|------|-----------|--------|-------------|
-| M2P3-T1 | Enable/Disable PITR | Planned | 2 days |
-| M2P3-T2 | RestoreTableToPointInTime | Planned | 2 days |
-
-**Total Effort**: ~4 days
-
-### M2 Phase 4: Advanced Query Features
-
-| Task | Operation | Status | Est. Effort |
-|------|-----------|--------|-------------|
-| M2P4-T1 | PartiQL Support | Planned | 3 days |
-| M2P4-T2 | Parallel Scan Improvements | Planned | 1.5 days |
-
-**Total Effort**: ~4.5 days
+**Operations to Implement**:
+1. **CreateBackup** - Creates a backup of an existing table
+2. **RestoreTableFromBackup** - Creates a new table from a backup
+3. **ListBackups** - Lists all backups for the account
+4. **DeleteBackup** - Deletes an existing backup
 
 ---
 
 ## 📋 Immediate Next Steps
 
-### 1. Create feature branch for M2 Phase 1
+### 1. Create feature branch for M2 Phase 2
 ```bash
 git checkout main
 git pull origin main
-git checkout -b feature/M2P1-ttl
+git checkout -b feature/M2P2-backup-restore
 ```
 
-### 2. Implement TTL (M2P1-T1)
+### 2. Implement M2P2-T1: CreateBackup
 
 **Goals**:
-- Enable TTL on tables
-- Store expiration timestamps
-- Background cleanup process
-- UpdateItem with TTL attribute
+- Create on-demand backups of DynamoDB tables
+- Store backup metadata
+- Copy table data to backup storage
 
-### 3. M1 Phase 10: Cross-Language E2E Testing
+**Implementation Notes**:
+- Backup storage: `data/backups/<backup_id>/`
+- Store table schema + all items
+- Metadata: table_name, creation_date, item_count, size_bytes
 
-Before moving fully to M2, complete E2E validation:
+### 3. Implement M2P2-T2: RestoreTableFromBackup
 
 **Goals**:
-- boto3 tests against Go implementation
-- boto3 tests against Rust implementation
-- boto3 tests against Zig implementation
-- Performance benchmarks across languages
-- Compatibility matrix validation
+- Create new table from backup
+- Restore all items
+- Preserve original table schema
+
+### 4. Implement M2P2-T3: ListBackups
+
+**Goals**:
+- List all backups with filtering
+- Pagination support
+- Show backup status and metadata
 
 ---
 
@@ -128,27 +80,19 @@ Before moving fully to M2, complete E2E validation:
 | Milestone | Phases | Progress |
 |-----------|--------|----------|
 | M1: Foundation | 9 | ✅ 100% |
-| M2: Advanced | 4 | ⚪ 0% |
+| M2 Phase 1: TTL | 1 | ✅ 100% |
+| M2 Phase 2: Backup | 1 | 🟡 0% |
+| M2 Phase 3: PITR | 1 | ⚪ 0% |
+| M2 Phase 4: PartiQL | 1 | ⚪ 0% |
 | M3: Global/Streams | 3 | ⚪ 0% |
 | M4: Import/Export | 3 | ⚪ 0% |
-| **Total** | **19** | **53%** |
-
----
-
-## 🔜 M2 Phase 1 Scope
-
-**TTL Operations**:
-- UpdateTimeToLive - Enable/disable TTL on a table
-- DescribeTimeToLive - Get TTL configuration
-- Automatic item expiration
-- Background cleanup process
+| **Total** | **20** | **50%** |
 
 ---
 
 ## 📝 Notes
 
-- M1 is 100% complete (all 9 phases)
-- 389 total tests passing across 4 languages
-- 36 DynamoDB operations implemented
-- Ready for advanced features (TTL, backups, PITR)
-- AWS SigV4 auth deferred to production phase
+- M1 complete: 36 operations, 389 tests
+- M2P1 (TTL) complete: 2 operations, 12 tests
+- Total operations: 38/61 (62%)
+- Total tests: 401
