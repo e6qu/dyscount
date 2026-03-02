@@ -100,6 +100,10 @@ async def dynamodb_endpoint(
         return await handle_untag_resource(body, config)
     elif operation == "ListTagsOfResource":
         return await handle_list_tags_of_resource(body, config)
+    elif operation == "UpdateTimeToLive":
+        return await handle_update_time_to_live(body, config)
+    elif operation == "DescribeTimeToLive":
+        return await handle_describe_time_to_live(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -1116,6 +1120,121 @@ async def handle_list_tags_of_resource(body: dict, config: Config) -> JSONRespon
         # Create service and execute
         service = TableService(config)
         response = await service.list_tags_of_resource(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+
+async def handle_update_time_to_live(body: dict, config: Config) -> JSONResponse:
+    """Handle UpdateTimeToLive operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            UpdateTimeToLiveRequest,
+            UpdateTimeToLiveResponse,
+        )
+        
+        # Parse request
+        request = UpdateTimeToLiveRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.update_time_to_live(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_describe_time_to_live(body: dict, config: Config) -> JSONResponse:
+    """Handle DescribeTimeToLive operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            DescribeTimeToLiveRequest,
+            DescribeTimeToLiveResponse,
+        )
+        
+        # Parse request
+        request = DescribeTimeToLiveRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.describe_time_to_live(request)
         
         # Serialize response
         content = json.loads(

@@ -24,6 +24,10 @@ from dyscount_core.models.operations import (
     UntagResourceResponse,
     ListTagsOfResourceRequest,
     ListTagsOfResourceResponse,
+    UpdateTimeToLiveRequest,
+    UpdateTimeToLiveResponse,
+    DescribeTimeToLiveRequest,
+    DescribeTimeToLiveResponse,
 )
 from dyscount_core.storage.table_manager import TableManager
 from dyscount_core.models.errors import (
@@ -606,6 +610,87 @@ class TableService:
             raise ValidationException(f"Invalid resource ARN: no table name found")
         
         return table_name
+
+    # ==========================================================================
+    # Time-to-Live (TTL) Operations
+    # ==========================================================================
+
+    async def update_time_to_live(
+        self,
+        request: UpdateTimeToLiveRequest,
+    ) -> UpdateTimeToLiveResponse:
+        """Enable or disable TTL on a table.
+        
+        Args:
+            request: UpdateTimeToLiveRequest with table name and TTL spec
+            
+        Returns:
+            UpdateTimeToLiveResponse with updated TTL specification
+            
+        Raises:
+            ResourceNotFoundException: If table doesn't exist
+            ValidationException: If TTL attribute is invalid
+        """
+        table_name = request.table_name
+        
+        # Validate table exists
+        if not await self.table_manager.table_exists(table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {table_name}"
+            )
+        
+        # Validate TTL attribute name
+        ttl_spec = request.time_to_live_specification
+        ttl_attribute = ttl_spec.attribute_name
+        
+        if not ttl_attribute:
+            raise ValidationException("TTL attribute name cannot be empty")
+        
+        # Update TTL configuration
+        result = await self.table_manager.update_time_to_live(
+            table_name,
+            ttl_attribute,
+            ttl_spec.enabled,
+        )
+        
+        return UpdateTimeToLiveResponse(
+            time_to_live_specification=ttl_spec,
+        )
+
+    async def describe_time_to_live(
+        self,
+        request: DescribeTimeToLiveRequest,
+    ) -> DescribeTimeToLiveResponse:
+        """Describe TTL configuration for a table.
+        
+        Args:
+            request: DescribeTimeToLiveRequest with table name
+            
+        Returns:
+            DescribeTimeToLiveResponse with TTL description
+            
+        Raises:
+            ResourceNotFoundException: If table doesn't exist
+        """
+        table_name = request.table_name
+        
+        # Validate table exists
+        if not await self.table_manager.table_exists(table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {table_name}"
+            )
+        
+        # Get TTL configuration
+        ttl_desc = await self.table_manager.describe_time_to_live(table_name)
+        
+        from dyscount_core.models.operations import TimeToLiveDescription
+        
+        return DescribeTimeToLiveResponse(
+            time_to_live_description=TimeToLiveDescription(
+                attribute_name=ttl_desc.get("AttributeName"),
+                time_to_live_status=ttl_desc.get("TimeToLiveStatus", "DISABLED"),
+            ),
+        )
     
     async def close(self):
         """Close any open resources"""

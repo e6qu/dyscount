@@ -1498,3 +1498,172 @@ class TableManager:
             items = self._apply_projection(items, projection_expression, expression_attribute_names or {})
         
         return items, scanned_count, last_evaluated_key
+
+
+    # ==========================================================================
+    # Time-to-Live (TTL) Operations
+    # ==========================================================================
+
+    async def update_time_to_live(
+        self,
+        table_name: str,
+        ttl_attribute: str,
+        enabled: bool,
+    ) -> dict:
+        """Update TTL configuration for a table.
+        
+        Args:
+            table_name: Name of the table
+            ttl_attribute: Name of the TTL attribute (e.g., "exp")
+            enabled: Whether TTL is enabled
+            
+        Returns:
+            Dict with TTL configuration
+        """
+        db_path = self._get_db_path(table_name)
+        
+        async with self.connection_manager.connection(db_path) as conn:
+            # Get current metadata
+            metadata = await self._load_metadata(conn, table_name)
+            
+            if metadata is None:
+                raise ValueError(f"Table metadata not found: {table_name}")
+            
+            # Update TTL description
+            if metadata.TimeToLiveDescription is None:
+                metadata.TimeToLiveDescription = {}
+            
+            metadata.TimeToLiveDescription["AttributeName"] = ttl_attribute
+            metadata.TimeToLiveDescription["TimeToLiveStatus"] = "ENABLED" if enabled else "DISABLED"
+            
+            # Store updated metadata
+            await self._store_metadata(conn, table_name, metadata)
+            
+            return {
+                "AttributeName": ttl_attribute,
+                "TimeToLiveStatus": "ENABLED" if enabled else "DISABLED",
+            }
+
+    async def describe_time_to_live(self, table_name: str) -> dict:
+        """Describe TTL configuration for a table.
+        
+        Args:
+            table_name: Name of the table
+            
+        Returns:
+            Dict with TTL configuration or default disabled config
+        """
+        db_path = self._get_db_path(table_name)
+        
+        async with self.connection_manager.connection(db_path) as conn:
+            metadata = await self._load_metadata(conn, table_name)
+            
+            if metadata is None or metadata.TimeToLiveDescription is None:
+                return {
+                    "AttributeName": None,
+                    "TimeToLiveStatus": "DISABLED",
+                }
+            
+            ttl_desc = metadata.TimeToLiveDescription
+            
+            return {
+                "AttributeName": ttl_desc.get("AttributeName"),
+                "TimeToLiveStatus": ttl_desc.get("TimeToLiveStatus", "DISABLED"),
+            }
+
+    async def get_expired_items(
+        self,
+        table_name: str,
+        ttl_attribute: str,
+        current_time: int,
+        limit: int = 100,
+    ) -> list:
+        """Get items that have expired based on TTL.
+        
+        Args:
+            table_name: Name of the table
+            ttl_attribute: Name of the TTL attribute containing Unix timestamp
+            current_time: Current Unix timestamp
+            limit: Maximum number of items to return
+            
+        Returns:
+            List of expired items with their keys
+        """
+        import msgpack
+        
+        db_path = self._get_db_path(table_name)
+        
+        async with self.connection_manager.connection(db_path) as conn:
+            # Query for items where expiration_time < current_time
+            # The expiration_time is stored in the item_data
+            # We need to scan and check each item
+            cursor = await conn.execute(
+                "SELECT pk, sk, item_data FROM items LIMIT ?",
+                (limit * 10,),  # Scan more to account for filtering
+            )
+            rows = await cursor.fetchall()
+            
+            expired_items = []
+            for row in rows:
+                pk, sk, item_data = row
+                item = msgpack.unpackb(item_data, raw=False)
+                
+                # Check if item has TTL attribute
+                if ttl_attribute in item:
+                    ttl_value = item[ttl_attribute]
+                    # TTL attribute should be a Number (Unix timestamp)
+                    if isinstance(ttl_value, dict) and "N" in ttl_value:
+                        try:
+                            expiration_time = int(ttl_value["N"])
+                            if expiration_time < current_time:
+                                expired_items.append({
+                                    "pk": pk,
+                                    "sk": sk,
+                                    "expiration_time": expiration_time,
+                                })
+                                if len(expired_items) >= limit:
+                                    break
+                        except (ValueError, TypeError):
+                            pass
+            
+            return expired_items
+
+    async def delete_expired_items(
+        self,
+        table_name: str,
+        expired_items: list,
+    ) -> int:
+        """Delete expired items from a table.
+        
+        Args:
+            table_name: Name of the table
+            expired_items: List of expired items with pk and sk
+            
+        Returns:
+            Number of items deleted
+        """
+        db_path = self._get_db_path(table_name)
+        deleted_count = 0
+        
+        async with self.connection_manager.connection(db_path) as conn:
+            for item in expired_items:
+                pk = item["pk"]
+                sk = item["sk"]
+                
+                # sk can be None, b'', or actual bytes
+                # In the database, sk is stored as BLOB NOT NULL (empty bytes for no sort key)
+                if sk is None:
+                    await conn.execute(
+                        "DELETE FROM items WHERE pk = ? AND sk IS NULL",
+                        (pk,),
+                    )
+                else:
+                    await conn.execute(
+                        "DELETE FROM items WHERE pk = ? AND sk = ?",
+                        (pk, sk),
+                    )
+                deleted_count += 1
+            
+            await conn.commit()
+        
+        return deleted_count
