@@ -2,42 +2,55 @@
 
 ## Current Phase: M1 Phase 3 (Core Data Plane)
 
-### Immediate Tasks (Priority Order)
+### Completed ✅
 
-1. **M1P3_T1: GetItem Operation**
-   - Add GetItem models (request/response)
-   - Implement storage.get_item()
-   - Add API route handler
-   - Write tests
+**M1P3_T1: GetItem Operation** (PR #3 merged)
+- GetItem models (GetItemRequest, GetItemResponse, ConsumedCapacity)
+- storage.get_item() implementation
+- ItemService.get_item() service method
+- API route handler for GetItem
+- 10 comprehensive tests
 
-2. **M1P3_T2: PutItem Operation**
-   - Add PutItem models
-   - Implement storage.put_item()
-   - Support ReturnValues
-   - Write tests
+### Next Task 🟡
+
+**M1P3_T2: PutItem Operation**
+
+#### Implementation Checklist
+- [ ] Add PutItem models (PutItemRequest, PutItemResponse)
+- [ ] Implement storage.put_item() method in table_manager.py
+- [ ] Add ItemService.put_item() service method
+- [ ] Add API route handler for PutItem
+- [ ] Support ReturnValues (NONE, ALL_OLD)
+- [ ] Calculate ConsumedCapacity (1 WCU)
+- [ ] Write comprehensive tests (>80% coverage)
+
+#### Acceptance Criteria (from M1P3_T2_PUT_ITEM.md)
+- [ ] PutItem creates new item
+- [ ] PutItem replaces existing item with same key
+- [ ] ReturnValues=ALL_OLD returns previous attributes
+- [ ] ConsumedCapacity calculated correctly
+- [ ] All error cases handled per ERROR_CODES.md
+
+### Remaining Tasks
 
 3. **M1P3_T3: DeleteItem Operation**
-   - Add DeleteItem models
-   - Implement storage.delete_item()
-   - Support ReturnValues=ALL_OLD
-   - Write tests
+   - DeleteItem models
+   - storage.delete_item()
+   - ReturnValues=ALL_OLD support
 
 4. **M1P3_T5: Condition Expressions**
-   - Create expression parser module
-   - Implement comparison operators
-   - Implement functions (attribute_exists, begins_with, etc.)
-   - Write tests
+   - Expression parser module
+   - Comparison operators
+   - Functions (attribute_exists, begins_with, etc.)
 
 5. **M1P3_T4: UpdateItem Operation**
-   - Add UpdateItem models
-   - Implement UpdateExpression parser (SET, REMOVE, ADD, DELETE)
-   - Support list_append, if_not_exists
-   - Write tests
+   - UpdateItem models
+   - UpdateExpression parser (SET, REMOVE, ADD, DELETE)
+   - list_append, if_not_exists support
 
 6. **M1P3_T6: E2E Tests**
-   - Create boto3-based E2E tests
+   - boto3-based E2E tests
    - Test all data operations
-   - Add to CI pipeline
 
 ### Technical Decisions Needed
 
@@ -50,3 +63,4 @@
 - CI/CD workflows are now in place (see .github/workflows/)
 - Test isolation is handled via temp directories
 - Follow existing patterns from control plane implementation
+- Task file: `python/tasks/todo/M1P3_T2_PUT_ITEM.md`
