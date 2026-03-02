@@ -2,10 +2,7 @@
 
 ## Status
 
-- [ ] Planned
-- [ ] In Progress
-- [ ] Code Review
-- [ ] Done
+- [x] Done
 
 ## Description
 

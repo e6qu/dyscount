@@ -302,3 +302,49 @@ class GetItemResponse(BaseModel):
     
     item: Optional[Dict[str, Any]] = Field(None, alias="Item")
     consumed_capacity: Optional[ConsumedCapacity] = Field(None, alias="ConsumedCapacity")
+
+
+# =============================================================================
+# PutItem (Data Plane)
+# =============================================================================
+
+class PutItemRequest(BaseModel):
+    """Request model for PutItem operation.
+    
+    Creates a new item, or replaces an old item with a new item.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Item: A map of attribute name to AttributeValue (required)
+        ConditionExpression: A condition that must be satisfied
+        ExpressionAttributeNames: One or more substitution tokens for attribute names
+        ExpressionAttributeValues: One or more values that can be substituted
+        ReturnConsumedCapacity: Whether to return consumed capacity (INDEXES, TOTAL, NONE)
+        ReturnItemCollectionMetrics: Whether to return item collection metrics (SIZE, NONE)
+        ReturnValues: Use ALL_OLD to get the previous item attributes
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    item: dict[str, Any] = Field(..., alias="Item")
+    condition_expression: str | None = Field(None, alias="ConditionExpression")
+    expression_attribute_names: dict[str, str] | None = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: dict[str, Any] | None = Field(None, alias="ExpressionAttributeValues")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+    return_item_collection_metrics: str | None = Field(None, alias="ReturnItemCollectionMetrics")
+    return_values: str | None = Field(None, alias="ReturnValues")
+
+
+class PutItemResponse(BaseModel):
+    """Response model for PutItem operation.
+    
+    Attributes:
+        Attributes: The attribute values as they appeared before the PutItem operation
+        ConsumedCapacity: The capacity units consumed
+        ItemCollectionMetrics: Information about item collections
+    """
+    model_config = {"populate_by_name": True}
+    
+    attributes: dict[str, Any] | None = Field(None, alias="Attributes")
+    consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
+    item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
