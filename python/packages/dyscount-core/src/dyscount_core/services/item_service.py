@@ -8,6 +8,8 @@ from dyscount_core.models.errors import (
     ValidationException,
 )
 from dyscount_core.models.operations import (
+    DeleteItemRequest,
+    DeleteItemResponse,
     PutItemRequest,
     PutItemResponse,
     ConsumedCapacity,
@@ -227,5 +229,62 @@ class ItemService:
         # Handle ReturnValues
         if request.return_values == "ALL_OLD" and old_item is not None:
             response.attributes = old_item
+        
+        return response
+
+    async def delete_item(self, request: DeleteItemRequest) -> DeleteItemResponse:
+        """Delete an item from a table.
+        
+        Args:
+            request: DeleteItemRequest with table name and key
+        
+        Returns:
+            DeleteItemResponse with old attributes if ReturnValues=ALL_OLD
+        
+        Raises:
+            ResourceNotFoundException: If table does not exist
+            ValidationException: If request is invalid
+        """
+        from dyscount_core.models.operations import DeleteItemResponse
+        
+        # Validate table name
+        self._validate_table_name(request.table_name)
+        
+        # Validate key
+        self._validate_key(request.key, request.table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(request.table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {request.table_name}"
+            )
+        
+        # Delete the item
+        try:
+            deleted_item = await self.table_manager.delete_item(
+                table_name=request.table_name,
+                key=request.key,
+            )
+        except ValueError as e:
+            if "key" in str(e).lower():
+                raise ValidationException(str(e)) from None
+            raise
+        
+        # Calculate consumed capacity
+        # Write operation = 1 WCU
+        consumed_capacity = self._calculate_consumed_capacity(
+            request.table_name,
+            capacity_units=1.0,
+        )
+        consumed_capacity.write_capacity_units = 1.0
+        
+        # Build response
+        response = DeleteItemResponse(
+            consumed_capacity=consumed_capacity,
+        )
+        
+        # Handle ReturnValues
+        if request.return_values == "ALL_OLD" and deleted_item is not None:
+            response.attributes = deleted_item
         
         return response

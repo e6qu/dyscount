@@ -594,3 +594,79 @@ class TableManager:
         await conn.commit()
         
         return old_item
+
+    async def delete_item(
+        self,
+        table_name: str,
+        key: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Delete an item from a table.
+        
+        Args:
+            table_name: Name of the table
+            key: Primary key as a dict of attribute name to AttributeValue dict
+        
+        Returns:
+            The deleted item data if item existed, None otherwise
+        
+        Raises:
+            ValueError: If table does not exist
+        """
+        import msgpack
+        
+        db_path = self._get_db_path(table_name)
+        
+        if not db_path.exists():
+            raise ValueError(f"Table does not exist: {table_name}")
+        
+        # Get table metadata to understand key schema
+        conn = await self.connection_manager.get_connection(db_path)
+        metadata = await self._load_metadata(conn, table_name)
+        
+        if metadata is None:
+            raise ValueError(f"Table metadata not found: {table_name}")
+        
+        # Extract partition key and sort key from the key dict
+        key_schema = metadata.KeySchema
+        partition_key_name = key_schema[0].AttributeName
+        partition_key_value = key.get(partition_key_name)
+        
+        if partition_key_value is None:
+            raise ValueError(f"Missing partition key attribute: {partition_key_name}")
+        
+        # Serialize partition key
+        pk_bytes = self._serialize_key_value(partition_key_value)
+        
+        # Handle sort key if present
+        sk_bytes = None
+        if len(key_schema) > 1:
+            sort_key_name = key_schema[1].AttributeName
+            sort_key_value = key.get(sort_key_name)
+            
+            if sort_key_value is None:
+                raise ValueError(f"Missing sort key attribute: {sort_key_name}")
+            
+            sk_bytes = self._serialize_key_value(sort_key_value)
+        
+        # Use empty blob for NULL sk
+        lookup_sk = sk_bytes if sk_bytes is not None else b''
+        
+        # Get the item before deleting (for ReturnValues)
+        cursor = await conn.execute(
+            "SELECT item_data FROM items WHERE pk = ? AND sk = ?",
+            (pk_bytes, lookup_sk)
+        )
+        row = await cursor.fetchone()
+        
+        deleted_item = None
+        if row is not None:
+            deleted_item = msgpack.unpackb(row[0], raw=False)
+            
+            # Delete the item
+            await conn.execute(
+                "DELETE FROM items WHERE pk = ? AND sk = ?",
+                (pk_bytes, lookup_sk)
+            )
+            await conn.commit()
+        
+        return deleted_item
