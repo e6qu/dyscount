@@ -84,6 +84,10 @@ async def dynamodb_endpoint(
         return await handle_query(body, config)
     elif operation == "Scan":
         return await handle_scan(body, config)
+    elif operation == "BatchGetItem":
+        return await handle_batch_get_item(body, config)
+    elif operation == "BatchWriteItem":
+        return await handle_batch_write_item(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -631,6 +635,125 @@ async def handle_scan(body: dict, config: Config) -> JSONResponse:
         # Create service and execute
         service = ItemService(config)
         response = await service.scan(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+
+# =============================================================================
+# BatchGetItem (Data Plane)
+# =============================================================================
+
+from dyscount_core.models.operations import BatchGetItemRequest, BatchGetItemResponse
+
+
+async def handle_batch_get_item(body: dict, config: Config) -> JSONResponse:
+    """Handle BatchGetItem operation."""
+    service = None
+    try:
+        # Parse request
+        request = BatchGetItemRequest.model_validate(body)
+        
+        # Create service and execute
+        service = ItemService(config)
+        response = await service.batch_get_item(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+# =============================================================================
+# BatchWriteItem (Data Plane)
+# =============================================================================
+
+from dyscount_core.models.operations import BatchWriteItemRequest, BatchWriteItemResponse
+
+
+async def handle_batch_write_item(body: dict, config: Config) -> JSONResponse:
+    """Handle BatchWriteItem operation."""
+    service = None
+    try:
+        # Parse request
+        request = BatchWriteItemRequest.model_validate(body)
+        
+        # Create service and execute
+        service = ItemService(config)
+        response = await service.batch_write_item(request)
         
         # Serialize response
         content = json.loads(

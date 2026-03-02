@@ -500,3 +500,196 @@ class ItemService:
         )
         
         return response
+
+
+    async def batch_get_item(self, request) -> "BatchGetItemResponse":
+        """Get multiple items from one or more tables.
+        
+        Args:
+            request: BatchGetItemRequest with table names and keys
+            
+        Returns:
+            BatchGetItemResponse with retrieved items
+        """
+        from dyscount_core.models.operations import BatchGetItemResponse, BatchGetItemTableRequest
+        from dyscount_core.models.operations import GetItemRequest
+        
+        # Validate and process each table
+        responses: dict[str, list[dict]] = {}
+        unprocessed_keys: dict[str, BatchGetItemTableRequest] = {}
+        consumed_capacities: list = []
+        
+        # DynamoDB limit: 100 items per batch get
+        MAX_ITEMS = 100
+        total_items = sum(len(table_req.keys) for table_req in request.request_items.values())
+        
+        if total_items > MAX_ITEMS:
+            # Mark excess items as unprocessed
+            remaining_capacity = MAX_ITEMS
+            for table_name, table_req in request.request_items.items():
+                if remaining_capacity <= 0:
+                    # All remaining items are unprocessed
+                    unprocessed_keys[table_name] = table_req
+                    continue
+                
+                if len(table_req.keys) <= remaining_capacity:
+                    # All keys fit
+                    remaining_capacity -= len(table_req.keys)
+                else:
+                    # Split keys
+                    processed_keys = table_req.keys[:remaining_capacity]
+                    unprocessed_keys_list = table_req.keys[remaining_capacity:]
+                    table_req.keys = processed_keys
+                    unprocessed_keys[table_name] = BatchGetItemTableRequest(
+                        Keys=unprocessed_keys_list,
+                        ProjectionExpression=table_req.projection_expression,
+                        ExpressionAttributeNames=table_req.expression_attribute_names,
+                        ConsistentRead=table_req.consistent_read,
+                    )
+                    remaining_capacity = 0
+        
+        # Process each table
+        for table_name, table_req in request.request_items.items():
+            if table_name in unprocessed_keys and not table_req.keys:
+                continue  # All keys were unprocessed
+            
+            # Validate table name
+            self._validate_table_name(table_name)
+            
+            # Check table exists
+            if not await self.table_manager.table_exists(table_name):
+                raise ResourceNotFoundException(f"Table not found: {table_name}")
+            
+            # Get each item
+            table_items = []
+            for key in table_req.keys:
+                get_request = GetItemRequest(
+                    TableName=table_name,
+                    Key=key,
+                    ProjectionExpression=table_req.projection_expression,
+                    ExpressionAttributeNames=table_req.expression_attribute_names,
+                    ConsistentRead=table_req.consistent_read,
+                )
+                
+                try:
+                    item = await self.table_manager.get_item(table_name, key)
+                    if item is not None:
+                        table_items.append(item)
+                except ValueError:
+                    # Item not found, skip
+                    pass
+            
+            responses[table_name] = table_items
+            
+            # Calculate consumed capacity (0.5 RCU per item)
+            consumed_capacity = self._calculate_consumed_capacity(
+                table_name,
+                capacity_units=len(table_req.keys) * 0.5,
+            )
+            consumed_capacity.read_capacity_units = len(table_req.keys) * 0.5
+            consumed_capacities.append(consumed_capacity)
+        
+        # Build response
+        response = BatchGetItemResponse(
+            Responses=responses,
+            UnprocessedKeys=unprocessed_keys if unprocessed_keys else None,
+            ConsumedCapacity=consumed_capacities if request.return_consumed_capacity else None,
+        )
+        
+        return response
+
+    async def batch_write_item(self, request) -> "BatchWriteItemResponse":
+        """Put or delete multiple items in one or more tables.
+        
+        Args:
+            request: BatchWriteItemRequest with table names and write requests
+            
+        Returns:
+            BatchWriteItemResponse with unprocessed items
+        """
+        from dyscount_core.models.operations import BatchWriteItemResponse, PutItemRequest, DeleteItemRequest
+        from dyscount_core.models.operations import BatchWriteItemTableRequest
+        
+        # DynamoDB limit: 25 items per batch write
+        MAX_ITEMS = 25
+        total_items = sum(len(write_requests) for write_requests in request.request_items.values())
+        
+        unprocessed_items: dict[str, list[BatchWriteItemTableRequest]] = {}
+        consumed_capacities: list = []
+        
+        if total_items > MAX_ITEMS:
+            # Mark excess items as unprocessed
+            remaining_capacity = MAX_ITEMS
+            for table_name, write_requests in request.request_items.items():
+                if remaining_capacity <= 0:
+                    # All remaining items are unprocessed
+                    unprocessed_items[table_name] = write_requests
+                    continue
+                
+                if len(write_requests) <= remaining_capacity:
+                    # All items fit
+                    remaining_capacity -= len(write_requests)
+                else:
+                    # Split items
+                    processed = write_requests[:remaining_capacity]
+                    unprocessed = write_requests[remaining_capacity:]
+                    request.request_items[table_name] = processed
+                    unprocessed_items[table_name] = unprocessed
+                    remaining_capacity = 0
+        
+        # Process each table
+        for table_name, write_requests in request.request_items.items():
+            if table_name in unprocessed_items and not write_requests:
+                continue  # All items were unprocessed
+            
+            # Validate table name
+            self._validate_table_name(table_name)
+            
+            # Check table exists
+            if not await self.table_manager.table_exists(table_name):
+                raise ResourceNotFoundException(f"Table not found: {table_name}")
+            
+            # Process each write request
+            for write_req in write_requests:
+                try:
+                    if write_req.put_request is not None:
+                        # Put item
+                        put_request = PutItemRequest(
+                            TableName=table_name,
+                            Item=write_req.put_request.item,
+                        )
+                        await self.table_manager.put_item(
+                            table_name=put_request.table_name,
+                            item=put_request.item,
+                        )
+                    elif write_req.delete_request is not None:
+                        # Delete item
+                        delete_request = DeleteItemRequest(
+                            TableName=table_name,
+                            Key=write_req.delete_request.key,
+                        )
+                        await self.table_manager.delete_item(
+                            table_name=delete_request.table_name,
+                            key=delete_request.key,
+                        )
+                except ValueError as e:
+                    # Add to unprocessed
+                    if table_name not in unprocessed_items:
+                        unprocessed_items[table_name] = []
+                    unprocessed_items[table_name].append(write_req)
+            
+            # Calculate consumed capacity (1 WCU per item)
+            consumed_capacity = self._calculate_consumed_capacity(
+                table_name,
+                capacity_units=len(write_requests) * 1.0,
+            )
+            consumed_capacity.write_capacity_units = len(write_requests) * 1.0
+            consumed_capacities.append(consumed_capacity)
+        
+        # Build response
+        response = BatchWriteItemResponse(
+            UnprocessedItems=unprocessed_items if unprocessed_items else None,
+            ConsumedCapacity=consumed_capacities if request.return_consumed_capacity else None,
+        )
+        
+        return response
