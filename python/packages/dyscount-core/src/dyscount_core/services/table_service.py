@@ -18,6 +18,12 @@ from dyscount_core.models.operations import (
     ListTablesResponse,
     UpdateTableRequest,
     UpdateTableResponse,
+    TagResourceRequest,
+    TagResourceResponse,
+    UntagResourceRequest,
+    UntagResourceResponse,
+    ListTagsOfResourceRequest,
+    ListTagsOfResourceResponse,
 )
 from dyscount_core.storage.table_manager import TableManager
 from dyscount_core.models.errors import (
@@ -482,6 +488,124 @@ class TableService:
         
         # Update metadata with modified GSIs
         metadata.GlobalSecondaryIndexes = list(existing_gsis.values())
+    
+    async def close(self):
+        """Close any open resources"""
+        await self.table_manager.close()
+
+
+    # =====================================================================
+    # Tagging Operations
+    # =====================================================================
+    
+    async def tag_resource(self, request: TagResourceRequest) -> TagResourceResponse:
+        """Add tags to a table resource.
+        
+        Args:
+            request: TagResourceRequest with resource ARN and tags
+            
+        Returns:
+            TagResourceResponse (empty on success)
+        """
+        # Extract table name from ARN
+        # ARN format: arn:aws:dynamodb:<region>:<account>:table/<table_name>
+        table_name = self._extract_table_name_from_arn(request.resource_arn)
+        
+        # Validate table name
+        self._validate_table_name(table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {table_name}"
+            )
+        
+        # Store tags
+        await self.table_manager._store_tags(table_name, request.tags)
+        
+        return TagResourceResponse()
+    
+    async def untag_resource(self, request: UntagResourceRequest) -> UntagResourceResponse:
+        """Remove tags from a table resource.
+        
+        Args:
+            request: UntagResourceRequest with resource ARN and tag keys
+            
+        Returns:
+            UntagResourceResponse (empty on success)
+        """
+        # Extract table name from ARN
+        table_name = self._extract_table_name_from_arn(request.resource_arn)
+        
+        # Validate table name
+        self._validate_table_name(table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {table_name}"
+            )
+        
+        # Remove tags
+        await self.table_manager._remove_tags(table_name, request.tag_keys)
+        
+        return UntagResourceResponse()
+    
+    async def list_tags_of_resource(self, request: ListTagsOfResourceRequest) -> ListTagsOfResourceResponse:
+        """List tags on a table resource.
+        
+        Args:
+            request: ListTagsOfResourceRequest with resource ARN
+            
+        Returns:
+            ListTagsOfResourceResponse with list of tags
+        """
+        # Extract table name from ARN
+        table_name = self._extract_table_name_from_arn(request.resource_arn)
+        
+        # Validate table name
+        self._validate_table_name(table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {table_name}"
+            )
+        
+        # Get tags
+        tags = await self.table_manager._get_tags(table_name)
+        
+        return ListTagsOfResourceResponse(Tags=tags)
+    
+    def _extract_table_name_from_arn(self, arn: str) -> str:
+        """Extract table name from resource ARN.
+        
+        Args:
+            arn: Resource ARN (arn:aws:dynamodb:<region>:<account>:table/<table_name>)
+            
+        Returns:
+            Table name
+            
+        Raises:
+            ValidationException: If ARN format is invalid
+        """
+        # Handle both formats:
+        # arn:aws:dynamodb:<region>:<account>:table/<table_name>
+        # arn:aws:dynamodb:local:<namespace>:table/<table_name>
+        
+        if not arn.startswith("arn:aws:dynamodb:"):
+            raise ValidationException(f"Invalid resource ARN: {arn}")
+        
+        # Split by '/' and get the last part (table name)
+        parts = arn.split("/")
+        if len(parts) < 2:
+            raise ValidationException(f"Invalid resource ARN format: {arn}")
+        
+        table_name = parts[-1]
+        if not table_name:
+            raise ValidationException(f"Invalid resource ARN: no table name found")
+        
+        return table_name
     
     async def close(self):
         """Close any open resources"""

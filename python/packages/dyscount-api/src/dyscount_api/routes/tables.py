@@ -94,6 +94,12 @@ async def dynamodb_endpoint(
         return await handle_transact_get_items(body, config)
     elif operation == "TransactWriteItems":
         return await handle_transact_write_items(body, config)
+    elif operation == "TagResource":
+        return await handle_tag_resource(body, config)
+    elif operation == "UntagResource":
+        return await handle_untag_resource(body, config)
+    elif operation == "ListTagsOfResource":
+        return await handle_list_tags_of_resource(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -939,6 +945,177 @@ async def handle_update_table(body: dict, config: Config) -> JSONResponse:
         # Create service and execute
         service = TableService(config)
         response = await service.update_table(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+
+# =============================================================================
+# Tagging Operations
+# =============================================================================
+
+from dyscount_core.models.operations import (
+    TagResourceRequest,
+    TagResourceResponse,
+    UntagResourceRequest,
+    UntagResourceResponse,
+    ListTagsOfResourceRequest,
+    ListTagsOfResourceResponse,
+)
+
+
+async def handle_tag_resource(body: dict, config: Config) -> JSONResponse:
+    """Handle TagResource operation."""
+    service = None
+    try:
+        # Parse request
+        request = TagResourceRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.tag_resource(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_untag_resource(body: dict, config: Config) -> JSONResponse:
+    """Handle UntagResource operation."""
+    service = None
+    try:
+        # Parse request
+        request = UntagResourceRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.untag_resource(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_list_tags_of_resource(body: dict, config: Config) -> JSONResponse:
+    """Handle ListTagsOfResource operation."""
+    service = None
+    try:
+        # Parse request
+        request = ListTagsOfResourceRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.list_tags_of_resource(request)
         
         # Serialize response
         content = json.loads(

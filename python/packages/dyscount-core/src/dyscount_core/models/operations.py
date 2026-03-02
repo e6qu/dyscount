@@ -875,3 +875,82 @@ class TransactWriteItemsResponse(BaseModel):
     
     consumed_capacity: Optional[list[ConsumedCapacity]] = Field(None, alias="ConsumedCapacity")
     item_collection_metrics: Optional[dict[str, Any]] = Field(None, alias="ItemCollectionMetrics")
+
+
+
+# =============================================================================
+# Tagging Operations
+# =============================================================================
+
+class TagResourceRequest(BaseModel):
+    """Request model for TagResource operation.
+    
+    Assigns tags to a resource (table).
+    
+    Attributes:
+        ResourceArn: The Amazon Resource Name (ARN) of the resource
+        Tags: A list of tags to assign to the resource
+    """
+    model_config = {"populate_by_name": True}
+    
+    resource_arn: str = Field(..., alias="ResourceArn")
+    tags: list[dict[str, str]] = Field(..., alias="Tags")  # List of {Key: str, Value: str}
+
+
+class TagResourceResponse(BaseModel):
+    """Response model for TagResource operation.
+    
+    Empty response on success.
+    """
+    model_config = {"populate_by_name": True}
+
+
+class UntagResourceRequest(BaseModel):
+    """Request model for UntagResource operation.
+    
+    Removes tags from a resource.
+    
+    Attributes:
+        ResourceArn: The Amazon Resource Name (ARN) of the resource
+        TagKeys: A list of tag keys to remove
+    """
+    model_config = {"populate_by_name": True}
+    
+    resource_arn: str = Field(..., alias="ResourceArn")
+    tag_keys: list[str] = Field(..., alias="TagKeys")
+
+
+class UntagResourceResponse(BaseModel):
+    """Response model for UntagResource operation.
+    
+    Empty response on success.
+    """
+    model_config = {"populate_by_name": True}
+
+
+class ListTagsOfResourceRequest(BaseModel):
+    """Request model for ListTagsOfResource operation.
+    
+    Lists all tags on a resource.
+    
+    Attributes:
+        ResourceArn: The Amazon Resource Name (ARN) of the resource
+        NextToken: A token to retrieve the next page of results
+    """
+    model_config = {"populate_by_name": True}
+    
+    resource_arn: str = Field(..., alias="ResourceArn")
+    next_token: Optional[str] = Field(None, alias="NextToken")
+
+
+class ListTagsOfResourceResponse(BaseModel):
+    """Response model for ListTagsOfResource operation.
+    
+    Attributes:
+        Tags: A list of tags assigned to the resource
+        NextToken: A token for retrieving the next page of results
+    """
+    model_config = {"populate_by_name": True}
+    
+    tags: list[dict[str, str]] = Field(default_factory=list, alias="Tags")
+    next_token: Optional[str] = Field(None, alias="NextToken")

@@ -10,6 +10,7 @@ from .dependencies import get_config
 from .logging import setup_logging
 from .middleware import LoggingMiddleware
 from .routes import tables
+from . import metrics
 
 
 @asynccontextmanager
@@ -48,6 +49,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     
     # Include routes
     app.include_router(tables.router)
+    
+    # Include metrics endpoint if enabled
+    if config.metrics.prometheus_enabled:
+        app.include_router(metrics.router, prefix="")
     
     # Override dependency to use the provided config
     from .dependencies import get_config

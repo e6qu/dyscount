@@ -569,6 +569,98 @@ class TableManager:
         
         await conn.commit()
 
+    async def _store_tags(
+        self,
+        table_name: str,
+        tags: list[dict[str, str]],
+    ) -> None:
+        """Store tags for a table.
+        
+        Args:
+            table_name: Name of the table
+            tags: List of tags (each tag is {Key: str, Value: str})
+        """
+        db_path = self._get_db_path(table_name)
+        conn = await self.connection_manager.get_connection(db_path)
+        
+        # Create tags table if not exists
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS __tags (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        
+        # Insert or replace tags
+        for tag in tags:
+            await conn.execute(
+                "INSERT OR REPLACE INTO __tags (key, value) VALUES (?, ?)",
+                (tag["Key"], tag["Value"])
+            )
+        
+        await conn.commit()
+
+    async def _remove_tags(
+        self,
+        table_name: str,
+        tag_keys: list[str],
+    ) -> None:
+        """Remove tags from a table.
+        
+        Args:
+            table_name: Name of the table
+            tag_keys: List of tag keys to remove
+        """
+        db_path = self._get_db_path(table_name)
+        conn = await self.connection_manager.get_connection(db_path)
+        
+        # Check if tags table exists
+        cursor = await conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='__tags'"
+        )
+        table_exists = await cursor.fetchone()
+        
+        if not table_exists:
+            # No tags to remove
+            return
+        
+        for key in tag_keys:
+            await conn.execute(
+                "DELETE FROM __tags WHERE key = ?",
+                (key,)
+            )
+        
+        await conn.commit()
+
+    async def _get_tags(
+        self,
+        table_name: str,
+    ) -> list[dict[str, str]]:
+        """Get all tags for a table.
+        
+        Args:
+            table_name: Name of the table
+            
+        Returns:
+            List of tags (each tag is {Key: str, Value: str})
+        """
+        db_path = self._get_db_path(table_name)
+        conn = await self.connection_manager.get_connection(db_path)
+        
+        # Check if tags table exists
+        cursor = await conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='__tags'"
+        )
+        table_exists = await cursor.fetchone()
+        
+        if not table_exists:
+            return []
+        
+        cursor = await conn.execute("SELECT key, value FROM __tags")
+        rows = await cursor.fetchall()
+        
+        return [{"Key": row[0], "Value": row[1]} for row in rows]
+
     # =========================================================================
     # Item Operations (Data Plane)
     # =========================================================================

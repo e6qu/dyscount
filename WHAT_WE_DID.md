@@ -1154,3 +1154,46 @@ uv run pytest tests/e2e/ -v
 🔜 **Next**: Time-to-live (TTL), backups, or paginated operations
 
 ---
+
+
+## 2026-03-03
+
+### M1 Phase 6: Auth, Metrics & Tagging - Partial Implementation
+
+#### M1 Phase 6 Progress: Prometheus Metrics & Tagging Operations ✅
+
+**Files Created/Modified**:
+- `metrics.py` - Prometheus metrics endpoint with counters and histograms
+- `main.py` - Integrated metrics router with config-based enablement
+- `models/operations.py` - Added TagResource, UntagResource, ListTagsOfResource models
+- `services/table_service.py` - Added tagging service methods
+- `storage/table_manager.py` - Added tag storage methods (_store_tags, _remove_tags, _get_tags)
+- `api/routes/tables.py` - Added tagging route handlers
+- `tests/test_tagging.py` - 15 comprehensive tagging tests
+
+**Features Implemented**:
+
+**Prometheus Metrics**:
+- `/metrics` endpoint for Prometheus scraping
+- Operation counters (dyscount_operations_total)
+- Operation latency histograms (dyscount_operation_duration_seconds)
+- Error counters (dyscount_errors_total)
+- Consumed capacity tracking (dyscount_consumed_capacity_total)
+- Item count tracking (dyscount_table_items_total)
+
+**Tagging Operations**:
+- **TagResource** - Add tags to tables (ARN-based)
+- **UntagResource** - Remove tags from tables
+- **ListTagsOfResource** - List all tags on a table
+- ARN parsing for both standard and local formats
+- SQLite-based tag storage per table
+
+**Test Results**:
+- 15 new tagging tests
+- 309 total tests passing ✅
+
+**Remaining for M1 Phase 6**:
+- AWS Signature V4 verification (pending)
+- IAM policy evaluation engine (pending)
+
+---
