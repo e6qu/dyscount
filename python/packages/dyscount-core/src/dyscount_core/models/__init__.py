@@ -26,6 +26,10 @@ from .operations import (
     QueryResponse,
     ScanRequest,
     ScanResponse,
+    TransactGetItemsRequest,
+    TransactGetItemsResponse,
+    TransactWriteItemsRequest,
+    TransactWriteItemsResponse,
 )
 from .table import (
     AttributeDefinition,
@@ -76,4 +80,8 @@ __all__ = [
     "QueryResponse",
     "ScanRequest",
     "ScanResponse",
+    "TransactGetItemsRequest",
+    "TransactGetItemsResponse",
+    "TransactWriteItemsRequest",
+    "TransactWriteItemsResponse",
 ]
