@@ -454,6 +454,121 @@ class TableManager:
         metadata_dict = json.loads(row[0].decode())
         return TableMetadata.model_validate(metadata_dict)
 
+    async def _update_metadata(
+        self,
+        table_name: str,
+        metadata: TableMetadata,
+    ) -> None:
+        """Update table metadata in the database.
+        
+        Args:
+            table_name: Name of the table
+            metadata: Updated table metadata
+        """
+        db_path = self._get_db_path(table_name)
+        conn = await self.connection_manager.get_connection(db_path)
+        
+        # Convert metadata to serializable format
+        metadata_dict = metadata.model_dump(mode="json")
+        
+        # Update full metadata
+        await conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+            ("full_metadata", json.dumps(metadata_dict).encode())
+        )
+        
+        # Update individual fields
+        await conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+            ("billing_mode", json.dumps(metadata_dict.get("BillingModeSummary", {})).encode())
+        )
+        await conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+            ("provisioned_throughput", json.dumps(metadata_dict.get("ProvisionedThroughput", {})).encode())
+        )
+        
+        # Update GSI info
+        if metadata.GlobalSecondaryIndexes:
+            await conn.execute(
+                "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+                ("global_secondary_indexes", json.dumps(metadata_dict.get("GlobalSecondaryIndexes", [])).encode())
+            )
+        
+        await conn.commit()
+
+    async def _add_gsi(
+        self,
+        table_name: str,
+        gsi: GlobalSecondaryIndex,
+    ) -> None:
+        """Add a global secondary index to the table.
+        
+        Args:
+            table_name: Name of the table
+            gsi: Global secondary index to add
+        """
+        db_path = self._get_db_path(table_name)
+        conn = await self.connection_manager.get_connection(db_path)
+        
+        # Serialize key schema
+        key_schema_json = json.dumps([ks.model_dump(mode="json") for ks in gsi.KeySchema])
+        
+        # Extract projection info
+        projection = gsi.Projection
+        projection_type = projection.get("ProjectionType", "ALL")
+        projected_attrs = projection.get("NonKeyAttributes", [])
+        
+        # Serialize provisioned throughput
+        provisioned_throughput_json = None
+        if gsi.ProvisionedThroughput:
+            # Handle both dict and model instances
+            if isinstance(gsi.ProvisionedThroughput, dict):
+                provisioned_throughput_json = json.dumps(gsi.ProvisionedThroughput)
+            else:
+                provisioned_throughput_json = json.dumps(gsi.ProvisionedThroughput.model_dump(mode="json"))
+        
+        await conn.execute(
+            """
+            INSERT INTO __index_metadata (
+                index_name, index_type, key_schema, projection_type, 
+                projected_attributes, index_status, backfilling, provisioned_throughput
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                gsi.IndexName,
+                "GSI",
+                key_schema_json.encode(),
+                projection_type,
+                json.dumps(projected_attrs).encode() if projected_attrs else None,
+                "ACTIVE",
+                0,  # backfilling = false
+                provisioned_throughput_json.encode() if provisioned_throughput_json else None,
+            )
+        )
+        
+        await conn.commit()
+
+    async def _remove_gsi(
+        self,
+        table_name: str,
+        index_name: str,
+    ) -> None:
+        """Remove a global secondary index from the table.
+        
+        Args:
+            table_name: Name of the table
+            index_name: Name of the index to remove
+        """
+        db_path = self._get_db_path(table_name)
+        conn = await self.connection_manager.get_connection(db_path)
+        
+        await conn.execute(
+            "DELETE FROM __index_metadata WHERE index_name = ? AND index_type = ?",
+            (index_name, "GSI")
+        )
+        
+        await conn.commit()
+
     # =========================================================================
     # Item Operations (Data Plane)
     # =========================================================================

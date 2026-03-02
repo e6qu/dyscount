@@ -39,7 +39,7 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 
 **Progress**: 2/2 tasks complete (100%)
 
-### Current Phase: M1 Phase 5 🔄
+### Current Phase: M1 Phase 5 ✅
 
 | Task ID | Task | Status | Completed | PR |
 |---------|------|--------|-----------|-----|
@@ -48,9 +48,9 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 | M1P5-T3 | TransactGetItems | ✅ Complete | 2026-03-02 | #12 |
 | M1P5-T4 | TransactWriteItems | ✅ Complete | 2026-03-02 | #12 |
 | M1P5-T5 | GSI CreateTable support | ✅ Complete | 2026-03-02 | #13 |
-| M1P5-T6 | UpdateTable for GSI | 🔄 Next | - | - |
+| M1P5-T6 | UpdateTable for GSI | ✅ Complete | 2026-03-02 | #14 |
 
-**Progress**: 5/6 tasks complete (83%)
+**Progress**: 6/6 tasks complete (100%)
 
 ## CI/CD Status
 
@@ -96,8 +96,9 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 | test_transact_get_items.py | 10 | ✅ All passing |
 | test_transact_write_items.py | 17 | ✅ All passing |
 | test_create_table_gsi.py | 14 | ✅ All passing |
+| test_update_table_gsi.py | 12 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Total** | **282** | **✅ 282 tests passing** |
+| **Total** | **294** | **✅ 294 tests passing** |
 
 ## Implemented Operations
 
@@ -128,8 +129,12 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 - `tests/test_transact_get_items.py` - 10 TransactGetItems tests
 - `tests/test_transact_write_items.py` - 17 TransactWriteItems tests
 
-### GSI Support (T5)
+### GSI Support (T5-T6)
 - `tests/test_create_table_gsi.py` - 14 GSI/LSI CreateTable tests
+- `tests/test_update_table_gsi.py` - 12 UpdateTable GSI tests
+- `services/table_service.py` - update_table() with GSI support
+- `storage/table_manager.py` - _update_metadata(), _add_gsi(), _remove_gsi()
+- `api/routes/tables.py` - handle_update_table() route
 
 ### Updated Files
 - `services/item_service.py` - transact_get_items() and transact_write_items() methods
@@ -137,6 +142,7 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 - `storage/table_manager.py` - GSI/LSI support in create_table()
 - `services/table_service.py` - GSI/LSI validation in create_table()
 - `models/table.py` - Fixed GlobalSecondaryIndex.ProvisionedThroughput type
+- `models/operations.py` - Fixed UpdateTableRequest field types
 
 ## Specifications Available
 

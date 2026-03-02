@@ -1090,3 +1090,67 @@ uv run pytest tests/e2e/ -v
 🔜 **Next**: Implement UpdateTable to add/remove GSIs
 
 ---
+
+
+## 2026-03-02 (Continued)
+
+### M1 Phase 5: Task T6 - UpdateTable for GSI Complete ✅
+
+#### Task M1P5-T6: UpdateTable for GSI - COMPLETE ✅
+
+**Files Modified**:
+- `services/table_service.py` - Added update_table() method with GSI support
+- `storage/table_manager.py` - Added _update_metadata(), _add_gsi(), _remove_gsi()
+- `api/routes/tables.py` - Added handle_update_table() route handler
+- `models/operations.py` - Fixed UpdateTableRequest field types (ProvisionedThroughput, BillingMode)
+- `tests/test_update_table_gsi.py` - 12 comprehensive UpdateTable GSI tests
+
+**Features**:
+- Create new Global Secondary Indexes via UpdateTable
+- Delete existing Global Secondary Indexes via UpdateTable
+- Update GSI provisioned throughput
+- Update table provisioned throughput
+- Update table billing mode
+- Update table deletion protection
+- Mixed operations (create and delete in same call)
+- Validation:
+  - Max 20 GSIs per table
+  - Cannot create duplicate index names
+  - Cannot delete non-existent indexes
+  - Attribute definitions must include GSI key attributes
+
+**GSI Update Operations**:
+- `Create` - Add new GSI with key schema, projection, throughput
+- `Delete` - Remove existing GSI
+- `Update` - Modify GSI provisioned throughput
+
+**Test Results**:
+- 12 new UpdateTable GSI tests
+- All tests passing ✅
+- 294 total tests passing
+
+---
+
+### M1 Phase 5: COMPLETE ✅
+
+**Summary**:
+- 6/6 tasks completed (100%)
+- 53 new tests in Phase 5 (27 transactions + 27 GSI/UpdateTable)
+- 294 total unit tests passing
+- M1 Phase 5 is now complete
+
+**Operations/Features Implemented in Phase 5**:
+1. ✅ BatchGetItem (T1) - Multi-table read (up to 100 items)
+2. ✅ BatchWriteItem (T2) - Multi-table write (up to 25 items)
+3. ✅ TransactGetItems (T3) - Atomic read (up to 100 items)
+4. ✅ TransactWriteItems (T4) - Atomic write (up to 100 items)
+5. ✅ GSI CreateTable Support (T5) - Create tables with GSIs/LSIs
+6. ✅ UpdateTable for GSI (T6) - Add/remove GSIs on existing tables
+
+**Current State**:
+
+✅ **M1 Phase 5 COMPLETE** - 100%
+🟡 **M1 Phase 6 NEXT** - Advanced Features
+🔜 **Next**: Time-to-live (TTL), backups, or paginated operations
+
+---

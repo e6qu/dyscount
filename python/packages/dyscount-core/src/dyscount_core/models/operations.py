@@ -199,10 +199,10 @@ class UpdateTableRequest(BaseModel):
     """
     TableName: str = Field(..., min_length=1, max_length=1024)
     AttributeDefinitions: Optional[List[AttributeDefinition]] = None
-    BillingMode: Optional[BillingMode] = None
-    ProvisionedThroughput: Optional[ProvisionedThroughput] = None
+    BillingMode: Optional[Any] = None  # Using Any to avoid name collision with BillingMode type
+    ProvisionedThroughput: Optional[Any] = None  # Using Any to avoid name collision
     GlobalSecondaryIndexUpdates: Optional[List[Dict[str, Any]]] = None
-    StreamSpecification: Optional[StreamSpecification] = None
+    StreamSpecification: Optional[Any] = None  # Using Any to avoid name collision
     SSESpecification: Optional[Dict[str, Any]] = None
     DeletionProtectionEnabled: Optional[bool] = None
 

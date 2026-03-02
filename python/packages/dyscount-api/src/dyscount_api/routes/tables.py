@@ -70,6 +70,8 @@ async def dynamodb_endpoint(
         return await handle_list_tables(body, config)
     elif operation == "DescribeTable":
         return await handle_describe_table(body, config)
+    elif operation == "UpdateTable":
+        return await handle_update_table(body, config)
     elif operation == "DescribeEndpoints":
         return await handle_describe_endpoints(body, config)
     elif operation == "GetItem":
@@ -877,6 +879,66 @@ async def handle_transact_write_items(body: dict, config: Config) -> JSONRespons
         # Create service and execute
         service = ItemService(config)
         response = await service.transact_write_items(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+
+# =============================================================================
+# UpdateTable (Control Plane)
+# =============================================================================
+
+from dyscount_core.models.operations import UpdateTableRequest, UpdateTableResponse
+
+
+async def handle_update_table(body: dict, config: Config) -> JSONResponse:
+    """Handle UpdateTable operation."""
+    service = None
+    try:
+        # Parse request
+        request = UpdateTableRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.update_table(request)
         
         # Serialize response
         content = json.loads(
