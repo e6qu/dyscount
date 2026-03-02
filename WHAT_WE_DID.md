@@ -1038,3 +1038,55 @@ uv run pytest tests/e2e/ -v
 🔜 **Next**: Implement GSI CreateTable support
 
 ---
+
+
+## 2026-03-02 (Continued)
+
+### M1 Phase 5: Task T5 - GSI CreateTable Support Complete ✅
+
+#### Task M1P5-T5: GSI CreateTable Support - COMPLETE ✅
+
+**Files Modified**:
+- `storage/table_manager.py` - Added GSI/LSI parameters to create_table(), added _store_index_metadata()
+- `services/table_service.py` - Added GSI/LSI validation methods, pass indexes to table_manager
+- `models/table.py` - Fixed GlobalSecondaryIndex.ProvisionedThroughput type issue
+- `tests/test_create_table_gsi.py` - 14 comprehensive GSI/LSI tests
+
+**Features**:
+- Create tables with Global Secondary Indexes (up to 20 per table)
+- Create tables with Local Secondary Indexes (up to 5 per table)
+- GSI validation:
+  - Index name required
+  - Key schema validation (HASH key required, RANGE optional)
+  - Attribute definitions must include all GSI key attributes
+  - Max 20 GSIs per table
+- LSI validation:
+  - Table must have composite key (HASH + RANGE)
+  - LSI hash key must match table hash key
+  - Max 5 LSIs per table
+- Projection types: ALL, KEYS_ONLY, INCLUDE
+- Provisioned throughput support for GSIs
+- Index metadata stored in __index_metadata table
+
+**Test Results**:
+- 14 new GSI/LSI tests
+- All tests passing ✅
+- 282 total tests passing
+
+---
+
+### M1 Phase 5 Progress Update
+
+**Summary**:
+- 5/6 tasks completed (83%)
+- 41 new tests in Phase 5 (27 transactions + 14 GSI)
+- 282 total unit tests passing
+- 5 DynamoDB operations/features implemented in Phase 5
+
+**Current State**:
+
+✅ **M1 Phase 5 IN PROGRESS** - 83% complete
+🟡 **Remaining**: UpdateTable for GSI (T6)
+🔜 **Next**: Implement UpdateTable to add/remove GSIs
+
+---

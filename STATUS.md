@@ -47,10 +47,10 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 | M1P5-T2 | BatchWriteItem | ✅ Complete | 2026-03-02 | #11 |
 | M1P5-T3 | TransactGetItems | ✅ Complete | 2026-03-02 | #12 |
 | M1P5-T4 | TransactWriteItems | ✅ Complete | 2026-03-02 | #12 |
-| M1P5-T5 | GSI CreateTable support | 🔄 Next | - | - |
-| M1P5-T6 | UpdateTable for GSI | ⚪ Pending | - | - |
+| M1P5-T5 | GSI CreateTable support | ✅ Complete | 2026-03-02 | #13 |
+| M1P5-T6 | UpdateTable for GSI | 🔄 Next | - | - |
 
-**Progress**: 4/6 tasks complete (67%)
+**Progress**: 5/6 tasks complete (83%)
 
 ## CI/CD Status
 
@@ -95,8 +95,9 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 | test_batch_write_item.py | 6 | ✅ All passing |
 | test_transact_get_items.py | 10 | ✅ All passing |
 | test_transact_write_items.py | 17 | ✅ All passing |
+| test_create_table_gsi.py | 14 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Total** | **268** | **✅ 268 tests passing** |
+| **Total** | **282** | **✅ 282 tests passing** |
 
 ## Implemented Operations
 
@@ -120,16 +121,22 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 - ✅ TransactGetItems - Atomic read (up to 100 items)
 - ✅ TransactWriteItems - Atomic write (up to 100 items)
 
-## Files Created in M1 Phase 5 (Transactions)
+## Files Created in M1 Phase 5
 
-### Transaction Operations
+### Transaction Operations (T3-T4)
 - `models/operations.py` - TransactGetItemsRequest/Response, TransactWriteItemsRequest/Response
 - `tests/test_transact_get_items.py` - 10 TransactGetItems tests
 - `tests/test_transact_write_items.py` - 17 TransactWriteItems tests
 
+### GSI Support (T5)
+- `tests/test_create_table_gsi.py` - 14 GSI/LSI CreateTable tests
+
 ### Updated Files
 - `services/item_service.py` - transact_get_items() and transact_write_items() methods
 - `api/routes/tables.py` - handle_transact_get_items() and handle_transact_write_items() handlers
+- `storage/table_manager.py` - GSI/LSI support in create_table()
+- `services/table_service.py` - GSI/LSI validation in create_table()
+- `models/table.py` - Fixed GlobalSecondaryIndex.ProvisionedThroughput type
 
 ## Specifications Available
 
@@ -154,7 +161,7 @@ None.
 
 1. ✅ **M1P5-T3 COMPLETE** - TransactGetItems implemented
 2. ✅ **M1P5-T4 COMPLETE** - TransactWriteItems implemented
-3. 🔄 **M1P5-T5** - GSI CreateTable support (next)
-4. 🔜 **M1P5-T6** - UpdateTable for GSI
+3. ✅ **M1P5-T5** - GSI CreateTable support complete
+4. 🔄 **M1P5-T6** - UpdateTable for GSI (next)
 
 See `DO_NEXT.md` for details.
