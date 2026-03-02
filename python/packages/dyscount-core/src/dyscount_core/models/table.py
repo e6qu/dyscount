@@ -134,7 +134,7 @@ class GlobalSecondaryIndex(BaseModel):
     IndexName: str
     KeySchema: List[KeySchemaElement]
     Projection: Dict[str, Any]  # { ProjectionType: "ALL"|"KEYS_ONLY"|"INCLUDE", NonKeyAttributes: [...] }
-    ProvisionedThroughput: Optional[ProvisionedThroughput] = None
+    ProvisionedThroughput: Optional[Any] = None  # Using Any to avoid name collision with type
 
 
 class LocalSecondaryIndex(BaseModel):

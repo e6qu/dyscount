@@ -13,7 +13,9 @@ import aiosqlite
 from ..models.table import (
     AttributeDefinition,
     BillingMode,
+    GlobalSecondaryIndex,
     KeySchemaElement,
+    LocalSecondaryIndex,
     ProvisionedThroughput,
     TableMetadata,
     TableStatus,
@@ -80,6 +82,8 @@ class TableManager:
         attribute_definitions: List[AttributeDefinition],
         billing_mode: BillingMode = BillingMode.PROVISIONED,
         provisioned_throughput: Optional[ProvisionedThroughput] = None,
+        global_secondary_indexes: Optional[List[GlobalSecondaryIndex]] = None,
+        local_secondary_indexes: Optional[List[LocalSecondaryIndex]] = None,
     ) -> TableMetadata:
         """Create a new table.
         
@@ -89,6 +93,8 @@ class TableManager:
             attribute_definitions: Attribute definitions
             billing_mode: Billing mode (PROVISIONED or PAY_PER_REQUEST)
             provisioned_throughput: Provisioned throughput settings
+            global_secondary_indexes: Optional list of global secondary indexes
+            local_secondary_indexes: Optional list of local secondary indexes
             
         Returns:
             TableMetadata for the created table
@@ -126,10 +132,19 @@ class TableManager:
             provisioned_throughput=provisioned_throughput or ProvisionedThroughput(
                 ReadCapacityUnits=5, WriteCapacityUnits=5
             ),
+            GlobalSecondaryIndexes=global_secondary_indexes,
+            LocalSecondaryIndexes=local_secondary_indexes,
         )
         
         # Store metadata
         await self._store_metadata(conn, table_name, metadata)
+        
+        # Store index metadata if provided
+        if global_secondary_indexes:
+            await self._store_index_metadata(conn, global_secondary_indexes, "GSI")
+        
+        if local_secondary_indexes:
+            await self._store_index_metadata(conn, local_secondary_indexes, "LSI")
         
         return metadata
 
@@ -349,6 +364,67 @@ class TableManager:
             "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
             ("full_metadata", json.dumps(metadata_dict).encode())
         )
+        
+        # Store GSI/LSI info in metadata
+        if metadata.GlobalSecondaryIndexes:
+            await conn.execute(
+                "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+                ("global_secondary_indexes", json.dumps(metadata_dict.get("GlobalSecondaryIndexes", [])).encode())
+            )
+        
+        if metadata.LocalSecondaryIndexes:
+            await conn.execute(
+                "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+                ("local_secondary_indexes", json.dumps(metadata_dict.get("LocalSecondaryIndexes", [])).encode())
+            )
+        
+        await conn.commit()
+
+    async def _store_index_metadata(
+        self,
+        conn: aiosqlite.Connection,
+        indexes: List[GlobalSecondaryIndex] | List[LocalSecondaryIndex],
+        index_type: str,
+    ) -> None:
+        """Store index metadata in the database.
+        
+        Args:
+            conn: SQLite connection
+            indexes: List of indexes to store
+            index_type: Type of index ('GSI' or 'LSI')
+        """
+        for index in indexes:
+            # Serialize key schema
+            key_schema_json = json.dumps([ks.model_dump(mode="json") for ks in index.KeySchema])
+            
+            # Extract projection info
+            projection = index.Projection
+            projection_type = projection.get("ProjectionType", "ALL")
+            projected_attrs = projection.get("NonKeyAttributes", [])
+            
+            # Serialize provisioned throughput for GSI
+            provisioned_throughput_json = None
+            if hasattr(index, 'ProvisionedThroughput') and index.ProvisionedThroughput:
+                provisioned_throughput_json = json.dumps(index.ProvisionedThroughput.model_dump(mode="json"))
+            
+            await conn.execute(
+                """
+                INSERT INTO __index_metadata (
+                    index_name, index_type, key_schema, projection_type, 
+                    projected_attributes, index_status, backfilling, provisioned_throughput
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    index.IndexName,
+                    index_type,
+                    key_schema_json.encode(),
+                    projection_type,
+                    json.dumps(projected_attrs).encode() if projected_attrs else None,
+                    "ACTIVE",
+                    0,  # backfilling = false
+                    provisioned_throughput_json.encode() if provisioned_throughput_json else None,
+                )
+            )
         
         await conn.commit()
 
