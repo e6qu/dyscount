@@ -244,3 +244,61 @@ class DescribeLimitsResponse(BaseModel):
 
 
 
+
+
+# =============================================================================
+# GetItem (Data Plane)
+# =============================================================================
+
+class ConsumedCapacity(BaseModel):
+    """The capacity units consumed by an operation.
+    
+    Attributes:
+        TableName: The name of the table
+        CapacityUnits: The total number of capacity units consumed
+        ReadCapacityUnits: The total number of read capacity units consumed
+        WriteCapacityUnits: The total number of write capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: Optional[str] = Field(None, alias="TableName")
+    capacity_units: Optional[float] = Field(None, alias="CapacityUnits")
+    read_capacity_units: Optional[float] = Field(None, alias="ReadCapacityUnits")
+    write_capacity_units: Optional[float] = Field(None, alias="WriteCapacityUnits")
+
+
+class GetItemRequest(BaseModel):
+    """Request model for GetItem operation.
+    
+    Retrieves a single item from a table based on its primary key.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: A map of attribute names to AttributeValue objects representing the primary key (required)
+        AttributesToGet: An array of attribute names to retrieve (legacy, use ProjectionExpression)
+        ConsistentRead: Whether to use strongly consistent reads (default: false)
+        ProjectionExpression: A string that identifies one or more attributes to retrieve
+        ExpressionAttributeNames: One or more substitution tokens for attribute names
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: Dict[str, Any] = Field(..., alias="Key")
+    attributes_to_get: Optional[List[str]] = Field(None, alias="AttributesToGet")
+    consistent_read: Optional[bool] = Field(False, alias="ConsistentRead")
+    projection_expression: Optional[str] = Field(None, alias="ProjectionExpression")
+    expression_attribute_names: Optional[Dict[str, str]] = Field(None, alias="ExpressionAttributeNames")
+    return_consumed_capacity: Optional[str] = Field(None, alias="ReturnConsumedCapacity")
+
+
+class GetItemResponse(BaseModel):
+    """Response model for GetItem operation.
+    
+    Attributes:
+        Item: A map of attribute names to AttributeValue objects (only if item found)
+        ConsumedCapacity: The capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    item: Optional[Dict[str, Any]] = Field(None, alias="Item")
+    consumed_capacity: Optional[ConsumedCapacity] = Field(None, alias="ConsumedCapacity")

@@ -6,18 +6,18 @@ Last Updated: 2026-03-02
 
 | Milestone | Status | Progress |
 |-----------|--------|----------|
-| M1: Foundation & Core Operations | 🟡 In Progress | 45% |
+| M1: Foundation & Core Operations | 🟡 In Progress | 55% |
 | M2: Advanced Operations | ⚪ Pending | 0% |
 | M3: Streams & Events | ⚪ Pending | 0% |
 | M4: Production Readiness | ⚪ Pending | 0% |
 
 ## Current Phase
 
-**M1 Phase 2: Python Implementation - Control Plane**
+**M1 Phase 3: Python Implementation - Data Plane**
 
-Status: ✅ **COMPLETE** - 10/10 Tasks Done
+Status: 🟡 **IN PROGRESS** - 6 tasks planned
 
-### Completed Tasks
+### Previous Phase: M1 Phase 2 ✅
 
 | Task ID | Task | Status | Completed |
 |---------|------|--------|-----------|
@@ -32,22 +32,35 @@ Status: ✅ **COMPLETE** - 10/10 Tasks Done
 | M1P2-T9 | Implement DescribeEndpoints | ✅ Complete | 2026-03-02 |
 | M1P2-T10 | Tests and Dockerfile | ✅ Complete | 2026-03-02 |
 
-**Completed**: 10/10 tasks (100%)
+**Completed**: 10/10 tasks (100%)  
 **Tests**: 84 tests passing
-**Total Estimated**: ~145k tokens
 
-## Task File Status
+### Current Phase: M1 Phase 3 🟡
 
-| Location | Count | Status |
-|----------|-------|--------|
-| `python/tasks/` | 0 files | - |
-| `python/tasks/done/` | 10 files | Complete |
+| Task ID | Task | Status | Est. Effort |
+|---------|------|--------|-------------|
+| M1P3-T1 | Implement GetItem | Planned | 1 day |
+| M1P3-T2 | Implement PutItem | Planned | 1.5 days |
+| M1P3-T3 | Implement DeleteItem | Planned | 1 day |
+| M1P3-T4 | Implement UpdateItem | Planned | 3 days |
+| M1P3-T5 | Condition Expressions | Planned | 2 days |
+| M1P3-T6 | E2E Tests | Planned | 1 day |
+
+## CI/CD Status
+
+| Component | Status | PR |
+|-----------|--------|-----|
+| GitHub Actions workflows | ✅ Active | #2 |
+| Python CI (lint, test, e2e) | ✅ Configured | - |
+| Go/Rust/Zig placeholders | ✅ Configured | - |
+| Release automation | ✅ Configured | - |
+| Dependabot | ✅ Configured | - |
 
 ## Language Implementation Status
 
 | Language | Status | Current Phase | Stack |
 |----------|--------|---------------|-------|
-| Python | ✅ **Control Plane Complete** | Ready for M1 P3 | FastAPI, uvicorn, async |
+| Python | 🟡 Data Plane In Progress | M1 Phase 3 | FastAPI, uvicorn, async |
 | Go | 🔴 Not Started | Waiting for Python ref | Gin, gin-swagger |
 | Rust | 🔴 Not Started | Waiting for Python ref | Axum, utoipa |
 | Zig | 🔴 Not Started | Waiting for Python ref | TBD |
@@ -66,48 +79,27 @@ Status: ✅ **COMPLETE** - 10/10 Tasks Done
 | test_describe_table.py | 4 | ✅ All passing |
 | **Total** | **84** | **✅ All passing** |
 
-## Implemented Operations (Control Plane Complete ✅)
+## Implemented Operations
 
-### CreateTable ✅
-- Table name validation
-- Key schema validation (HASH, RANGE)
-- Attribute definitions validation
-- SQLite database creation
-- Error handling (TableAlreadyExistsException, ValidationException)
-- **7 tests passing**
+### Control Plane (Complete ✅)
+- ✅ CreateTable
+- ✅ DeleteTable
+- ✅ ListTables
+- ✅ DescribeTable
+- ✅ DescribeEndpoints
 
-### DeleteTable ✅
-- Table name validation
-- Resource existence check
-- Connection cleanup
-- SQLite file deletion
-- Error handling (ResourceNotFoundException)
-- **4 tests passing**
-
-### ListTables ✅
-- List all tables alphabetically
-- Pagination with Limit
-- ExclusiveStartTableName for paging
-- LastEvaluatedTableName in response
-- **5 tests passing**
-
-### DescribeTable ✅
-- Read table metadata from SQLite
-- Return complete TableDescription
-- Error handling (ResourceNotFoundException)
-- **3 tests passing**
-
-### DescribeEndpoints ✅
-- Return service endpoints
-- Cache period configuration
-- **1 test passing**
+### Data Plane (In Progress 🟡)
+- 🔜 GetItem (planned)
+- 🔜 PutItem (planned)
+- 🔜 DeleteItem (planned)
+- 🔜 UpdateItem (planned)
 
 ## Files Created in M1 Phase 2
 
 ### Core Package
 - `dyscount_core/models/` - AttributeValue, Table, Operations, Errors
 - `dyscount_core/storage/` - SQLite backend, Table manager
-- `dyscount_core/services/` - TableService (CreateTable, DeleteTable, ListTables, DescribeTable, DescribeEndpoints)
+- `dyscount_core/services/` - TableService
 - `dyscount_core/config.py` - Pydantic settings
 
 ### API Package
@@ -122,19 +114,9 @@ Status: ✅ **COMPLETE** - 10/10 Tasks Done
 - `dyscount_cli/commands/serve.py` - Server command
 - `dyscount_cli/commands/config.py` - Config commands
 
-### Tests
-- `tests/test_models.py` - 58 model tests
-- `tests/test_api_basic.py` - Basic API tests
-- `tests/test_cli.py` - CLI tests
-- `tests/test_create_table.py` - 7 CreateTable tests
-- `tests/test_delete_table.py` - 4 DeleteTable tests
-- `tests/test_list_tables.py` - 5 ListTables tests
-- `tests/test_describe_table.py` - 4 DescribeTable/Endpoints tests
-
 ### Infrastructure
 - `Dockerfile` - Multi-stage Docker build
-- `pyproject.toml` - Workspace configuration
-- `packages/*/pyproject.toml` - Package configurations
+- `.github/workflows/` - CI/CD workflows
 
 ## Specifications Available
 
@@ -151,35 +133,14 @@ Status: ✅ **COMPLETE** - 10/10 Tasks Done
 | `specs/LSP.md` | 34KB | 1,306 | LSP server spec |
 | **Total** | **~249KB** | **8,555** | **Complete spec suite** |
 
-## Implementation Stack
-
-| Component | Technology |
-|-----------|------------|
-| Python HTTP | FastAPI + uvicorn (async) |
-| Python Structure | Monorepo (core, api, cli packages) |
-| Go HTTP | Gin + gin-swagger |
-| Rust HTTP | Axum + utoipa |
-| Zig HTTP | TBD (async) |
-| Expression Parser | Tree-sitter (unified grammar) |
-| LSP | Standalone server |
-| OpenAPI | Generated from code |
-| Testing | Matrix testing all 4 implementations |
-| Storage | SQLite (one file per table) |
-| Serialization | MessagePack |
-| Auth | AWS Signature V4 |
-| IAM | AWS IAM-style policies |
-| Config | JSON file + env vars |
-| Metrics | Prometheus endpoint |
-| Logging | Structured JSON |
-
 ## Blockers
 
 None.
 
 ## Next Actions
 
-1. ✅ **M1 Phase 2 COMPLETE** - All 5 Control Plane operations implemented
-2. 🔄 **Git Commit and PR** - Commit changes and create GitHub PR
-3. 🔜 **M1 Phase 3** - Data Plane operations (GetItem, PutItem, DeleteItem, UpdateItem)
+1. ✅ M1 Phase 2 COMPLETE
+2. ✅ CI/CD Workflows merged (PR #2)
+3. 🟡 M1 Phase 3 - Data Plane operations starting
 
 See `DO_NEXT.md` for details.

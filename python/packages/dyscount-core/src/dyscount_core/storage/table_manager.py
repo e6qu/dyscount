@@ -377,3 +377,126 @@ class TableManager:
         
         metadata_dict = json.loads(row[0].decode())
         return TableMetadata.model_validate(metadata_dict)
+
+    # =========================================================================
+    # Item Operations (Data Plane)
+    # =========================================================================
+
+    async def get_item(
+        self,
+        table_name: str,
+        key: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Get a single item by its primary key.
+        
+        Args:
+            table_name: Name of the table
+            key: Primary key as a dict of attribute name to AttributeValue dict
+                e.g., {"pk": {"S": "user#123"}, "sk": {"S": "profile"}}
+        
+        Returns:
+            The item as a dict of attribute name to AttributeValue dict, or None if not found
+            e.g., {"pk": {"S": "user#123"}, "name": {"S": "John"}}
+        
+        Raises:
+            ValueError: If table does not exist
+        """
+        db_path = self._get_db_path(table_name)
+        
+        if not db_path.exists():
+            raise ValueError(f"Table does not exist: {table_name}")
+        
+        # Get table metadata to understand key schema
+        conn = await self.connection_manager.get_connection(db_path)
+        metadata = await self._load_metadata(conn, table_name)
+        
+        if metadata is None:
+            raise ValueError(f"Table metadata not found: {table_name}")
+        
+        # Extract partition key and sort key from the key dict
+        key_schema = metadata.KeySchema
+        partition_key_name = key_schema[0].AttributeName
+        partition_key_value = key.get(partition_key_name)
+        
+        if partition_key_value is None:
+            raise ValueError(f"Missing partition key attribute: {partition_key_name}")
+        
+        # Serialize partition key
+        pk_bytes = self._serialize_key_value(partition_key_value)
+        pk_type = self._get_key_type(partition_key_value)
+        
+        # Handle sort key if present
+        sk_bytes = None
+        sk_type = None
+        if len(key_schema) > 1:
+            sort_key_name = key_schema[1].AttributeName
+            sort_key_value = key.get(sort_key_name)
+            
+            if sort_key_value is None:
+                raise ValueError(f"Missing sort key attribute: {sort_key_name}")
+            
+            sk_bytes = self._serialize_key_value(sort_key_value)
+            sk_type = self._get_key_type(sort_key_value)
+        
+        # Query the database
+        if sk_bytes is not None:
+            # Composite key lookup
+            cursor = await conn.execute(
+                "SELECT item_data FROM items WHERE pk = ? AND sk = ?",
+                (pk_bytes, sk_bytes)
+            )
+        else:
+            # Partition key only lookup
+            cursor = await conn.execute(
+                "SELECT item_data FROM items WHERE pk = ? AND sk IS NULL",
+                (pk_bytes,)
+            )
+        
+        row = await cursor.fetchone()
+        
+        if row is None:
+            return None
+        
+        # Deserialize item data
+        import msgpack
+        item_data = msgpack.unpackb(row[0], raw=False)
+        
+        return item_data
+
+    def _serialize_key_value(self, key_value: Any) -> bytes:
+        """Serialize a key AttributeValue to bytes for storage.
+        
+        Args:
+            key_value: AttributeValue dict, e.g., {"S": "user#123"}
+        
+        Returns:
+            Serialized bytes
+        """
+        import msgpack
+        
+        # Handle DynamoDB JSON format
+        if isinstance(key_value, dict):
+            return msgpack.packb(key_value, use_bin_type=True)
+        
+        # If it's already a simple value, wrap it
+        return msgpack.packb(key_value, use_bin_type=True)
+
+    def _get_key_type(self, key_value: Any) -> str:
+        """Extract the DynamoDB type from a key AttributeValue.
+        
+        Args:
+            key_value: AttributeValue dict, e.g., {"S": "user#123"}
+        
+        Returns:
+            Type string: 'S', 'N', or 'B'
+        """
+        if isinstance(key_value, dict):
+            # DynamoDB JSON format
+            if "S" in key_value:
+                return "S"
+            elif "N" in key_value:
+                return "N"
+            elif "B" in key_value:
+                return "B"
+        
+        raise ValueError(f"Invalid key value format: {key_value}")
