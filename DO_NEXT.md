@@ -1,4 +1,4 @@
-# Do Next - M1 Phase 3 COMPLETE, Starting Phase 4
+# Do Next - M1 Phase 4 COMPLETE, Starting Phase 5
 
 ## ✅ Previous Milestones Complete
 
@@ -11,78 +11,92 @@
 - Python monorepo with uv workspace
 - 5 DynamoDB operations implemented
 - 84 tests passing
-- CI/CD workflows added
 
 ### M1 Phase 3: Data Plane ✅
-- **T1: GetItem** - Complete (10 tests, PR #3 merged)
-- **T2: PutItem** - Complete (14 tests, PR #5 merged)
-- **T3: DeleteItem** - Complete (13 tests, PR #6 merged)
-- **T4: UpdateItem** - Complete (17 tests, PR #7 merged)
-- **T5: Condition Expressions** - Complete (70 tests, PR #8 merged)
-- **T6: E2E Tests** - Complete (25 tests)
-- 208 unit tests + 25 E2E tests
+- GetItem, PutItem, DeleteItem, UpdateItem
+- Condition Expressions
+- E2E Tests
+- 208 tests passing
+
+### M1 Phase 4: Query & Scan ✅
+- Query with KeyConditionExpression
+- Scan with FilterExpression
+- Pagination support
+- 233 tests passing
 
 ---
 
-## 🚀 Current Phase: M1 Phase 4 - Query & Scan
+## 🚀 Current Phase: M1 Phase 5 - Batch, Transactions & Indexes
 
 **Status**: 🟡 **STARTING**
 
-### Phase 4 Tasks
+### Phase 5 Tasks
 
 | Task | Operation | Status | Est. Effort |
 |------|-----------|--------|-------------|
-| M1P4-T1 | Query | 🟡 Next | 2 days |
-| M1P4-T2 | Scan | Planned | 1.5 days |
-| M1P4-T3 | KeyConditionExpression | Planned | 1 day |
-| M1P4-T4 | FilterExpression | Planned | 1 day |
-| M1P4-T5 | ProjectionExpression | Planned | 0.5 days |
-| M1P4-T6 | Pagination | Planned | 0.5 days |
+| M1P5-T1 | BatchGetItem | 🟡 Next | 1.5 days |
+| M1P5-T2 | BatchWriteItem | Planned | 1.5 days |
+| M1P5-T3 | TransactGetItems | Planned | 1.5 days |
+| M1P5-T4 | TransactWriteItems | Planned | 2 days |
+| M1P5-T5 | GSI Support | Planned | 2 days |
+| M1P5-T6 | UpdateTable (GSI) | Planned | 1 day |
 
-**Total Effort**: ~6.5 days
+**Total Effort**: ~9.5 days
 
 ---
 
 ## 📋 Immediate Next Steps
 
-### 1. Create feature branch for M1 Phase 4
+### 1. Create feature branch for M1 Phase 5
 ```bash
 git checkout main
 git pull origin main
-git checkout -b feature/M1P4-query-scan
+git checkout -b feature/M1P5-batch-transactions
 ```
 
-### 2. Implement Query Operation (M1P4-T1)
+### 2. Implement BatchGetItem (M1P5-T1)
 
 **Goals**:
-- Query items by partition key
-- Support sort key conditions (begins_with, =, <, <=, >, >=, BETWEEN)
-- Support KeyConditionExpression
-- Return paginated results with LastEvaluatedKey
-
-**Key Files to Create/Modify**:
-- `dyscount_core/expressions/key_condition_parser.py` - Parse KeyConditionExpression
-- `dyscount_core/storage/table_manager.py` - Add query() method
-- `dyscount_core/services/item_service.py` - Add query() service method
-- `dyscount_api/routes/tables.py` - Add Query route handler
-- `tests/test_query.py` - Comprehensive tests
-
-**Implementation Notes**:
-- Use SQLite index on pk column for efficient queries
-- For sort key conditions, filter in SQL WHERE clause
-- Support ascending/descending order (ScanIndexForward)
-- Handle pagination with Limit and ExclusiveStartKey
-
-### 3. Implement Scan Operation (M1P4-T2)
-
-**Goals**:
-- Full table scan with optional filters
-- Support FilterExpression
-- Pagination support
+- Get multiple items from one or more tables
+- Handle up to 100 items per request
+- Return unprocessed keys if request exceeds limits
+- Support for consistent reads
 
 **Key Files**:
-- Similar structure to Query
-- `tests/test_scan.py` - Tests
+- `models/operations.py` - BatchGetItemRequest, BatchGetItemResponse
+- `storage/table_manager.py` - batch_get_items() method
+- `services/item_service.py` - batch_get_item() service method
+- `api/routes/tables.py` - handle_batch_get_item() handler
+- `tests/test_batch_get_item.py`
+
+### 3. Implement BatchWriteItem (M1P5-T2)
+
+**Goals**:
+- Put or delete multiple items in one or more tables
+- Handle up to 25 items per request (put or delete)
+- Return unprocessed items if request exceeds limits
+
+### 4. Implement TransactGetItems (M1P5-T3)
+
+**Goals**:
+- Atomic read of multiple items
+- All-or-nothing transaction semantics
+- Up to 100 items per transaction
+
+### 5. Implement TransactWriteItems (M1P5-T4)
+
+**Goals**:
+- Atomic write of multiple items
+- Support Put, Update, Delete, ConditionCheck
+- Up to 100 items per transaction
+
+### 6. Implement GSI Support (M1P5-T5, T6)
+
+**Goals**:
+- Create GSI on table creation
+- UpdateTable to add GSI
+- Maintain GSI on writes
+- Query GSI
 
 ---
 
@@ -90,42 +104,35 @@ git checkout -b feature/M1P4-query-scan
 
 | Milestone | Phases | Progress |
 |-----------|--------|----------|
-| M1: Foundation | 10 | 🟡 80% (3 complete, 1 starting) |
+| M1: Foundation | 10 | 🟡 90% (4 complete, 1 starting) |
 | M2: Advanced | 4 | ⚪ 0% |
 | M3: Global/Streams | 3 | ⚪ 0% |
 | M4: Import/Export | 3 | ⚪ 0% |
-| **Total** | **20** | **40%** |
+| **Total** | **20** | **45%** |
 
 ---
 
-## 🔜 M1 Phase 4 Scope
+## 🔜 M1 Phase 5 Scope
 
-**Query Operation Features**:
-- Query by partition key (required)
-- Sort key conditions (optional)
-  - `=`, `<`, `<=`, `>`, `>=`, `BETWEEN`, `begins_with`
-- KeyConditionExpression parser
-- FilterExpression for post-filtering
-- ProjectionExpression for attribute selection
-- ScanIndexForward (ascending/descending)
-- Limit and pagination (ExclusiveStartKey, LastEvaluatedKey)
-- ReturnConsumedCapacity
+**Batch Operations**:
+- BatchGetItem - Get up to 100 items from one or more tables
+- BatchWriteItem - Put/Delete up to 25 items in one or more tables
 
-**Scan Operation Features**:
-- Full table scan
-- FilterExpression support
-- ProjectionExpression
-- Limit and pagination
-- Segment/TotalSegments for parallel scans
-- ReturnConsumedCapacity
+**Transactions**:
+- TransactGetItems - Atomic reads of up to 100 items
+- TransactWriteItems - Atomic writes with Put/Update/Delete/ConditionCheck
+
+**Indexes**:
+- Global Secondary Index (GSI) support
+- UpdateTable to add GSI
+- Query on GSI
 
 ---
 
 ## 📝 Notes
 
-- M1 Phase 3 is 100% complete
-- All 6 tasks merged to main
-- 208 unit tests passing
-- 25 E2E tests ready (require running server)
-- Expression parser infrastructure ready from T5
-- SQLite storage layer ready for Query/Scan
+- M1 Phase 4 is 100% complete (PR #10)
+- 233 unit tests passing
+- 11 DynamoDB operations implemented
+- Query and Scan fully functional
+- Ready for Batch and Transaction operations

@@ -61,84 +61,37 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 **Estimated Token Budget**: ~850k tokens across 10 phases
 
 #### M1 Phase 1: Specifications & E2E Framework ✅
-**Budget**: ~60k tokens
-**Deliverables**:
-- [x] `specs/API_OPERATIONS.md` - 61 DynamoDB operations documented
-- [x] `specs/DATA_TYPES.md` - Type system & JSON protocol
-- [x] `specs/SQLITE_SCHEMA.md` - Storage architecture
-- [x] `specs/AUTH_IAM.md` - Authentication & IAM
-- [x] `specs/CONFIG.md` - Configuration schema
-- [x] `specs/METRICS.md` - Prometheus metrics spec
-- [x] `specs/ERROR_CODES.md` - DynamoDB error responses
-- [x] `specs/TREE_SITTER.md` - Expression grammar
-- [x] `specs/LSP.md` - LSP server specification
-
-**Operations Covered**: None (specification only)
+**Status**: ✅ **COMPLETE** - 100%
 
 #### M1 Phase 2: Python - HTTP Server & Control Plane ✅
-**Budget**: ~145k tokens
 **Status**: ✅ **COMPLETE** - 100%
-
-**Deliverables**:
-- Python monorepo with uv workspace
-- dyscount-core, dyscount-api, dyscount-cli packages
-- HTTP server with FastAPI
-- Request routing based on X-Amz-Target header
-- JSON request/response handling
-- SQLite connection management
-
-**Operations to Implement**:
-| Category | Operations |
-|----------|------------|
-| Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable |
-| Utility | DescribeEndpoints |
-
-**Total**: 5 operations
 
 #### M1 Phase 3: Python - Core Data Plane ✅
+**Status**: ✅ **COMPLETE** - 100%
+
+#### M1 Phase 4: Python - Query, Scan & Expressions ✅
 **Budget**: ~90k tokens
 **Status**: ✅ **COMPLETE** - 100%
 
 **Deliverables**:
-- Item serialization/deserialization (MessagePack)
-- Primary key handling (partition key, sort key)
-- Expression parsing foundation
-- Error handling framework
-- Condition expressions
-- E2E tests with boto3
+- ✅ Expression parser (KeyConditionExpression, FilterExpression)
+- ✅ Query operation with key conditions
+- ✅ Scan operation with filters
+- ✅ ProjectionExpression support
+- ✅ Pagination (Limit, ExclusiveStartKey, LastEvaluatedKey)
 
-**Operations to Implement**:
+**Operations Implemented**:
 | Category | Operations | Status |
 |----------|------------|--------|
-| Data Plane | GetItem | ✅ Complete |
-| Data Plane | PutItem | ✅ Complete |
-| Data Plane | DeleteItem | ✅ Complete |
-| Data Plane | UpdateItem | ✅ Complete |
-| Condition Expressions | For Put/Delete/Update | ✅ Complete |
-| E2E Tests | boto3 integration | ✅ Complete |
-
-**Total**: 4 operations + condition expressions + E2E tests (9 cumulative)
-
-#### M1 Phase 4: Python - Query, Scan & Expressions 🟡
-**Budget**: ~90k tokens
-**Status**: 🟡 **STARTING**
-
-**Deliverables**:
-- Expression parser (KeyConditionExpression, FilterExpression)
-- Query operation with key conditions
-- Scan operation with filters
-- ProjectionExpression support
-- Pagination (Limit, ExclusiveStartKey)
-
-**Operations to Implement**:
-| Category | Operations |
-|----------|------------|
-| Data Plane | Query, Scan |
+| Data Plane | Query | ✅ Complete |
+| Data Plane | Scan | ✅ Complete |
 
 **Total**: 2 operations (11 cumulative)
 
-#### M1 Phase 5: Python - Batch, Transactions & Indexes
+#### M1 Phase 5: Python - Batch, Transactions & Indexes 🟡
 **Budget**: ~90k tokens
+**Status**: 🟡 **STARTING**
+
 **Deliverables**:
 - Batch operations handling
 - Transaction support
@@ -175,120 +128,28 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 
 #### M1 Phase 7: Go Implementation
 **Budget**: ~100k tokens
-**Approach**: Port Python implementation to Go
-
-**Libraries/Frameworks** (TBD):
-- HTTP: stdlib net/http vs Gin/Echo
-- SQLite: mattn/go-sqlite3
-- MessagePack: msgpack/v5
-
-**Implement all 22 operations from M1 Phases 2-6**
 
 #### M1 Phase 8: Rust Implementation
 **Budget**: ~100k tokens
-**Approach**: Port to Rust
-
-**Libraries/Frameworks** (TBD):
-- HTTP: Axum/Actix-web
-- SQLite: sqlx/rusqlite
-- MessagePack: rmp-serde
-
-**Implement all 22 operations from M1 Phases 2-6**
 
 #### M1 Phase 9: Zig Implementation
 **Budget**: ~100k tokens
-**Approach**: Port to Zig
-
-**Libraries/Frameworks** (TBD):
-- HTTP: stdlib http (Zig 0.12+) or custom
-- SQLite: C bindings
-- MessagePack: Custom or existing library
-
-**Implement all 22 operations from M1 Phases 2-6**
 
 #### M1 Phase 10: E2E Testing & Validation
 **Budget**: ~60k tokens
-**Deliverables**:
-- Comprehensive E2E test suite covering all 22 operations
-- Performance benchmarks vs DynamoDB Local
-- Documentation (API usage, deployment, configuration)
-- CI/CD pipeline
-
-**Test Coverage**:
-- All implemented operations with boto3
-- AWS CLI compatibility
-- SDK compatibility (Go, Rust, JavaScript)
-- Auth scenarios (valid/invalid signatures, IAM policies)
-- Error handling validation
 
 ---
 
 ### Milestone 2: Advanced Operations
 **Goal**: Full feature parity for remaining common operations
 
-#### M2 Phase 1: TimeToLive & Continuous Backups
-- DescribeTimeToLive, UpdateTimeToLive
-- DescribeContinuousBackups, UpdateContinuousBackups
-
-#### M2 Phase 2: Backup & Restore
-- CreateBackup, DescribeBackup, DeleteBackup, ListBackups
-- RestoreTableFromBackup, RestoreTableToPointInTime
-
-#### M2 Phase 3: PartiQL Support
-- ExecuteStatement (SELECT, INSERT, UPDATE, DELETE)
-- BatchExecuteStatement
-- ExecuteTransaction
-
-#### M2 Phase 4: Advanced Features
-- DescribeLimits
-- DescribeContributorInsights, UpdateContributorInsights, ListContributorInsights
-- DescribeTableReplicaAutoScaling, UpdateTableReplicaAutoScaling
-
----
-
 ### Milestone 3: Global Tables & Streams
 **Goal**: Multi-region and event-driven capabilities
-
-#### M3 Phase 1: Global Tables
-- CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable
-- ListGlobalTables, UpdateGlobalTableSettings, DescribeGlobalTableSettings
-
-#### M3 Phase 2: DynamoDB Streams
-- ListStreams, DescribeStream, GetShardIterator, GetRecords
-
-#### M3 Phase 3: Kinesis Integration
-- EnableKinesisStreamingDestination, DisableKinesisStreamingDestination
-- DescribeKinesisStreamingDestination, UpdateKinesisStreamingDestination
-
----
 
 ### Milestone 4: Import/Export & Polish
 **Goal**: Complete API coverage and production readiness
 
-#### M4 Phase 1: Import/Export Operations
-- ImportTable, DescribeImport, ListImports
-- ExportTableToPointInTime, DescribeExport, ListExports
-
-#### M4 Phase 2: Performance Optimization
-- Query plan optimization
-- Connection pooling improvements
-- Caching layer (optional)
-
-#### M4 Phase 3: Production Hardening
-- Comprehensive error handling
-- Rate limiting
-- Resource quotas
-- Documentation completion
-
 ---
-
-## Language-Specific Roadmaps
-
-Detailed implementation plans for each language:
-- `python/PLAN.md` - Reference implementation
-- `go/PLAN.md`
-- `rust/PLAN.md`
-- `zig/PLAN.md`
 
 ## Success Criteria
 
@@ -303,11 +164,11 @@ Detailed implementation plans for each language:
 
 | Milestone | Phases | Status | Progress |
 |-----------|--------|--------|----------|
-| M1: Foundation | 10 | 🟡 In Progress | 80% |
+| M1: Foundation | 10 | 🟡 In Progress | 90% |
 | M2: Advanced | 4 | ⚪ Planned | 0% |
 | M3: Global/Streams | 3 | ⚪ Planned | 0% |
 | M4: Import/Export | 3 | ⚪ Planned | 0% |
-| **Total** | **20** | | **40%** |
+| **Total** | **20** | | **45%** |
 
 ## API Operations Coverage
 
