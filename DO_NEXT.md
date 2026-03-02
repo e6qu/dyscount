@@ -12,9 +12,13 @@
 - 84 tests passing
 - CI/CD workflows added
 
+### M1 Phase 3: Data Plane (Partial) ✅
+- **T1: GetItem** - Complete (10 tests, PR #3 merged)
+- 94 total tests passing
+
 ---
 
-## 🚀 Current Phase: M1 Phase 3 - Data Plane
+## 🚀 Current Phase: M1 Phase 3 - Data Plane (Continued)
 
 **Status**: 🟡 In Progress
 
@@ -22,33 +26,42 @@
 
 | Task | Operation | Status | Est. Effort |
 |------|-----------|--------|-------------|
-| M1P3-T1 | GetItem | Planned | 1 day |
-| M1P3-T2 | PutItem | Planned | 1.5 days |
+| M1P3-T1 | GetItem | ✅ Complete | Done |
+| M1P3-T2 | PutItem | 🟡 Next | 1.5 days |
 | M1P3-T3 | DeleteItem | Planned | 1 day |
 | M1P3-T4 | UpdateItem | Planned | 3 days |
 | M1P3-T5 | Condition Expressions | Planned | 2 days |
 | M1P3-T6 | E2E Tests | Planned | 1 day |
 
-**Total Estimated Effort**: ~9.5 days
+**Remaining Effort**: ~8.5 days
 
 ---
 
 ## 📋 Immediate Next Steps
 
-1. **Create feature branch** from main:
+1. **Create feature branch** from main for T2 (PutItem):
    ```bash
    git checkout main
    git pull origin main
-   git checkout -b phase/M1-P3-data-plane
+   git checkout -b feature/M1P3-T2-put-item
    ```
 
-2. **Implement T1: GetItem**
-   - Add GetItem models
-   - Implement storage.get_item()
-   - Add API route
-   - Write tests
+2. **Implement T2: PutItem**
+   - Add PutItem models (PutItemRequest, PutItemResponse)
+   - Implement `storage.put_item()` method
+   - Add `ItemService.put_item()` service method
+   - Add API route handler for PutItem
+   - Write comprehensive tests
+   - Support ReturnValues (NONE, ALL_OLD)
+   - Calculate ConsumedCapacity
 
-3. **Create PR** after T1-T3 complete
+3. **Verify Acceptance Criteria** per M1P3_T2_PUT_ITEM.md:
+   - Code complete
+   - Tests >80% coverage
+   - All tests passing
+   - Error handling per ERROR_CODES.md
+   - Docstrings complete
+   - ruff/ty checks pass
 
 ---
 
@@ -56,17 +69,17 @@
 
 | Milestone | Phases | Progress |
 |-----------|--------|----------|
-| M1: Foundation | 10 | 🟡 55% (2/10 complete, 1 in progress) |
+| M1: Foundation | 10 | 🟡 60% (2/10 complete, 1 in progress) |
 | M2: Advanced | 4 | ⚪ 0% |
 | M3: Global/Streams | 3 | ⚪ 0% |
 | M4: Import/Export | 3 | ⚪ 0% |
-| **Total** | **20** | **25%** |
+| **Total** | **20** | **30%** |
 
 ---
 
 ## 📝 Notes
 
 - CI/CD workflows are active (PR #2 merged)
-- All Phase 3 task files created in `python/tasks/todo/`
-- Expression parsing is the most complex part of this phase
-- Consider incremental PRs (T1-T3 first, then T4-T6)
+- GetItem merged via PR #3
+- Task files in `python/tasks/todo/` (M1P3_T2-T6)
+- Completed task moved to `python/tasks/done/M1P3_T1_GET_ITEM.md`

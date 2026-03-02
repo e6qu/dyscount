@@ -613,3 +613,68 @@ Language Server Protocol for DynamoDB expressions:
 6. Sync local `main` with `origin/main`
 7. Create new branch rebased from `origin/main`
 8. Create GitHub PR for review and merge
+
+---
+
+## 2026-03-02
+
+### M1 Phase 3: Data Plane - Task 1 Complete ✅
+
+#### Task M1P3-T1: Implement GetItem - COMPLETE ✅
+
+**Files Created**:
+- `python/packages/dyscount-core/src/dyscount_core/services/item_service.py` - Item service layer
+- `python/tests/test_get_item.py` - 10 comprehensive tests
+- `python/tasks/todo/M1P3_T2_PUT_ITEM.md` - Task file for PutItem
+- `python/tasks/todo/M1P3_T3_DELETE_ITEM.md` - Task file for DeleteItem
+- `python/tasks/todo/M1P3_T4_UPDATE_ITEM.md` - Task file for UpdateItem
+- `python/tasks/todo/M1P3_T5_CONDITION_EXPRESSIONS.md` - Task file for Condition Expressions
+- `python/tasks/todo/M1P3_T6_E2E_DATA_OPS.md` - Task file for E2E tests
+- `python/tasks/todo/M1P3_MASTER_CHECKLIST.md` - Phase 3 master checklist
+
+**Files Modified**:
+- `python/packages/dyscount-core/src/dyscount_core/models/operations.py` - Added GetItemRequest, GetItemResponse, ConsumedCapacity
+- `python/packages/dyscount-core/src/dyscount_core/storage/table_manager.py` - Added get_item() method
+- `python/packages/dyscount-api/src/dyscount_api/routes/tables.py` - Added GetItem route handler
+
+**Features**:
+- Retrieve item by primary key (partition key or composite)
+- Support for strongly consistent reads (ConsistentRead=True)
+- ConsumedCapacity tracking (0.5 RCU eventually consistent, 1.0 RCU strongly consistent)
+- Proper error handling (ResourceNotFoundException, ValidationException)
+
+**Test Results**:
+- 10 new tests added
+- 94 total tests passing (84 existing + 10 new)
+- All tests passing ✅
+
+**PR**: #3 - feat: M1 Phase 3 - GetItem Operation (M1P3_T1)
+**Status**: Merged to main
+
+**Task File**: Moved to `python/tasks/done/M1P3_T1_GET_ITEM.md`
+
+---
+
+### AGENTS.md Updates (2026-03-02)
+
+**Added Code Style Guidelines**:
+- Do not use useless comments (explain WHY, not WHAT)
+- Use early-exit pattern when it makes sense
+- Invert if-conditions to simplify logic and reduce indentation
+- Include code examples for both patterns
+
+**Added Verification Requirements**:
+- Always stop and wait for user review after creating PR
+- Always verify Acceptance Criteria before marking tasks complete
+- Always verify Definition of Done before marking tasks complete
+- New section: "Acceptance Criteria and Definition of Done Verification"
+- Includes example verification checklist
+
+---
+
+### Current State
+
+✅ **M1 Phase 3 T1 COMPLETE** - GetItem implemented
+🟡 **M1 Phase 3 T2 NEXT** - PutItem
+📊 **Progress**: 1/6 tasks (17%)
+🔢 **Tests**: 94 passing
