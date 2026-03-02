@@ -1035,3 +1035,154 @@ class DescribeTimeToLiveResponse(BaseModel):
     model_config = {"populate_by_name": True}
     
     time_to_live_description: TimeToLiveDescription = Field(..., alias="TimeToLiveDescription")
+
+
+# =============================================================================
+# Backup Operations (M2 Phase 2)
+# =============================================================================
+
+class BackupDetails(BaseModel):
+    """Contains details about a backup.
+    
+    Attributes:
+        BackupArn: The ARN of the backup
+        BackupName: The name of the backup
+        BackupSizeBytes: The size of the backup in bytes
+        BackupStatus: The status of the backup (CREATING, DELETED, AVAILABLE)
+        BackupType: The type of backup (USER, SYSTEM, AWS_BACKUP)
+        CreationDateTime: When the backup was created
+        TableArn: The ARN of the source table
+        TableName: The name of the source table
+    """
+    model_config = {"populate_by_name": True}
+    
+    backup_arn: str = Field(..., alias="BackupArn")
+    backup_name: str = Field(..., alias="BackupName")
+    backup_size_bytes: int = Field(default=0, alias="BackupSizeBytes")
+    backup_status: str = Field(default="CREATING", alias="BackupStatus")  # CREATING, DELETED, AVAILABLE
+    backup_type: str = Field(default="USER", alias="BackupType")  # USER, SYSTEM, AWS_BACKUP
+    creation_date_time: str = Field(..., alias="CreationDateTime")
+    table_arn: str = Field(..., alias="TableArn")
+    table_name: str = Field(..., alias="TableName")
+
+
+class CreateBackupRequest(BaseModel):
+    """Request model for CreateBackup operation.
+    
+    Creates a backup of an existing table.
+    
+    Attributes:
+        TableName: The name of the table to back up (required)
+        BackupName: The name of the backup (optional, defaults to table name + timestamp)
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., alias="TableName")
+    backup_name: Optional[str] = Field(default=None, alias="BackupName")
+
+
+class CreateBackupResponse(BaseModel):
+    """Response model for CreateBackup operation.
+    
+    Attributes:
+        BackupDetails: Details about the created backup
+    """
+    model_config = {"populate_by_name": True}
+    
+    backup_details: BackupDetails = Field(..., alias="BackupDetails")
+
+
+class RestoreTableFromBackupRequest(BaseModel):
+    """Request model for RestoreTableFromBackup operation.
+    
+    Creates a new table from an existing backup.
+    
+    Attributes:
+        BackupArn: The ARN of the backup to restore from (required)
+        TargetTableName: The name of the new table to create (required)
+        BillingModeOverride: Overrides the billing mode for the restored table
+        GlobalSecondaryIndexOverride: GSI definitions for the restored table
+        LocalSecondaryIndexOverride: LSI definitions for the restored table
+        ProvisionedThroughputOverride: Provisioned throughput for the restored table
+        SSESpecificationOverride: SSE settings for the restored table
+    """
+    model_config = {"populate_by_name": True}
+    
+    backup_arn: str = Field(..., alias="BackupArn")
+    target_table_name: str = Field(..., alias="TargetTableName")
+    billing_mode_override: Optional[str] = Field(default=None, alias="BillingModeOverride")
+    global_secondary_index_override: Optional[List[Dict[str, Any]]] = Field(default=None, alias="GlobalSecondaryIndexOverride")
+    local_secondary_index_override: Optional[List[Dict[str, Any]]] = Field(default=None, alias="LocalSecondaryIndexOverride")
+    provisioned_throughput_override: Optional[Dict[str, Any]] = Field(default=None, alias="ProvisionedThroughputOverride")
+    sse_specification_override: Optional[Dict[str, Any]] = Field(default=None, alias="SSESpecificationOverride")
+
+
+class RestoreTableFromBackupResponse(BaseModel):
+    """Response model for RestoreTableFromBackup operation.
+    
+    Attributes:
+        TableDescription: Details about the restored table
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_description: TableMetadata = Field(..., alias="TableDescription")
+
+
+class ListBackupsRequest(BaseModel):
+    """Request model for ListBackups operation.
+    
+    Lists all backups for the account.
+    
+    Attributes:
+        TableName: Filter by table name
+        Limit: Maximum number of backups to return
+        TimeRangeLowerBound: Filter backups created after this time
+        TimeRangeUpperBound: Filter backups created before this time
+        BackupType: Filter by backup type (USER, SYSTEM, AWS_BACKUP, ALL)
+        ExclusiveStartBackupArn: For pagination
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: Optional[str] = Field(default=None, alias="TableName")
+    limit: Optional[int] = Field(default=None, alias="Limit")
+    time_range_lower_bound: Optional[str] = Field(default=None, alias="TimeRangeLowerBound")
+    time_range_upper_bound: Optional[str] = Field(default=None, alias="TimeRangeUpperBound")
+    backup_type: Optional[str] = Field(default="ALL", alias="BackupType")
+    exclusive_start_backup_arn: Optional[str] = Field(default=None, alias="ExclusiveStartBackupArn")
+
+
+class ListBackupsResponse(BaseModel):
+    """Response model for ListBackups operation.
+    
+    Attributes:
+        BackupSummaries: List of backup summaries
+        LastEvaluatedBackupArn: For pagination
+    """
+    model_config = {"populate_by_name": True}
+    
+    backup_summaries: List[BackupDetails] = Field(default_factory=list, alias="BackupSummaries")
+    last_evaluated_backup_arn: Optional[str] = Field(default=None, alias="LastEvaluatedBackupArn")
+
+
+class DeleteBackupRequest(BaseModel):
+    """Request model for DeleteBackup operation.
+    
+    Deletes an existing backup.
+    
+    Attributes:
+        BackupArn: The ARN of the backup to delete (required)
+    """
+    model_config = {"populate_by_name": True}
+    
+    backup_arn: str = Field(..., alias="BackupArn")
+
+
+class DeleteBackupResponse(BaseModel):
+    """Response model for DeleteBackup operation.
+    
+    Attributes:
+        BackupDescription: Details about the deleted backup
+    """
+    model_config = {"populate_by_name": True}
+    
+    backup_description: Optional[BackupDetails] = Field(default=None, alias="BackupDescription")

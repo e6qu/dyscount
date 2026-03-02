@@ -104,6 +104,14 @@ async def dynamodb_endpoint(
         return await handle_update_time_to_live(body, config)
     elif operation == "DescribeTimeToLive":
         return await handle_describe_time_to_live(body, config)
+    elif operation == "CreateBackup":
+        return await handle_create_backup(body, config)
+    elif operation == "RestoreTableFromBackup":
+        return await handle_restore_table_from_backup(body, config)
+    elif operation == "ListBackups":
+        return await handle_list_backups(body, config)
+    elif operation == "DeleteBackup":
+        return await handle_delete_backup(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -1235,6 +1243,238 @@ async def handle_describe_time_to_live(body: dict, config: Config) -> JSONRespon
         # Create service and execute
         service = TableService(config)
         response = await service.describe_time_to_live(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+# =============================================================================
+# Backup Operations (M2 Phase 2)
+# =============================================================================
+
+async def handle_create_backup(body: dict, config: Config) -> JSONResponse:
+    """Handle CreateBackup operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            CreateBackupRequest,
+            CreateBackupResponse,
+        )
+        
+        # Parse request
+        request = CreateBackupRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.create_backup(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_restore_table_from_backup(body: dict, config: Config) -> JSONResponse:
+    """Handle RestoreTableFromBackup operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            RestoreTableFromBackupRequest,
+            RestoreTableFromBackupResponse,
+        )
+        
+        # Parse request
+        request = RestoreTableFromBackupRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.restore_table_from_backup(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except TableAlreadyExistsException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_list_backups(body: dict, config: Config) -> JSONResponse:
+    """Handle ListBackups operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            ListBackupsRequest,
+            ListBackupsResponse,
+        )
+        
+        # Parse request
+        request = ListBackupsRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.list_backups(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_delete_backup(body: dict, config: Config) -> JSONResponse:
+    """Handle DeleteBackup operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            DeleteBackupRequest,
+            DeleteBackupResponse,
+        )
+        
+        # Parse request
+        request = DeleteBackupRequest.model_validate(body)
+        
+        # Create service and execute
+        service = TableService(config)
+        response = await service.delete_backup(request)
         
         # Serialize response
         content = json.loads(

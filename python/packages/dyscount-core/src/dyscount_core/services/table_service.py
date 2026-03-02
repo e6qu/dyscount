@@ -28,6 +28,15 @@ from dyscount_core.models.operations import (
     UpdateTimeToLiveResponse,
     DescribeTimeToLiveRequest,
     DescribeTimeToLiveResponse,
+    CreateBackupRequest,
+    CreateBackupResponse,
+    BackupDetails,
+    RestoreTableFromBackupRequest,
+    RestoreTableFromBackupResponse,
+    ListBackupsRequest,
+    ListBackupsResponse,
+    DeleteBackupRequest,
+    DeleteBackupResponse,
 )
 from dyscount_core.storage.table_manager import TableManager
 from dyscount_core.models.errors import (
@@ -493,6 +502,134 @@ class TableService:
         # Update metadata with modified GSIs
         metadata.GlobalSecondaryIndexes = list(existing_gsis.values())
     
+    # ======================================================================
+    # Backup Operations (M2 Phase 2)
+    # ======================================================================
+
+    async def create_backup(self, request: CreateBackupRequest) -> CreateBackupResponse:
+        """Create a backup of an existing table.
+        
+        Args:
+            request: CreateBackupRequest with table name and optional backup name
+            
+        Returns:
+            CreateBackupResponse with backup details
+            
+        Raises:
+            ResourceNotFoundException: If table doesn't exist
+        """
+        self._validate_table_name(request.table_name)
+        
+        result = await self.table_manager.create_backup(
+            request.table_name,
+            request.backup_name,
+        )
+        
+        return CreateBackupResponse(
+            backup_details=BackupDetails(
+                backup_arn=result["BackupArn"],
+                backup_name=result["BackupName"],
+                backup_size_bytes=result["BackupSizeBytes"],
+                backup_status=result["BackupStatus"],
+                backup_type=result["BackupType"],
+                creation_date_time=result["CreationDateTime"],
+                table_arn=result["TableArn"],
+                table_name=result["TableName"],
+            ),
+        )
+
+    async def restore_table_from_backup(
+        self,
+        request: RestoreTableFromBackupRequest,
+    ) -> RestoreTableFromBackupResponse:
+        """Restore a table from a backup.
+        
+        Args:
+            request: RestoreTableFromBackupRequest with backup ARN and target table name
+            
+        Returns:
+            RestoreTableFromBackupResponse with table description
+            
+        Raises:
+            ResourceNotFoundException: If backup doesn't exist
+            TableAlreadyExistsException: If target table already exists
+        """
+        self._validate_table_name(request.target_table_name)
+        
+        table_metadata = await self.table_manager.restore_table_from_backup(
+            request.backup_arn,
+            request.target_table_name,
+        )
+        
+        return RestoreTableFromBackupResponse(
+            table_description=table_metadata,
+        )
+
+    async def list_backups(self, request: ListBackupsRequest) -> ListBackupsResponse:
+        """List all backups.
+        
+        Args:
+            request: ListBackupsRequest with optional filters
+            
+        Returns:
+            ListBackupsResponse with list of backups
+        """
+        backups = await self.table_manager.list_backups(
+            table_name=request.table_name,
+            backup_type=request.backup_type or "ALL",
+            limit=request.limit,
+        )
+        
+        backup_details = [
+            BackupDetails(
+                backup_arn=b["BackupArn"],
+                backup_name=b["BackupName"],
+                backup_size_bytes=b["BackupSizeBytes"],
+                backup_status=b["BackupStatus"],
+                backup_type=b["BackupType"],
+                creation_date_time=b["CreationDateTime"],
+                table_arn=b["TableArn"],
+                table_name=b["TableName"],
+            )
+            for b in backups
+        ]
+        
+        return ListBackupsResponse(
+            backup_summaries=backup_details,
+        )
+
+    async def delete_backup(self, request: DeleteBackupRequest) -> DeleteBackupResponse:
+        """Delete a backup.
+        
+        Args:
+            request: DeleteBackupRequest with backup ARN
+            
+        Returns:
+            DeleteBackupResponse with deleted backup details
+            
+        Raises:
+            ResourceNotFoundException: If backup doesn't exist
+        """
+        result = await self.table_manager.delete_backup(request.backup_arn)
+        
+        if result is None:
+            raise ResourceNotFoundException(
+                f"Backup not found: {request.backup_arn}"
+            )
+        
+        return DeleteBackupResponse(
+            backup_description=BackupDetails(
+                backup_arn=result["BackupArn"],
+                backup_name=result["BackupName"],
+                backup_size_bytes=result["BackupSizeBytes"],
+                backup_status=result["BackupStatus"],
+                backup_type=result["BackupType"],
+                creation_date_time=result["CreationDateTime"],
+                table_arn=result["TableArn"],
+                table_name=result["TableName"],
+            ),
+        )
+
     async def close(self):
         """Close any open resources"""
         await self.table_manager.close()
