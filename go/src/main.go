@@ -31,6 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
+	itemManager := storage.NewItemManager(tableManager)
 
 	// Setup Gin
 	if cfg.Server.Mode == "release" {
@@ -51,7 +52,7 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// DynamoDB API endpoint
-	dynamoHandler := handlers.NewDynamoDBHandler(tableManager)
+	dynamoHandler := handlers.NewDynamoDBHandler(tableManager, itemManager)
 	r.POST("/", dynamoHandler.Handle)
 
 	// Start server

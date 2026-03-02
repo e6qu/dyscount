@@ -1,4 +1,4 @@
-# Do Next - M1 Phase 4 COMPLETE, Starting Phase 5
+# Do Next - M1 COMPLETE, Starting M2
 
 ## ✅ Previous Milestones Complete
 
@@ -7,12 +7,12 @@
 - Documentation
 - 9 specifications created (~249KB)
 
-### M1 Phase 2: Control Plane ✅ 
+### M1 Phase 2: Python Control Plane ✅ 
 - Python monorepo with uv workspace
 - 5 DynamoDB operations implemented
 - 84 tests passing
 
-### M1 Phase 3: Data Plane ✅
+### M1 Phase 3: Python Data Plane ✅
 - GetItem, PutItem, DeleteItem, UpdateItem
 - Condition Expressions
 - E2E Tests
@@ -24,79 +24,102 @@
 - Pagination support
 - 233 tests passing
 
+### M1 Phase 5: Batch, Transactions & Indexes ✅
+- BatchGetItem, BatchWriteItem
+- TransactGetItems, TransactWriteItems
+- GSI/LSI support
+- 294 tests passing
+
+### M1 Phase 6: Metrics & Tagging ✅
+- Prometheus metrics endpoint
+- TagResource, UntagResource, ListTagsOfResource
+- AWS SigV4 deferred to later phase
+- 309 tests passing
+
+### M1 Phase 7: Go Implementation ✅
+- Full Go implementation (control + data plane)
+- 50 tests passing
+
+### M1 Phase 8: Rust Implementation ✅
+- Full Rust implementation (control + data plane)
+- 21 tests passing
+
+### M1 Phase 9: Zig Implementation ✅
+- Zig control plane implementation
+- 9 tests passing
+
 ---
 
-## 🚀 Current Phase: M1 Phase 5 - Batch, Transactions & Indexes
+## 🚀 Current Phase: M2 - Advanced Operations
 
-**Status**: 🟡 **STARTING**
+**Status**: ⚪ **STARTING**
 
-### Phase 5 Tasks
+### M2 Phase 1: Time-to-Live (TTL)
 
 | Task | Operation | Status | Est. Effort |
 |------|-----------|--------|-------------|
-| M1P5-T1 | BatchGetItem | 🟡 Next | 1.5 days |
-| M1P5-T2 | BatchWriteItem | Planned | 1.5 days |
-| M1P5-T3 | TransactGetItems | Planned | 1.5 days |
-| M1P5-T4 | TransactWriteItems | Planned | 2 days |
-| M1P5-T5 | GSI Support | Planned | 2 days |
-| M1P5-T6 | UpdateTable (GSI) | Planned | 1 day |
+| M2P1-T1 | TTL Implementation | Planned | 2 days |
+| M2P1-T2 | Expiration Management | Planned | 1.5 days |
 
-**Total Effort**: ~9.5 days
+**Total Effort**: ~3.5 days
+
+### M2 Phase 2: Backup & Restore
+
+| Task | Operation | Status | Est. Effort |
+|------|-----------|--------|-------------|
+| M2P2-T1 | CreateBackup | Planned | 2 days |
+| M2P2-T2 | RestoreTableFromBackup | Planned | 2 days |
+| M2P2-T3 | ListBackups | Planned | 1 day |
+
+**Total Effort**: ~5 days
+
+### M2 Phase 3: Point-in-Time Recovery
+
+| Task | Operation | Status | Est. Effort |
+|------|-----------|--------|-------------|
+| M2P3-T1 | Enable/Disable PITR | Planned | 2 days |
+| M2P3-T2 | RestoreTableToPointInTime | Planned | 2 days |
+
+**Total Effort**: ~4 days
+
+### M2 Phase 4: Advanced Query Features
+
+| Task | Operation | Status | Est. Effort |
+|------|-----------|--------|-------------|
+| M2P4-T1 | PartiQL Support | Planned | 3 days |
+| M2P4-T2 | Parallel Scan Improvements | Planned | 1.5 days |
+
+**Total Effort**: ~4.5 days
 
 ---
 
 ## 📋 Immediate Next Steps
 
-### 1. Create feature branch for M1 Phase 5
+### 1. Create feature branch for M2 Phase 1
 ```bash
 git checkout main
 git pull origin main
-git checkout -b feature/M1P5-batch-transactions
+git checkout -b feature/M2P1-ttl
 ```
 
-### 2. Implement BatchGetItem (M1P5-T1)
+### 2. Implement TTL (M2P1-T1)
 
 **Goals**:
-- Get multiple items from one or more tables
-- Handle up to 100 items per request
-- Return unprocessed keys if request exceeds limits
-- Support for consistent reads
+- Enable TTL on tables
+- Store expiration timestamps
+- Background cleanup process
+- UpdateItem with TTL attribute
 
-**Key Files**:
-- `models/operations.py` - BatchGetItemRequest, BatchGetItemResponse
-- `storage/table_manager.py` - batch_get_items() method
-- `services/item_service.py` - batch_get_item() service method
-- `api/routes/tables.py` - handle_batch_get_item() handler
-- `tests/test_batch_get_item.py`
+### 3. M1 Phase 10: Cross-Language E2E Testing
 
-### 3. Implement BatchWriteItem (M1P5-T2)
+Before moving fully to M2, complete E2E validation:
 
 **Goals**:
-- Put or delete multiple items in one or more tables
-- Handle up to 25 items per request (put or delete)
-- Return unprocessed items if request exceeds limits
-
-### 4. Implement TransactGetItems (M1P5-T3)
-
-**Goals**:
-- Atomic read of multiple items
-- All-or-nothing transaction semantics
-- Up to 100 items per transaction
-
-### 5. Implement TransactWriteItems (M1P5-T4)
-
-**Goals**:
-- Atomic write of multiple items
-- Support Put, Update, Delete, ConditionCheck
-- Up to 100 items per transaction
-
-### 6. Implement GSI Support (M1P5-T5, T6)
-
-**Goals**:
-- Create GSI on table creation
-- UpdateTable to add GSI
-- Maintain GSI on writes
-- Query GSI
+- boto3 tests against Go implementation
+- boto3 tests against Rust implementation
+- boto3 tests against Zig implementation
+- Performance benchmarks across languages
+- Compatibility matrix validation
 
 ---
 
@@ -104,35 +127,28 @@ git checkout -b feature/M1P5-batch-transactions
 
 | Milestone | Phases | Progress |
 |-----------|--------|----------|
-| M1: Foundation | 10 | 🟡 90% (4 complete, 1 starting) |
+| M1: Foundation | 9 | ✅ 100% |
 | M2: Advanced | 4 | ⚪ 0% |
 | M3: Global/Streams | 3 | ⚪ 0% |
 | M4: Import/Export | 3 | ⚪ 0% |
-| **Total** | **20** | **45%** |
+| **Total** | **19** | **53%** |
 
 ---
 
-## 🔜 M1 Phase 5 Scope
+## 🔜 M2 Phase 1 Scope
 
-**Batch Operations**:
-- BatchGetItem - Get up to 100 items from one or more tables
-- BatchWriteItem - Put/Delete up to 25 items in one or more tables
-
-**Transactions**:
-- TransactGetItems - Atomic reads of up to 100 items
-- TransactWriteItems - Atomic writes with Put/Update/Delete/ConditionCheck
-
-**Indexes**:
-- Global Secondary Index (GSI) support
-- UpdateTable to add GSI
-- Query on GSI
+**TTL Operations**:
+- UpdateTimeToLive - Enable/disable TTL on a table
+- DescribeTimeToLive - Get TTL configuration
+- Automatic item expiration
+- Background cleanup process
 
 ---
 
 ## 📝 Notes
 
-- M1 Phase 4 is 100% complete (PR #10)
-- 233 unit tests passing
-- 11 DynamoDB operations implemented
-- Query and Scan fully functional
-- Ready for Batch and Transaction operations
+- M1 is 100% complete (all 9 phases)
+- 389 total tests passing across 4 languages
+- 36 DynamoDB operations implemented
+- Ready for advanced features (TTL, backups, PITR)
+- AWS SigV4 auth deferred to production phase

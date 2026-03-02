@@ -1,0 +1,17 @@
+# Zig build artifacts
+.zig-cache/
+zig-out/
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Data directory (runtime generated)
+/data
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
