@@ -6,6 +6,7 @@ from dyscount_core.config import Config
 from dyscount_core.models.errors import (
     ResourceNotFoundException,
     ValidationException,
+    ConditionalCheckFailedException,
 )
 from dyscount_core.models.operations import (
     UpdateItemRequest,
@@ -19,6 +20,7 @@ from dyscount_core.models.operations import (
     GetItemResponse,
 )
 from dyscount_core.storage.table_manager import TableManager
+from dyscount_core.expressions import ConditionEvaluator
 
 
 class ItemService:
@@ -209,10 +211,15 @@ class ItemService:
             old_item = await self.table_manager.put_item(
                 table_name=request.table_name,
                 item=request.item,
+                condition_expression=request.condition_expression,
+                expression_attribute_names=request.expression_attribute_names,
+                expression_attribute_values=request.expression_attribute_values,
             )
         except ValueError as e:
             if "key" in str(e).lower():
                 raise ValidationException(str(e)) from None
+            if "ConditionalCheckFailedException" in str(e):
+                raise ConditionalCheckFailedException(str(e).replace("ConditionalCheckFailedException: ", "")) from None
             raise
         
         # Calculate consumed capacity
@@ -266,10 +273,15 @@ class ItemService:
             deleted_item = await self.table_manager.delete_item(
                 table_name=request.table_name,
                 key=request.key,
+                condition_expression=request.condition_expression,
+                expression_attribute_names=request.expression_attribute_names,
+                expression_attribute_values=request.expression_attribute_values,
             )
         except ValueError as e:
             if "key" in str(e).lower():
                 raise ValidationException(str(e)) from None
+            if "ConditionalCheckFailedException" in str(e):
+                raise ConditionalCheckFailedException(str(e).replace("ConditionalCheckFailedException: ", "")) from None
             raise
         
         # Calculate consumed capacity
@@ -326,9 +338,12 @@ class ItemService:
                 update_expression=request.update_expression,
                 expression_attribute_names=request.expression_attribute_names,
                 expression_attribute_values=request.expression_attribute_values,
+                condition_expression=request.condition_expression,
             )
         except ValueError as e:
-            if "key" in str(e).lower() or "expression" in str(e).lower():
+            if "ConditionalCheckFailedException" in str(e):
+                raise ConditionalCheckFailedException(str(e).replace("ConditionalCheckFailedException: ", "")) from None
+            if "key" in str(e).lower() or "UpdateExpression" in str(e):
                 raise ValidationException(str(e)) from None
             raise
         

@@ -6,7 +6,7 @@ Last Updated: 2026-03-02
 
 | Milestone | Status | Progress |
 |-----------|--------|----------|
-| M1: Foundation & Core Operations | 🟡 In Progress | 55% |
+| M1: Foundation & Core Operations | 🟡 In Progress | 75% |
 | M2: Advanced Operations | ⚪ Pending | 0% |
 | M3: Streams & Events | ⚪ Pending | 0% |
 | M4: Production Readiness | ⚪ Pending | 0% |
@@ -33,20 +33,20 @@ Status: 🟡 **IN PROGRESS** - 6 tasks planned
 | M1P2-T10 | Tests and Dockerfile | ✅ Complete | 2026-03-02 |
 
 **Completed**: 10/10 tasks (100%)  
-**Tests**: 94 tests passing (84 + 10 new)
+**Tests**: 84 tests passing
 
 ### Current Phase: M1 Phase 3 🟡
 
-| Task ID | Task | Status | Completed |
-|---------|------|--------|-----------|
-| M1P3-T1 | Implement GetItem | ✅ Complete | 2026-03-02 |
-| M1P3-T2 | Implement PutItem | 🟡 In Progress | - |
-| M1P3-T3 | Implement DeleteItem | Planned | - |
-| M1P3-T4 | Implement UpdateItem | Planned | - |
-| M1P3-T5 | Condition Expressions | Planned | - |
-| M1P3-T6 | E2E Tests | Planned | - |
+| Task ID | Task | Status | Completed | PR |
+|---------|------|--------|-----------|-----|
+| M1P3-T1 | Implement GetItem | ✅ Complete | 2026-03-02 | #3 |
+| M1P3-T2 | Implement PutItem | ✅ Complete | 2026-03-02 | #5 |
+| M1P3-T3 | Implement DeleteItem | ✅ Complete | 2026-03-02 | #6 |
+| M1P3-T4 | Implement UpdateItem | ✅ Complete | 2026-03-02 | #7 |
+| M1P3-T5 | Condition Expressions | ✅ Complete | 2026-03-02 | #8 |
+| M1P3-T6 | E2E Tests | Planned | - | - |
 
-**Progress**: 1/6 tasks complete (17%)
+**Progress**: 5/6 tasks complete (83%)
 
 ## CI/CD Status
 
@@ -62,7 +62,7 @@ Status: 🟡 **IN PROGRESS** - 6 tasks planned
 
 | Language | Status | Current Phase | Stack |
 |----------|--------|---------------|-------|
-| Python | 🟡 Data Plane In Progress | M1 Phase 3 | FastAPI, uvicorn, async |
+| Python | 🟡 Data Plane Almost Complete | M1 Phase 3 | FastAPI, uvicorn, async |
 | Go | 🔴 Not Started | Waiting for Python ref | Gin, gin-swagger |
 | Rust | 🔴 Not Started | Waiting for Python ref | Axum, utoipa |
 | Zig | 🔴 Not Started | Waiting for Python ref | TBD |
@@ -79,7 +79,13 @@ Status: 🟡 **IN PROGRESS** - 6 tasks planned
 | test_delete_table.py | 4 | ✅ All passing |
 | test_list_tables.py | 5 | ✅ All passing |
 | test_describe_table.py | 4 | ✅ All passing |
-| **Total** | **84** | **✅ All passing** |
+| test_get_item.py | 10 | ✅ All passing |
+| test_put_item.py | 14 | ✅ All passing |
+| test_delete_item.py | 13 | ✅ All passing |
+| test_update_item.py | 17 | ✅ All passing |
+| test_condition_expression.py | 29 | ✅ All passing |
+| test_condition_parser.py | 41 | ✅ All passing |
+| **Total** | **208** | **✅ All passing** |
 
 ## Implemented Operations
 
@@ -90,35 +96,33 @@ Status: 🟡 **IN PROGRESS** - 6 tasks planned
 - ✅ DescribeTable
 - ✅ DescribeEndpoints
 
-### Data Plane (In Progress 🟡)
-- 🔜 GetItem (planned)
-- 🔜 PutItem (planned)
-- 🔜 DeleteItem (planned)
-- 🔜 UpdateItem (planned)
+### Data Plane (Almost Complete 🟡)
+- ✅ GetItem - Primary key retrieval
+- ✅ PutItem - Create/replace items with ReturnValues
+- ✅ DeleteItem - Delete with ReturnValues
+- ✅ UpdateItem - SET/REMOVE/ADD/DELETE with expressions
+- ✅ Condition Expressions - For PutItem, DeleteItem, UpdateItem
 
-## Files Created in M1 Phase 2
+## Files Created in M1 Phase 3
 
-### Core Package
-- `dyscount_core/models/` - AttributeValue, Table, Operations, Errors
-- `dyscount_core/storage/` - SQLite backend, Table manager
-- `dyscount_core/services/` - TableService
-- `dyscount_core/config.py` - Pydantic settings
+### Item Operations
+- `dyscount_core/services/item_service.py` - Item service layer
+- `dyscount_core/storage/table_manager.py` - Item CRUD operations
+- `dyscount_core/models/operations.py` - GetItem, PutItem, DeleteItem, UpdateItem models
 
-### API Package
-- `dyscount_api/main.py` - FastAPI app factory
-- `dyscount_api/routes/tables.py` - All 5 operation handlers
-- `dyscount_api/dependencies.py` - Config dependency
-- `dyscount_api/logging.py` - Structured logging
-- `dyscount_api/middleware.py` - Request logging
+### Expression Parser
+- `dyscount_core/expressions/parser.py` - UpdateExpression parser
+- `dyscount_core/expressions/evaluator.py` - Expression evaluator
+- `dyscount_core/expressions/condition_parser.py` - ConditionExpression parser
+- `dyscount_core/expressions/condition_evaluator.py` - Condition evaluator
 
-### CLI Package
-- `dyscount_cli/main.py` - Typer CLI entry point
-- `dyscount_cli/commands/serve.py` - Server command
-- `dyscount_cli/commands/config.py` - Config commands
-
-### Infrastructure
-- `Dockerfile` - Multi-stage Docker build
-- `.github/workflows/` - CI/CD workflows
+### Tests
+- `tests/test_get_item.py` - 10 tests
+- `tests/test_put_item.py` - 14 tests
+- `tests/test_delete_item.py` - 13 tests
+- `tests/test_update_item.py` - 17 tests
+- `tests/test_condition_expression.py` - 29 tests
+- `tests/test_condition_parser.py` - 41 tests
 
 ## Specifications Available
 
@@ -141,8 +145,8 @@ None.
 
 ## Next Actions
 
-1. ✅ M1 Phase 2 COMPLETE
-2. ✅ CI/CD Workflows merged (PR #2)
-3. 🟡 M1 Phase 3 - Data Plane operations starting
+1. ✅ M1 Phase 3 T1-T5 COMPLETE
+2. 🔄 M1 Phase 3 T6 - E2E Tests with boto3
+3. 🔜 M1 Phase 4 - Query/Scan operations
 
 See `DO_NEXT.md` for details.

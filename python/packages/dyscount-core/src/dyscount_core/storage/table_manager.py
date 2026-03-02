@@ -501,6 +501,9 @@ class TableManager:
         self,
         table_name: str,
         item: dict[str, Any],
+        condition_expression: str | None = None,
+        expression_attribute_names: dict[str, str] | None = None,
+        expression_attribute_values: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Put an item into a table.
         
@@ -509,12 +512,15 @@ class TableManager:
         Args:
             table_name: Name of the table
             item: Item data as dict of attribute name to AttributeValue
+            condition_expression: Optional condition expression to evaluate
+            expression_attribute_names: Optional name placeholders
+            expression_attribute_values: Optional value placeholders
         
         Returns:
             Previous item data if item existed, None otherwise
         
         Raises:
-            ValueError: If table does not exist
+            ValueError: If table does not exist or condition is not met
         """
         import msgpack
         
@@ -569,6 +575,25 @@ class TableManager:
         if row is not None:
             old_item = msgpack.unpackb(row[0], raw=False)
         
+        # Evaluate condition expression if provided
+        if condition_expression:
+            from dyscount_core.expressions import ConditionEvaluator
+            evaluator = ConditionEvaluator()
+            
+            # Use existing item for condition evaluation, or empty dict if new item
+            # Condition is evaluated against the current state of the item in the database
+            condition_item = old_item if old_item is not None else {}
+            
+            condition_met = evaluator.evaluate(
+                condition_item,
+                condition_expression,
+                expression_attribute_names or {},
+                expression_attribute_values or {},
+            )
+            
+            if not condition_met:
+                raise ValueError("ConditionalCheckFailedException: Condition expression is not met")
+        
         # Serialize item data
         item_data = msgpack.packb(item, use_bin_type=True)
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -599,18 +624,24 @@ class TableManager:
         self,
         table_name: str,
         key: dict[str, Any],
+        condition_expression: str | None = None,
+        expression_attribute_names: dict[str, str] | None = None,
+        expression_attribute_values: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Delete an item from a table.
         
         Args:
             table_name: Name of the table
             key: Primary key as a dict of attribute name to AttributeValue dict
+            condition_expression: Optional condition expression to evaluate
+            expression_attribute_names: Optional name placeholders
+            expression_attribute_values: Optional value placeholders
         
         Returns:
             The deleted item data if item existed, None otherwise
         
         Raises:
-            ValueError: If table does not exist
+            ValueError: If table does not exist or condition is not met
         """
         import msgpack
         
@@ -662,6 +693,21 @@ class TableManager:
         if row is not None:
             deleted_item = msgpack.unpackb(row[0], raw=False)
             
+            # Evaluate condition expression if provided
+            if condition_expression:
+                from dyscount_core.expressions import ConditionEvaluator
+                evaluator = ConditionEvaluator()
+                
+                condition_met = evaluator.evaluate(
+                    deleted_item,
+                    condition_expression,
+                    expression_attribute_names or {},
+                    expression_attribute_values or {},
+                )
+                
+                if not condition_met:
+                    raise ValueError("ConditionalCheckFailedException: Condition expression is not met")
+            
             # Delete the item
             await conn.execute(
                 "DELETE FROM items WHERE pk = ? AND sk = ?",
@@ -678,6 +724,7 @@ class TableManager:
         update_expression: str,
         expression_attribute_names: dict[str, str] | None = None,
         expression_attribute_values: dict[str, Any] | None = None,
+        condition_expression: str | None = None,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         """Update an item in a table.
         
@@ -687,6 +734,7 @@ class TableManager:
             update_expression: The UpdateExpression to apply
             expression_attribute_names: Optional name placeholders
             expression_attribute_values: Optional value placeholders
+            condition_expression: Optional condition expression to evaluate
         
         Returns:
             Tuple of (old_item, new_item)
@@ -751,6 +799,24 @@ class TableManager:
             new_item = {partition_key_name: partition_key_value}
             if len(key_schema) > 1:
                 new_item[key_schema[1].AttributeName] = key[key_schema[1].AttributeName]
+        
+        # Evaluate condition expression if provided
+        if condition_expression:
+            from dyscount_core.expressions import ConditionEvaluator
+            condition_evaluator = ConditionEvaluator()
+            
+            # Use old_item for condition evaluation (existing item or None)
+            condition_item = old_item if old_item is not None else {}
+            
+            condition_met = condition_evaluator.evaluate(
+                condition_item,
+                condition_expression,
+                expression_attribute_names or {},
+                expression_attribute_values or {},
+            )
+            
+            if not condition_met:
+                raise ValueError("ConditionalCheckFailedException: Condition expression is not met")
         
         # Apply the update expression
         evaluator = ExpressionEvaluator()
