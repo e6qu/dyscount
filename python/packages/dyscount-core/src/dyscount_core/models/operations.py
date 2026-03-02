@@ -443,3 +443,120 @@ class UpdateItemResponse(BaseModel):
     attributes: dict[str, Any] | None = Field(None, alias="Attributes")
     consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
     item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
+
+
+
+# =============================================================================
+# Query (Data Plane)
+# =============================================================================
+
+class QueryRequest(BaseModel):
+    """Request model for Query operation.
+    
+    Queries a table or index using the primary key.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        IndexName: The name of a secondary index to query
+        KeyConditionExpression: The condition that specifies the key values (required)
+        FilterExpression: A filter expression to apply after the query
+        ProjectionExpression: A string that identifies attributes to retrieve
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ExpressionAttributeValues: Values that can be substituted
+        ScanIndexForward: If true, results in ascending order; if false, descending
+        Select: Attributes to return (ALL_ATTRIBUTES, ALL_PROJECTED_ATTRIBUTES, SPECIFIC_ATTRIBUTES, COUNT)
+        Limit: The maximum number of items to evaluate
+        ExclusiveStartKey: The primary key of the first item to evaluate
+        ReturnConsumedCapacity: Whether to return consumed capacity
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    index_name: str | None = Field(None, alias="IndexName")
+    key_condition_expression: str = Field(..., alias="KeyConditionExpression")
+    filter_expression: str | None = Field(None, alias="FilterExpression")
+    projection_expression: str | None = Field(None, alias="ProjectionExpression")
+    expression_attribute_names: dict[str, str] | None = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: dict[str, Any] | None = Field(None, alias="ExpressionAttributeValues")
+    scan_index_forward: bool = Field(True, alias="ScanIndexForward")
+    select: str | None = Field(None, alias="Select")
+    limit: int | None = Field(None, ge=1, alias="Limit")
+    exclusive_start_key: dict[str, Any] | None = Field(None, alias="ExclusiveStartKey")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+
+
+class QueryResponse(BaseModel):
+    """Response model for Query operation.
+    
+    Attributes:
+        Items: An array of item attributes that match the query criteria
+        Count: The number of items that matched the query conditions
+        ScannedCount: The number of items evaluated
+        LastEvaluatedKey: The primary key of the item where the operation stopped
+        ConsumedCapacity: The capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    items: list[dict[str, Any]] = Field(default_factory=list, alias="Items")
+    count: int = Field(0, alias="Count")
+    scanned_count: int = Field(0, alias="ScannedCount")
+    last_evaluated_key: dict[str, Any] | None = Field(None, alias="LastEvaluatedKey")
+    consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
+
+
+# =============================================================================
+# Scan (Data Plane)
+# =============================================================================
+
+class ScanRequest(BaseModel):
+    """Request model for Scan operation.
+    
+    Scans a table or index and returns one or more items.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        IndexName: The name of a secondary index to scan
+        FilterExpression: A filter expression to apply to the results
+        ProjectionExpression: A string that identifies attributes to retrieve
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ExpressionAttributeValues: Values that can be substituted
+        Segment: For parallel scan, the segment to scan
+        TotalSegments: For parallel scan, the total number of segments
+        Select: Attributes to return
+        Limit: The maximum number of items to evaluate
+        ExclusiveStartKey: The primary key of the first item to evaluate
+        ReturnConsumedCapacity: Whether to return consumed capacity
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    index_name: str | None = Field(None, alias="IndexName")
+    filter_expression: str | None = Field(None, alias="FilterExpression")
+    projection_expression: str | None = Field(None, alias="ProjectionExpression")
+    expression_attribute_names: dict[str, str] | None = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: dict[str, Any] | None = Field(None, alias="ExpressionAttributeValues")
+    segment: int | None = Field(None, ge=0, alias="Segment")
+    total_segments: int | None = Field(None, ge=1, alias="TotalSegments")
+    select: str | None = Field(None, alias="Select")
+    limit: int | None = Field(None, ge=1, alias="Limit")
+    exclusive_start_key: dict[str, Any] | None = Field(None, alias="ExclusiveStartKey")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+
+
+class ScanResponse(BaseModel):
+    """Response model for Scan operation.
+    
+    Attributes:
+        Items: An array of item attributes that match the scan criteria
+        Count: The number of items that matched the filter expression
+        ScannedCount: The number of items evaluated
+        LastEvaluatedKey: The primary key of the item where the operation stopped
+        ConsumedCapacity: The capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    items: list[dict[str, Any]] = Field(default_factory=list, alias="Items")
+    count: int = Field(0, alias="Count")
+    scanned_count: int = Field(0, alias="ScannedCount")
+    last_evaluated_key: dict[str, Any] | None = Field(None, alias="LastEvaluatedKey")
+    consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")

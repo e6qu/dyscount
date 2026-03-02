@@ -385,3 +385,118 @@ class ItemService:
                 response.attributes = updated_attrs
         
         return response
+
+
+    async def query(self, request) -> "QueryResponse":
+        """Query items in a table.
+        
+        Args:
+            request: QueryRequest with table name and key conditions
+            
+        Returns:
+            QueryResponse with matching items
+        """
+        from dyscount_core.models.operations import QueryResponse
+        
+        # Validate table name
+        self._validate_table_name(request.table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(request.table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {request.table_name}"
+            )
+        
+        # Execute query
+        try:
+            items, last_evaluated_key = await self.table_manager.query(
+                table_name=request.table_name,
+                key_condition_expression=request.key_condition_expression,
+                expression_attribute_names=request.expression_attribute_names,
+                expression_attribute_values=request.expression_attribute_values,
+                filter_expression=request.filter_expression,
+                projection_expression=request.projection_expression,
+                scan_index_forward=request.scan_index_forward,
+                limit=request.limit,
+                exclusive_start_key=request.exclusive_start_key,
+            )
+        except ValueError as e:
+            if "expression" in str(e).lower():
+                raise ValidationException(str(e)) from None
+            raise
+        
+        # Calculate consumed capacity
+        # Query: 1 RCU per 4KB read
+        consumed_capacity = self._calculate_consumed_capacity(
+            request.table_name,
+            capacity_units=float(len(items)) * 0.5,
+        )
+        consumed_capacity.read_capacity_units = float(len(items)) * 0.5
+        
+        # Build response
+        response = QueryResponse(
+            Items=items,
+            Count=len(items),
+            ScannedCount=len(items),
+            LastEvaluatedKey=last_evaluated_key,
+            ConsumedCapacity=consumed_capacity,
+        )
+        
+        return response
+
+    async def scan(self, request) -> "ScanResponse":
+        """Scan items in a table.
+        
+        Args:
+            request: ScanRequest with table name and optional filters
+            
+        Returns:
+            ScanResponse with matching items
+        """
+        from dyscount_core.models.operations import ScanResponse
+        
+        # Validate table name
+        self._validate_table_name(request.table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(request.table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {request.table_name}"
+            )
+        
+        # Execute scan
+        try:
+            items, scanned_count, last_evaluated_key = await self.table_manager.scan(
+                table_name=request.table_name,
+                filter_expression=request.filter_expression,
+                projection_expression=request.projection_expression,
+                expression_attribute_names=request.expression_attribute_names,
+                expression_attribute_values=request.expression_attribute_values,
+                limit=request.limit,
+                exclusive_start_key=request.exclusive_start_key,
+                segment=request.segment,
+                total_segments=request.total_segments,
+            )
+        except ValueError as e:
+            if "expression" in str(e).lower():
+                raise ValidationException(str(e)) from None
+            raise
+        
+        # Calculate consumed capacity
+        # Scan: 1 RCU per 4KB read
+        consumed_capacity = self._calculate_consumed_capacity(
+            request.table_name,
+            capacity_units=float(scanned_count) * 0.5,
+        )
+        consumed_capacity.read_capacity_units = float(scanned_count) * 0.5
+        
+        # Build response
+        response = ScanResponse(
+            Items=items,
+            Count=len(items),
+            ScannedCount=scanned_count,
+            LastEvaluatedKey=last_evaluated_key,
+            ConsumedCapacity=consumed_capacity,
+        )
+        
+        return response

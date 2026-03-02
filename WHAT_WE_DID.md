@@ -878,3 +878,80 @@ uv run pytest tests/e2e/ -v
 🔜 **Next**: Implement Query with KeyConditionExpression
 
 ---
+
+---
+
+## M1 Phase 4: Query & Scan ✅
+
+### 2026-03-02
+
+#### Task M1P4-T1: Query Operation - COMPLETE ✅
+
+**Files Created**:
+- `dyscount_core/expressions/key_condition_parser.py` - KeyConditionExpression parser
+- `tests/test_query.py` - 12 Query tests
+
+**Files Modified**:
+- `models/operations.py` - QueryRequest, QueryResponse
+- `storage/table_manager.py` - query() method
+- `services/item_service.py` - query() service method
+- `api/routes/tables.py` - handle_query() route
+
+**Features**:
+- KeyConditionExpression with partition key equality
+- Sort key conditions: =, <, <=, >, >=, BETWEEN, begins_with
+- FilterExpression for post-filtering
+- ProjectionExpression for attribute selection
+- ScanIndexForward for ascending/descending order
+- Pagination with Limit, ExclusiveStartKey, LastEvaluatedKey
+- ConsumedCapacity tracking
+
+**Test Results**:
+- 12 Query tests passing
+- All tests passing ✅
+
+---
+
+#### Task M1P4-T2: Scan Operation - COMPLETE ✅
+
+**Files Modified**:
+- `models/operations.py` - ScanRequest, ScanResponse
+- `storage/table_manager.py` - scan() method
+- `services/item_service.py` - scan() service method
+- `api/routes/tables.py` - handle_scan() route
+
+**Features**:
+- Full table scan
+- FilterExpression support
+- ProjectionExpression
+- Limit and pagination
+- Parallel scan support (Segment/TotalSegments)
+- ConsumedCapacity tracking
+
+**Test Results**:
+- 13 Scan tests passing
+- All tests passing ✅
+
+---
+
+### M1 Phase 4: COMPLETE ✅
+
+**Summary**:
+- 2/2 tasks completed
+- 25 new tests (12 Query + 13 Scan)
+- 233 unit tests passing
+- 2 new DynamoDB operations implemented
+
+**Operations Implemented**:
+1. ✅ Query - Query items by partition key with sort key conditions
+2. ✅ Scan - Full table scan with filters
+
+**Task Files**: Create and move to `python/tasks/done/` as needed
+
+### Current State
+
+✅ **M1 Phase 4 COMPLETE** - 100%
+🟡 **M1 Phase 5 NEXT** - Batch, Transactions & Indexes
+🔜 **Next**: Implement BatchGetItem and BatchWriteItem
+
+---

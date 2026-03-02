@@ -18,6 +18,10 @@ from .operations import (
     DescribeTableResponse,
     ListTablesRequest,
     ListTablesResponse,
+    QueryRequest,
+    QueryResponse,
+    ScanRequest,
+    ScanResponse,
 )
 from .table import (
     AttributeDefinition,
@@ -60,4 +64,8 @@ __all__ = [
     "DescribeTableResponse",
     "ListTablesRequest",
     "ListTablesResponse",
+    "QueryRequest",
+    "QueryResponse",
+    "ScanRequest",
+    "ScanResponse",
 ]

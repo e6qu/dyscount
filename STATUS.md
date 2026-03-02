@@ -6,47 +6,38 @@ Last Updated: 2026-03-02
 
 | Milestone | Status | Progress |
 |-----------|--------|----------|
-| M1: Foundation & Core Operations | 🟡 In Progress | 80% |
+| M1: Foundation & Core Operations | 🟡 In Progress | 90% |
 | M2: Advanced Operations | ⚪ Pending | 0% |
 | M3: Streams & Events | ⚪ Pending | 0% |
 | M4: Production Readiness | ⚪ Pending | 0% |
 
 ## Current Phase
 
-**M1 Phase 3: Python Implementation - Data Plane**
+**M1 Phase 4: Python Implementation - Query & Scan**
 
-Status: ✅ **COMPLETE** - 6/6 tasks finished
+Status: ✅ **COMPLETE** - 2/2 tasks finished
 
-### Previous Phase: M1 Phase 2 ✅
+### Previous Phase: M1 Phase 3 ✅
 
 | Task ID | Task | Status | Completed |
 |---------|------|--------|-----------|
-| M1P2-T1 | Setup Python monorepo | ✅ Complete | 2026-03-02 |
-| M1P2-T2 | Create dyscount-core package | ✅ Complete | 2026-03-02 |
-| M1P2-T3 | Create dyscount-api package | ✅ Complete | 2026-03-02 |
-| M1P2-T4 | Create dyscount-cli package | ✅ Complete | 2026-03-02 |
-| M1P2-T5 | Implement CreateTable | ✅ Complete | 2026-03-02 |
-| M1P2-T6 | Implement DeleteTable | ✅ Complete | 2026-03-02 |
-| M1P2-T7 | Implement ListTables | ✅ Complete | 2026-03-02 |
-| M1P2-T8 | Implement DescribeTable | ✅ Complete | 2026-03-02 |
-| M1P2-T9 | Implement DescribeEndpoints | ✅ Complete | 2026-03-02 |
-| M1P2-T10 | Tests and Dockerfile | ✅ Complete | 2026-03-02 |
+| M1P3-T1 | Implement GetItem | ✅ Complete | 2026-03-02 |
+| M1P3-T2 | Implement PutItem | ✅ Complete | 2026-03-02 |
+| M1P3-T3 | Implement DeleteItem | ✅ Complete | 2026-03-02 |
+| M1P3-T4 | Implement UpdateItem | ✅ Complete | 2026-03-02 |
+| M1P3-T5 | Condition Expressions | ✅ Complete | 2026-03-02 |
+| M1P3-T6 | E2E Tests | ✅ Complete | 2026-03-02 |
 
-**Completed**: 10/10 tasks (100%)  
-**Tests**: 84 tests passing
+**Completed**: 6/6 tasks (100%)
 
-### Current Phase: M1 Phase 3 ✅
+### Current Phase: M1 Phase 4 ✅
 
 | Task ID | Task | Status | Completed | PR |
 |---------|------|--------|-----------|-----|
-| M1P3-T1 | Implement GetItem | ✅ Complete | 2026-03-02 | #3 |
-| M1P3-T2 | Implement PutItem | ✅ Complete | 2026-03-02 | #5 |
-| M1P3-T3 | Implement DeleteItem | ✅ Complete | 2026-03-02 | #6 |
-| M1P3-T4 | Implement UpdateItem | ✅ Complete | 2026-03-02 | #7 |
-| M1P3-T5 | Condition Expressions | ✅ Complete | 2026-03-02 | #8 |
-| M1P3-T6 | E2E Tests | ✅ Complete | 2026-03-02 | - |
+| M1P4-T1 | Query | ✅ Complete | 2026-03-02 | #10 |
+| M1P4-T2 | Scan | ✅ Complete | 2026-03-02 | #10 |
 
-**Progress**: 6/6 tasks complete (100%)
+**Progress**: 2/2 tasks complete (100%)
 
 ## CI/CD Status
 
@@ -62,7 +53,7 @@ Status: ✅ **COMPLETE** - 6/6 tasks finished
 
 | Language | Status | Current Phase | Stack |
 |----------|--------|---------------|-------|
-| Python | 🟡 Phase 4 Starting | M1 Phase 3 Complete | FastAPI, uvicorn, async |
+| Python | 🟡 Phase 5 Starting | M1 Phase 4 Complete | FastAPI, uvicorn, async |
 | Go | 🔴 Not Started | Waiting for Python ref | Gin, gin-swagger |
 | Rust | 🔴 Not Started | Waiting for Python ref | Axum, utoipa |
 | Zig | 🔴 Not Started | Waiting for Python ref | TBD |
@@ -85,8 +76,10 @@ Status: ✅ **COMPLETE** - 6/6 tasks finished
 | test_update_item.py | 17 | ✅ All passing |
 | test_condition_expression.py | 29 | ✅ All passing |
 | test_condition_parser.py | 41 | ✅ All passing |
+| test_query.py | 12 | ✅ All passing |
+| test_scan.py | 13 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Total** | **233** | **✅ 208 unit tests passing** |
+| **Total** | **258** | **✅ 233 unit tests passing** |
 
 ## Implemented Operations
 
@@ -103,28 +96,21 @@ Status: ✅ **COMPLETE** - 6/6 tasks finished
 - ✅ DeleteItem - Delete with ReturnValues
 - ✅ UpdateItem - SET/REMOVE/ADD/DELETE with expressions
 - ✅ Condition Expressions - For PutItem, DeleteItem, UpdateItem
+- ✅ Query - KeyConditionExpression, FilterExpression, pagination
+- ✅ Scan - Full table scan, FilterExpression, pagination
 
-## Files Created in M1 Phase 3
+## Files Created in M1 Phase 4
 
-### Item Operations
-- `dyscount_core/services/item_service.py` - Item service layer
-- `dyscount_core/storage/table_manager.py` - Item CRUD operations
-- `dyscount_core/models/operations.py` - GetItem, PutItem, DeleteItem, UpdateItem models
+### Query & Scan
+- `dyscount_core/expressions/key_condition_parser.py` - KeyConditionExpression parser
+- `tests/test_query.py` - 12 Query tests
+- `tests/test_scan.py` - 13 Scan tests
 
-### Expression Parser
-- `dyscount_core/expressions/parser.py` - UpdateExpression parser
-- `dyscount_core/expressions/evaluator.py` - Expression evaluator
-- `dyscount_core/expressions/condition_parser.py` - ConditionExpression parser
-- `dyscount_core/expressions/condition_evaluator.py` - Condition evaluator
-
-### Tests
-- `tests/test_get_item.py` - 10 tests
-- `tests/test_put_item.py` - 14 tests
-- `tests/test_delete_item.py` - 13 tests
-- `tests/test_update_item.py` - 17 tests
-- `tests/test_condition_expression.py` - 29 tests
-- `tests/test_condition_parser.py` - 41 tests
-- `tests/e2e/test_data_operations.py` - 25 E2E tests
+### Updated Files
+- `models/operations.py` - QueryRequest, QueryResponse, ScanRequest, ScanResponse
+- `storage/table_manager.py` - query() and scan() methods
+- `services/item_service.py` - query() and scan() service methods
+- `api/routes/tables.py` - handle_query() and handle_scan() handlers
 
 ## Specifications Available
 
@@ -147,9 +133,9 @@ None.
 
 ## Next Actions
 
-1. ✅ **M1 Phase 3 COMPLETE** - All 6 tasks finished
-2. 🔄 **M1 Phase 4** - Query/Scan operations starting
-3. 🔜 Implement Query with KeyConditionExpression
-4. 🔜 Implement Scan with FilterExpression
+1. ✅ **M1 Phase 4 COMPLETE** - Query and Scan implemented
+2. 🔄 **M1 Phase 5** - Batch, Transactions & Indexes starting
+3. 🔜 Implement BatchGetItem and BatchWriteItem
+4. 🔜 Implement TransactGetItems and TransactWriteItems
 
 See `DO_NEXT.md` for details.
