@@ -49,7 +49,7 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 | **Go Stack** | Gin + gin-swagger (OpenAPI from code) |
 | **Rust Stack** | Axum + utoipa (OpenAPI from code) |
 | **Zig Stack** | TBD (async http + sqlite C bindings) |
-| **Expression Parser** | Tree-sitter (unified grammar) |
+| **Expression Parser** | Custom recursive descent parser |
 | **LSP** | Standalone LSP server for DynamoDB expressions |
 | **OpenAPI** | Generate from code, validate against AWS specs |
 | **Testing** | Matrix testing (all 4 implementations in CI) |
@@ -60,23 +60,23 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 **Goal**: Core DynamoDB API operations working in all 4 languages
 **Estimated Token Budget**: ~850k tokens across 10 phases
 
-#### M1 Phase 1: Specifications & E2E Framework (In Progress)
+#### M1 Phase 1: Specifications & E2E Framework ✅
 **Budget**: ~60k tokens
 **Deliverables**:
 - [x] `specs/API_OPERATIONS.md` - 61 DynamoDB operations documented
 - [x] `specs/DATA_TYPES.md` - Type system & JSON protocol
 - [x] `specs/SQLITE_SCHEMA.md` - Storage architecture
 - [x] `specs/AUTH_IAM.md` - Authentication & IAM
-- [ ] `specs/CONFIG.md` - Configuration schema
-- [ ] `specs/METRICS.md` - Prometheus metrics spec
-- [ ] `specs/ERROR_CODES.md` - DynamoDB error responses
-- [ ] `e2e/` framework with boto3 test harness
-- [ ] Dockerfiles for each language (skeleton)
+- [x] `specs/CONFIG.md` - Configuration schema
+- [x] `specs/METRICS.md` - Prometheus metrics spec
+- [x] `specs/ERROR_CODES.md` - DynamoDB error responses
+- [x] `specs/TREE_SITTER.md` - Expression grammar
+- [x] `specs/LSP.md` - LSP server specification
 
 **Operations Covered**: None (specification only)
 
-#### M1 Phase 2: Python - HTTP Server & Control Plane
-**Budget**: ~145k tokens (split into sub-phases if needed)
+#### M1 Phase 2: Python - HTTP Server & Control Plane ✅
+**Budget**: ~145k tokens
 **Status**: ✅ **COMPLETE** - 100%
 
 **Deliverables**:
@@ -95,34 +95,28 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 
 **Total**: 5 operations
 
-**Tasks** (see `python/tasks/`):
-| Task | Description | Est. Tokens |
-|------|-------------|-------------|
-| M1P2-T1 | Setup Python monorepo | 15k |
-| M1P2-T2 | Create dyscount-core package | 25k |
-| M1P2-T3 | Create dyscount-api package | 20k |
-| M1P2-T4 | Create dyscount-cli package | 10k |
-| M1P2-T5 | Implement CreateTable | 20k |
-| M1P2-T6 | Implement DeleteTable | 10k |
-| M1P2-T7 | Implement ListTables | 10k |
-| M1P2-T8 | Implement DescribeTable | 15k |
-| M1P2-T9 | Implement DescribeEndpoints | 5k |
-| M1P2-T10 | Tests and Dockerfile | 15k |
-
-#### M1 Phase 3: Python - Core Data Plane
+#### M1 Phase 3: Python - Core Data Plane 🟡
 **Budget**: ~90k tokens
+**Status**: 🟡 **83% COMPLETE**
+
 **Deliverables**:
 - Item serialization/deserialization (MessagePack)
 - Primary key handling (partition key, sort key)
-- Basic expression parsing foundation
+- Expression parsing foundation
 - Error handling framework
+- Condition expressions
 
 **Operations to Implement**:
-| Category | Operations |
-|----------|------------|
-| Data Plane | GetItem, PutItem, DeleteItem, UpdateItem |
+| Category | Operations | Status |
+|----------|------------|--------|
+| Data Plane | GetItem | ✅ Complete |
+| Data Plane | PutItem | ✅ Complete |
+| Data Plane | DeleteItem | ✅ Complete |
+| Data Plane | UpdateItem | ✅ Complete |
+| Condition Expressions | For Put/Delete/Update | ✅ Complete |
+| E2E Tests | boto3 integration | 🟡 Next |
 
-**Total**: 4 operations (9 cumulative)
+**Total**: 4 operations + condition expressions (9 cumulative)
 
 #### M1 Phase 4: Python - Query, Scan & Expressions
 **Budget**: ~90k tokens
@@ -306,40 +300,11 @@ Detailed implementation plans for each language:
 
 | Milestone | Phases | Status | Progress |
 |-----------|--------|--------|----------|
-| M1: Foundation | 10 | 🟡 In Progress | 45% |
+| M1: Foundation | 10 | 🟡 In Progress | 75% |
 | M2: Advanced | 4 | ⚪ Planned | 0% |
 | M3: Global/Streams | 3 | ⚪ Planned | 0% |
 | M4: Import/Export | 3 | ⚪ Planned | 0% |
-| **Total** | **20** | | **22%** |
-
-## Phase 1 (Specifications) Status
-
-| Spec | Status | Size |
-|------|--------|------|
-| API_OPERATIONS.md | ✅ Complete | 47KB |
-| DATA_TYPES.md | ✅ Complete | 13KB |
-| SQLITE_SCHEMA.md | ✅ Complete | 17KB |
-| AUTH_IAM.md | ✅ Complete | 23KB |
-| CONFIG.md | ✅ Complete | 34KB |
-| METRICS.md | ✅ Complete | 31KB |
-| ERROR_CODES.md | ✅ Complete | 24KB |
-| TREE_SITTER.md | ✅ Complete | 26KB |
-| LSP.md | ✅ Complete | 34KB |
-
-## Phase 2 (Python Control Plane) Status
-
-| Task | Status | Est. Tokens |
-|------|--------|-------------|
-| M1P2-T1: Setup Monorepo | 🔴 Not Started | 15k |
-| M1P2-T2: Core Package | 🔴 Not Started | 25k |
-| M1P2-T3: API Package | 🔴 Not Started | 20k |
-| M1P2-T4: CLI Package | 🔴 Not Started | 10k |
-| M1P2-T5: CreateTable | 🔴 Not Started | 20k |
-| M1P2-T6: DeleteTable | 🔴 Not Started | 10k |
-| M1P2-T7: ListTables | 🔴 Not Started | 10k |
-| M1P2-T8: DescribeTable | 🔴 Not Started | 15k |
-| M1P2-T9: DescribeEndpoints | 🔴 Not Started | 5k |
-| M1P2-T10: Tests & Docker | 🔴 Not Started | 15k |
+| **Total** | **20** | | **37%** |
 
 ## API Operations Coverage
 

@@ -350,7 +350,7 @@ Language Server Protocol for DynamoDB expressions:
 
 **Files Created**:
 
-**Main** (`packages/dyscount-cli/src/dyscount_cli/`):
+**Main** (`packages/dyscount-api/src/dyscount_cli/`):
 - `__init__.py` - Package version
 - `__main__.py` - Module entry point
 - `main.py` - Typer app with --version flag, subcommands
@@ -618,7 +618,7 @@ Language Server Protocol for DynamoDB expressions:
 
 ## 2026-03-02
 
-### M1 Phase 3: Data Plane - Task 1 Complete ✅
+### M1 Phase 3: Data Plane - Tasks T1-T5 Complete ✅
 
 #### Task M1P3-T1: Implement GetItem - COMPLETE ✅
 
@@ -655,6 +655,125 @@ Language Server Protocol for DynamoDB expressions:
 
 ---
 
+#### Task M1P3-T2: Implement PutItem - COMPLETE ✅
+
+**Files Modified**:
+- `dyscount_core/models/operations.py` - Added PutItemRequest, PutItemResponse
+- `dyscount_core/storage/table_manager.py` - Added put_item() method
+- `dyscount_core/services/item_service.py` - Added put_item() service method
+- `dyscount_api/routes/tables.py` - Added PutItem route handler
+- `tests/test_put_item.py` - 14 comprehensive tests
+
+**Features**:
+- Create or replace items
+- ReturnValues support (NONE, ALL_OLD)
+- ConsumedCapacity tracking (1 WCU)
+- NULL sort key handling with empty blob
+
+**Test Results**:
+- 14 new tests added
+- 108 total tests passing
+- All tests passing ✅
+
+**PR**: #5 - feat: M1 Phase 3 - PutItem Operation (M1P3_T2)
+**Status**: Merged to main
+
+**Task File**: Moved to `python/tasks/done/M1P3_T2_PUT_ITEM.md`
+
+---
+
+#### Task M1P3-T3: Implement DeleteItem - COMPLETE ✅
+
+**Files Modified**:
+- `dyscount_core/models/operations.py` - Added DeleteItemRequest, DeleteItemResponse
+- `dyscount_core/storage/table_manager.py` - Added delete_item() method
+- `dyscount_core/services/item_service.py` - Added delete_item() service method
+- `dyscount_api/routes/tables.py` - Added DeleteItem route handler
+- `tests/test_delete_item.py` - 13 comprehensive tests
+
+**Features**:
+- Delete items by primary key
+- ReturnValues support (NONE, ALL_OLD)
+- Silent delete for non-existent items
+- ConsumedCapacity tracking
+
+**Test Results**:
+- 13 new tests added
+- 121 total tests passing
+- All tests passing ✅
+
+**PR**: #6 - feat: M1 Phase 3 - DeleteItem Operation (M1P3_T3)
+**Status**: Merged to main
+
+**Task File**: Moved to `python/tasks/done/M1P3_T3_DELETE_ITEM.md`
+
+---
+
+#### Task M1P3-T4: Implement UpdateItem - COMPLETE ✅
+
+**Files Created**:
+- `dyscount_core/expressions/parser.py` - UpdateExpression parser
+- `dyscount_core/expressions/evaluator.py` - Expression evaluator
+
+**Files Modified**:
+- `dyscount_core/models/operations.py` - Added UpdateItemRequest, UpdateItemResponse
+- `dyscount_core/storage/table_manager.py` - Added update_item() method
+- `dyscount_core/services/item_service.py` - Added update_item() service method
+- `dyscount_api/routes/tables.py` - Added UpdateItem route handler
+- `tests/test_update_item.py` - 17 comprehensive tests
+
+**Features**:
+- SET, REMOVE, ADD, DELETE actions
+- Arithmetic operations (+, -)
+- Functions: list_append(), if_not_exists()
+- ReturnValues: NONE, ALL_OLD, ALL_NEW, UPDATED_OLD, UPDATED_NEW
+- ExpressionAttributeNames and ExpressionAttributeValues
+
+**Test Results**:
+- 17 new tests added
+- 138 total tests passing
+- All tests passing ✅
+
+**PR**: #7 - feat: M1 Phase 3 - UpdateItem with Expression Parser (M1P3_T4)
+**Status**: Merged to main
+
+**Task File**: Moved to `python/tasks/done/M1P3_T4_UPDATE_ITEM.md`
+
+---
+
+#### Task M1P3-T5: Condition Expressions - COMPLETE ✅
+
+**Files Created**:
+- `dyscount_core/expressions/condition_parser.py` - ConditionExpression parser
+- `dyscount_core/expressions/condition_evaluator.py` - Condition evaluator
+- `tests/test_condition_expression.py` - 29 integration tests
+- `tests/test_condition_parser.py` - 41 unit tests
+
+**Files Modified**:
+- `dyscount_core/expressions/__init__.py` - Export new classes
+- `dyscount_core/models/errors.py` - Added ConditionalCheckFailedException
+- `dyscount_core/storage/table_manager.py` - Added condition evaluation to PutItem, DeleteItem, UpdateItem
+- `dyscount_core/services/item_service.py` - Pass condition params and handle exceptions
+
+**Features**:
+- Comparison operators: =, <>, <, <=, >, >=
+- Logical operators: AND, OR, NOT
+- Functions: attribute_exists(), attribute_not_exists(), begins_with(), contains()
+- Special operators: BETWEEN, IN
+- Integration with PutItem, DeleteItem, UpdateItem
+
+**Test Results**:
+- 70 new tests added (29 integration + 41 unit)
+- 208 total tests passing
+- All tests passing ✅
+
+**PR**: #8 - M1P3_T5: Condition Expressions for conditional operations
+**Status**: Created, awaiting merge
+
+**Task File**: Moved to `python/tasks/done/M1P3_T5_CONDITION_EXPRESSIONS.md`
+
+---
+
 ### AGENTS.md Updates (2026-03-02)
 
 **Added Code Style Guidelines**:
@@ -674,7 +793,7 @@ Language Server Protocol for DynamoDB expressions:
 
 ### Current State
 
-✅ **M1 Phase 3 T1 COMPLETE** - GetItem implemented
-🟡 **M1 Phase 3 T2 NEXT** - PutItem
-📊 **Progress**: 1/6 tasks (17%)
-🔢 **Tests**: 94 passing
+✅ **M1 Phase 3 T1-T5 COMPLETE** - GetItem, PutItem, DeleteItem, UpdateItem, Condition Expressions
+🟡 **M1 Phase 3 T6 NEXT** - E2E Tests with boto3
+📊 **Progress**: 5/6 tasks (83%)
+🔢 **Tests**: 208 passing
