@@ -1667,3 +1667,303 @@ class TableManager:
             await conn.commit()
         
         return deleted_count
+
+
+    # ==========================================================================
+    # Backup Operations (M2 Phase 2)
+    # ==========================================================================
+
+    async def create_backup(
+        self,
+        table_name: str,
+        backup_name: Optional[str] = None,
+    ) -> dict:
+        """Create a backup of an existing table.
+        
+        Args:
+            table_name: Name of the table to back up
+            backup_name: Optional name for the backup
+            
+        Returns:
+            Dict with backup details
+            
+        Raises:
+            ResourceNotFoundException: If table does not exist
+        """
+        import json
+        import shutil
+        from datetime import datetime, timezone
+        import uuid
+        
+        # Check if table exists
+        if not await self.table_exists(table_name):
+            from dyscount_core.models.errors import ResourceNotFoundException
+            raise ResourceNotFoundException(f"Table not found: {table_name}")
+        
+        # Generate backup metadata
+        backup_id = str(uuid.uuid4())
+        if not backup_name:
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            backup_name = f"{table_name}-backup-{timestamp}"
+        
+        creation_time = datetime.now(timezone.utc).isoformat()
+        
+        # Get table metadata
+        metadata = await self.describe_table(table_name)
+        
+        # Create backup directory
+        backup_dir = self.data_directory / "backups" / backup_id
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Source database file
+        source_db = self._get_db_path(table_name)
+        
+        # Copy database file
+        backup_db = backup_dir / "table.db"
+        shutil.copy2(source_db, backup_db)
+        
+        # Save metadata
+        backup_metadata = {
+            "backup_id": backup_id,
+            "backup_name": backup_name,
+            "table_name": table_name,
+            "table_arn": f"arn:aws:dynamodb:local:{self.namespace}:table/{table_name}",
+            "creation_date_time": creation_time,
+            "backup_status": "AVAILABLE",
+            "backup_type": "USER",
+            "table_metadata": metadata.model_dump(mode="json"),
+        }
+        
+        metadata_file = backup_dir / "metadata.json"
+        with open(metadata_file, "w") as f:
+            json.dump(backup_metadata, f, indent=2)
+        
+        # Get backup size
+        backup_size = backup_db.stat().st_size
+        backup_metadata["backup_size_bytes"] = backup_size
+        
+        # Update metadata with size
+        with open(metadata_file, "w") as f:
+            json.dump(backup_metadata, f, indent=2)
+        
+        return {
+            "BackupArn": f"arn:aws:dynamodb:local:{self.namespace}:backup/{backup_id}",
+            "BackupName": backup_name,
+            "BackupSizeBytes": backup_size,
+            "BackupStatus": "AVAILABLE",
+            "BackupType": "USER",
+            "CreationDateTime": creation_time,
+            "TableArn": backup_metadata["table_arn"],
+            "TableName": table_name,
+        }
+
+    async def restore_table_from_backup(
+        self,
+        backup_arn: str,
+        target_table_name: str,
+    ) -> TableMetadata:
+        """Restore a table from a backup.
+        
+        Args:
+            backup_arn: ARN of the backup to restore from
+            target_table_name: Name for the restored table
+            
+        Returns:
+            TableMetadata for the restored table
+            
+        Raises:
+            ResourceNotFoundException: If backup does not exist
+            TableAlreadyExistsException: If target table already exists
+        """
+        import json
+        import shutil
+        from datetime import datetime, timezone
+        
+        # Extract backup_id from ARN
+        # ARN format: arn:aws:dynamodb:local:{namespace}:backup/{backup_id}
+        backup_id = backup_arn.split("/")[-1]
+        
+        # Check if backup exists
+        backup_dir = self.data_directory / "backups" / backup_id
+        if not backup_dir.exists():
+            from dyscount_core.models.errors import ResourceNotFoundException
+            raise ResourceNotFoundException(f"Backup not found: {backup_arn}")
+        
+        # Check if target table already exists
+        if await self.table_exists(target_table_name):
+            from dyscount_core.models.errors import TableAlreadyExistsException
+            raise TableAlreadyExistsException(f"Table already exists: {target_table_name}")
+        
+        # Load backup metadata
+        metadata_file = backup_dir / "metadata.json"
+        with open(metadata_file, "r") as f:
+            backup_metadata = json.load(f)
+        
+        # Copy database file to new location
+        source_db = backup_dir / "table.db"
+        target_db = self._get_db_path(target_table_name)
+        
+        # Ensure directory exists
+        target_db.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Copy the database
+        shutil.copy2(source_db, target_db)
+        
+        # Update table metadata in the copied database
+        # Update table name and creation time
+        async with self.connection_manager.connection(target_db) as conn:
+            # Load current metadata
+            cursor = await conn.execute(
+                "SELECT value FROM __table_metadata WHERE key = ?",
+                ("full_metadata",)
+            )
+            row = await cursor.fetchone()
+            
+            if row:
+                # Parse and update metadata
+                metadata_dict = json.loads(row[0].decode())
+                metadata_dict["TableName"] = target_table_name
+                metadata_dict["TableArn"] = f"arn:aws:dynamodb:local:{self.namespace}:table/{target_table_name}"
+                metadata_dict["CreationDateTime"] = datetime.now(timezone.utc).isoformat()
+                
+                # Store updated metadata
+                await conn.execute(
+                    "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+                    ("full_metadata", json.dumps(metadata_dict).encode())
+                )
+            
+            # Also update simple metadata fields
+            await conn.execute(
+                "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+                ("table_name", target_table_name.encode())
+            )
+            
+            new_creation_time = datetime.now(timezone.utc).isoformat()
+            await conn.execute(
+                "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+                ("creation_time", new_creation_time.encode())
+            )
+            
+            await conn.commit()
+        
+        # Return table metadata
+        return await self.describe_table(target_table_name)
+
+    async def list_backups(
+        self,
+        table_name: Optional[str] = None,
+        backup_type: str = "ALL",
+        limit: Optional[int] = None,
+    ) -> List[dict]:
+        """List all backups.
+        
+        Args:
+            table_name: Filter by table name
+            backup_type: Filter by backup type (USER, SYSTEM, ALL)
+            limit: Maximum number of backups to return
+            
+        Returns:
+            List of backup details
+        """
+        import json
+        from datetime import datetime
+        
+        backups = []
+        backups_dir = self.data_directory / "backups"
+        
+        if not backups_dir.exists():
+            return []
+        
+        for backup_dir in backups_dir.iterdir():
+            if not backup_dir.is_dir():
+                continue
+            
+            metadata_file = backup_dir / "metadata.json"
+            if not metadata_file.exists():
+                continue
+            
+            with open(metadata_file, "r") as f:
+                metadata = json.load(f)
+            
+            # Filter by table name
+            if table_name and metadata.get("table_name") != table_name:
+                continue
+            
+            # Filter by backup type
+            if backup_type != "ALL" and metadata.get("backup_type") != backup_type:
+                continue
+            
+            # Skip deleted backups
+            if metadata.get("backup_status") == "DELETED":
+                continue
+            
+            backup_id = metadata.get("backup_id", backup_dir.name)
+            
+            backups.append({
+                "BackupArn": f"arn:aws:dynamodb:local:{self.namespace}:backup/{backup_id}",
+                "BackupName": metadata.get("backup_name", "unnamed"),
+                "BackupSizeBytes": metadata.get("backup_size_bytes", 0),
+                "BackupStatus": metadata.get("backup_status", "AVAILABLE"),
+                "BackupType": metadata.get("backup_type", "USER"),
+                "CreationDateTime": metadata.get("creation_date_time"),
+                "TableArn": metadata.get("table_arn"),
+                "TableName": metadata.get("table_name"),
+            })
+        
+        # Sort by creation time (newest first)
+        backups.sort(key=lambda x: x.get("CreationDateTime", ""), reverse=True)
+        
+        # Apply limit
+        if limit:
+            backups = backups[:limit]
+        
+        return backups
+
+    async def delete_backup(self, backup_arn: str) -> Optional[dict]:
+        """Delete a backup.
+        
+        Args:
+            backup_arn: ARN of the backup to delete
+            
+        Returns:
+            Backup details if found, None otherwise
+            
+        Raises:
+            ResourceNotFoundException: If backup does not exist
+        """
+        import json
+        import shutil
+        
+        # Extract backup_id from ARN
+        backup_id = backup_arn.split("/")[-1]
+        
+        # Check if backup exists
+        backup_dir = self.data_directory / "backups" / backup_id
+        if not backup_dir.exists():
+            from dyscount_core.models.errors import ResourceNotFoundException
+            raise ResourceNotFoundException(f"Backup not found: {backup_arn}")
+        
+        # Load backup metadata
+        metadata_file = backup_dir / "metadata.json"
+        with open(metadata_file, "r") as f:
+            metadata = json.load(f)
+        
+        # Mark as deleted in metadata
+        metadata["backup_status"] = "DELETED"
+        
+        # Return backup details before deletion
+        result = {
+            "BackupArn": backup_arn,
+            "BackupName": metadata.get("backup_name", "unnamed"),
+            "BackupSizeBytes": metadata.get("backup_size_bytes", 0),
+            "BackupStatus": "DELETED",
+            "BackupType": metadata.get("backup_type", "USER"),
+            "CreationDateTime": metadata.get("creation_date_time"),
+            "TableArn": metadata.get("table_arn"),
+            "TableName": metadata.get("table_name"),
+        }
+        
+        # Delete the backup directory
+        shutil.rmtree(backup_dir)
+        
+        return result

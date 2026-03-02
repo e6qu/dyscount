@@ -222,7 +222,8 @@ None.
 ## Next Actions
 
 1. ✅ **M1 COMPLETE** - All 9 phases of Milestone 1 completed
-2. 🔜 **M2 Phase 1** - Advanced Operations (Time-to-live, backups)
+2. ✅ **M2 Phase 1** - TTL Implementation (Complete)
+3. 🔜 **M2 Phase 2** - Backup & Restore
 3. 🔜 **M1P10** - E2E Testing & Validation across all languages
 
 See `DO_NEXT.md` for details.
