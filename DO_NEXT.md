@@ -1,4 +1,4 @@
-# Do Next - M1 Phase 3 COMPLETE, Ready for T6
+# Do Next - M1 Phase 3 COMPLETE, Starting Phase 4
 
 ## ✅ Previous Milestones Complete
 
@@ -13,78 +13,76 @@
 - 84 tests passing
 - CI/CD workflows added
 
-### M1 Phase 3: Data Plane T1-T5 ✅
+### M1 Phase 3: Data Plane ✅
 - **T1: GetItem** - Complete (10 tests, PR #3 merged)
 - **T2: PutItem** - Complete (14 tests, PR #5 merged)
 - **T3: DeleteItem** - Complete (13 tests, PR #6 merged)
 - **T4: UpdateItem** - Complete (17 tests, PR #7 merged)
-- **T5: Condition Expressions** - Complete (70 tests, PR #8 pending)
-- 208 total tests passing
+- **T5: Condition Expressions** - Complete (70 tests, PR #8 merged)
+- **T6: E2E Tests** - Complete (25 tests)
+- 208 unit tests + 25 E2E tests
 
 ---
 
-## 🚀 Current Phase: M1 Phase 3 - Data Plane (T6 Remaining)
+## 🚀 Current Phase: M1 Phase 4 - Query & Scan
 
-**Status**: 🟡 83% Complete
+**Status**: 🟡 **STARTING**
 
-### Phase 3 Tasks
+### Phase 4 Tasks
 
 | Task | Operation | Status | Est. Effort |
 |------|-----------|--------|-------------|
-| M1P3-T1 | GetItem | ✅ Complete | Done |
-| M1P3-T2 | PutItem | ✅ Complete | Done |
-| M1P3-T3 | DeleteItem | ✅ Complete | Done |
-| M1P3-T4 | UpdateItem | ✅ Complete | Done |
-| M1P3-T5 | Condition Expressions | ✅ Complete | Done |
-| M1P3-T6 | E2E Tests | 🟡 Next | 1 day |
+| M1P4-T1 | Query | 🟡 Next | 2 days |
+| M1P4-T2 | Scan | Planned | 1.5 days |
+| M1P4-T3 | KeyConditionExpression | Planned | 1 day |
+| M1P4-T4 | FilterExpression | Planned | 1 day |
+| M1P4-T5 | ProjectionExpression | Planned | 0.5 days |
+| M1P4-T6 | Pagination | Planned | 0.5 days |
 
-**Remaining Effort**: ~1 day
+**Total Effort**: ~6.5 days
 
 ---
 
 ## 📋 Immediate Next Steps
 
-### 1. Merge PR #8 (if not already merged)
-```bash
-# Review and merge via GitHub UI
-# Or merge locally:
-git checkout main
-git pull origin main
-git merge feature/M1P3-T5-condition-expressions
-git push origin main
-```
-
-### 2. Create feature branch for T6 (E2E Tests)
+### 1. Create feature branch for M1 Phase 4
 ```bash
 git checkout main
 git pull origin main
-git checkout -b feature/M1P3-T6-e2e-tests
+git checkout -b feature/M1P4-query-scan
 ```
 
-### 3. Implement T6: E2E Tests with boto3
+### 2. Implement Query Operation (M1P4-T1)
 
 **Goals**:
-- Create E2E test harness using boto3
-- Test all 4 data plane operations (GetItem, PutItem, DeleteItem, UpdateItem)
-- Test with real AWS SDK patterns
-- Verify JSON protocol compatibility
+- Query items by partition key
+- Support sort key conditions (begins_with, =, <, <=, >, >=, BETWEEN)
+- Support KeyConditionExpression
+- Return paginated results with LastEvaluatedKey
 
-**Files to Create**:
-- `e2e/test_data_plane.py` - E2E tests for data plane operations
-- `e2e/conftest.py` - pytest fixtures for E2E tests
-- `e2e/docker-compose.yml` - For testing against containerized service
+**Key Files to Create/Modify**:
+- `dyscount_core/expressions/key_condition_parser.py` - Parse KeyConditionExpression
+- `dyscount_core/storage/table_manager.py` - Add query() method
+- `dyscount_core/services/item_service.py` - Add query() service method
+- `dyscount_api/routes/tables.py` - Add Query route handler
+- `tests/test_query.py` - Comprehensive tests
 
-**Test Scenarios**:
-- Create table → PutItem → GetItem → UpdateItem → DeleteItem
-- Conditional operations with ConditionExpression
-- ReturnValues variations
-- Error scenarios (table not found, conditional check failed)
+**Implementation Notes**:
+- Use SQLite index on pk column for efficient queries
+- For sort key conditions, filter in SQL WHERE clause
+- Support ascending/descending order (ScanIndexForward)
+- Handle pagination with Limit and ExclusiveStartKey
 
-### 4. Verify Acceptance Criteria
-- Code complete
-- E2E tests passing
-- boto3 compatibility verified
-- Documentation updated
+### 3. Implement Scan Operation (M1P4-T2)
+
+**Goals**:
+- Full table scan with optional filters
+- Support FilterExpression
+- Pagination support
+
+**Key Files**:
+- Similar structure to Query
+- `tests/test_scan.py` - Tests
 
 ---
 
@@ -92,35 +90,42 @@ git checkout -b feature/M1P3-T6-e2e-tests
 
 | Milestone | Phases | Progress |
 |-----------|--------|----------|
-| M1: Foundation | 10 | 🟡 75% (2 complete, 1 at 83%) |
+| M1: Foundation | 10 | 🟡 80% (3 complete, 1 starting) |
 | M2: Advanced | 4 | ⚪ 0% |
 | M3: Global/Streams | 3 | ⚪ 0% |
 | M4: Import/Export | 3 | ⚪ 0% |
-| **Total** | **20** | **37%** |
+| **Total** | **20** | **40%** |
 
 ---
 
-## 🔜 Upcoming: M1 Phase 4
+## 🔜 M1 Phase 4 Scope
 
-After T6 completes, next phase is **M1 Phase 4: Query, Scan & Expressions**
+**Query Operation Features**:
+- Query by partition key (required)
+- Sort key conditions (optional)
+  - `=`, `<`, `<=`, `>`, `>=`, `BETWEEN`, `begins_with`
+- KeyConditionExpression parser
+- FilterExpression for post-filtering
+- ProjectionExpression for attribute selection
+- ScanIndexForward (ascending/descending)
+- Limit and pagination (ExclusiveStartKey, LastEvaluatedKey)
+- ReturnConsumedCapacity
 
-**Planned Operations**:
-- Query - Query items by partition key with optional sort key conditions
-- Scan - Full table scan with filters
-
-**Key Features**:
-- KeyConditionExpression support
+**Scan Operation Features**:
+- Full table scan
 - FilterExpression support
-- ProjectionExpression support
-- Pagination (Limit, ExclusiveStartKey, LastEvaluatedKey)
+- ProjectionExpression
+- Limit and pagination
+- Segment/TotalSegments for parallel scans
+- ReturnConsumedCapacity
 
 ---
 
 ## 📝 Notes
 
-- CI/CD workflows are active (PR #2 merged)
-- All data plane operations implemented (T1-T5)
-- 208 tests passing with 100% success rate
-- PR #8 pending merge for Condition Expressions
-- Task files in `python/tasks/done/` (M1P3_T1-T5)
-- T6 task file at `python/tasks/todo/M1P3_T6_E2E_DATA_OPS.md`
+- M1 Phase 3 is 100% complete
+- All 6 tasks merged to main
+- 208 unit tests passing
+- 25 E2E tests ready (require running server)
+- Expression parser infrastructure ready from T5
+- SQLite storage layer ready for Query/Scan

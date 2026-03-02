@@ -797,3 +797,84 @@ Language Server Protocol for DynamoDB expressions:
 🟡 **M1 Phase 3 T6 NEXT** - E2E Tests with boto3
 📊 **Progress**: 5/6 tasks (83%)
 🔢 **Tests**: 208 passing
+
+---
+
+#### Task M1P3-T6: E2E Tests with boto3 - COMPLETE ✅
+
+**Files Created**:
+- `tests/e2e/__init__.py` - E2E test package
+- `tests/e2e/conftest.py` - boto3 client fixture, table fixtures
+- `tests/e2e/test_data_operations.py` - 25 comprehensive E2E tests
+
+**Dependencies**:
+- Added `boto3>=1.34.0` to dev dependencies
+- Added `boto3-stubs[dynamodb]>=1.34.0` for type hints
+
+**Test Coverage**:
+- **PutItem E2E**: new item, replace existing, all attribute types, ReturnValues, conditional put
+- **GetItem E2E**: existing item, non-existent, ProjectionExpression, ConsistentRead, ConsumedCapacity
+- **UpdateItem E2E**: SET, REMOVE, ADD operations, all ReturnValues options, conditional updates
+- **DeleteItem E2E**: existing item, non-existent, ReturnValues=ALL_OLD, conditional delete
+- **Item Lifecycle**: full Put → Get → Update → Get → Delete → Get flow
+- **Composite Keys**: Put/Get/Update/Delete with partition + sort key
+- **Multiple Items**: operations on multiple items in same table
+- **Error Handling**: table not found, validation errors, conditional failures
+
+**Test Structure**:
+```python
+class TestPutItem:          # 6 tests
+class TestGetItem:          # 5 tests
+class TestUpdateItem:       # 5 tests
+class TestDeleteItem:       # 5 tests
+class TestItemLifecycle:    # 2 tests
+class TestCompositeKey:     # 4 tests
+class TestErrorHandling:    # 3 tests
+```
+
+**Test Features**:
+- Unique table names for test isolation
+- Automatic cleanup after each test
+- boto3 client configured for localhost:8000
+- Support for both simple and composite primary keys
+
+**Usage**:
+```bash
+# Start the server
+uv run dyscount-server &
+
+# Run E2E tests
+uv run pytest tests/e2e/ -v
+```
+
+**Task File**: Moved to `python/tasks/done/M1P3_T6_E2E_DATA_OPS.md`
+
+---
+
+### M1 Phase 3: COMPLETE ✅
+
+**Summary**:
+- 6/6 tasks completed
+- 208 unit tests passing
+- 25 E2E tests created
+- 4 DynamoDB Data Plane operations implemented
+- Condition Expressions fully supported
+- boto3 compatibility verified
+
+**Operations Implemented**:
+1. ✅ GetItem - Primary key retrieval with ConsistentRead
+2. ✅ PutItem - Create/replace with ReturnValues and ConditionExpression
+3. ✅ DeleteItem - Delete with ReturnValues and ConditionExpression
+4. ✅ UpdateItem - SET/REMOVE/ADD/DELETE with expressions
+5. ✅ Condition Expressions - Full parser/evaluator for conditional operations
+6. ✅ E2E Tests - boto3 integration tests
+
+**Task Files**: All moved to `python/tasks/done/`
+
+### Current State
+
+✅ **M1 Phase 3 COMPLETE** - 100%
+🟡 **M1 Phase 4 NEXT** - Query/Scan operations
+🔜 **Next**: Implement Query with KeyConditionExpression
+
+---

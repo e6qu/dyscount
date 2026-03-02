@@ -95,9 +95,9 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 
 **Total**: 5 operations
 
-#### M1 Phase 3: Python - Core Data Plane 🟡
+#### M1 Phase 3: Python - Core Data Plane ✅
 **Budget**: ~90k tokens
-**Status**: 🟡 **83% COMPLETE**
+**Status**: ✅ **COMPLETE** - 100%
 
 **Deliverables**:
 - Item serialization/deserialization (MessagePack)
@@ -105,6 +105,7 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 - Expression parsing foundation
 - Error handling framework
 - Condition expressions
+- E2E tests with boto3
 
 **Operations to Implement**:
 | Category | Operations | Status |
@@ -114,12 +115,14 @@ A DynamoDB-compatible API service that runs locally, backed by SQLite, implement
 | Data Plane | DeleteItem | ✅ Complete |
 | Data Plane | UpdateItem | ✅ Complete |
 | Condition Expressions | For Put/Delete/Update | ✅ Complete |
-| E2E Tests | boto3 integration | 🟡 Next |
+| E2E Tests | boto3 integration | ✅ Complete |
 
-**Total**: 4 operations + condition expressions (9 cumulative)
+**Total**: 4 operations + condition expressions + E2E tests (9 cumulative)
 
-#### M1 Phase 4: Python - Query, Scan & Expressions
+#### M1 Phase 4: Python - Query, Scan & Expressions 🟡
 **Budget**: ~90k tokens
+**Status**: 🟡 **STARTING**
+
 **Deliverables**:
 - Expression parser (KeyConditionExpression, FilterExpression)
 - Query operation with key conditions
@@ -300,11 +303,11 @@ Detailed implementation plans for each language:
 
 | Milestone | Phases | Status | Progress |
 |-----------|--------|--------|----------|
-| M1: Foundation | 10 | 🟡 In Progress | 75% |
+| M1: Foundation | 10 | 🟡 In Progress | 80% |
 | M2: Advanced | 4 | ⚪ Planned | 0% |
 | M3: Global/Streams | 3 | ⚪ Planned | 0% |
 | M4: Import/Export | 3 | ⚪ Planned | 0% |
-| **Total** | **20** | | **37%** |
+| **Total** | **20** | | **40%** |
 
 ## API Operations Coverage
 
