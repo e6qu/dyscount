@@ -16,6 +16,8 @@ from dyscount_core.models.operations import (
     DescribeTableResponse,
     ListTablesRequest,
     ListTablesResponse,
+    UpdateTableRequest,
+    UpdateTableResponse,
 )
 from dyscount_core.storage.table_manager import TableManager
 from dyscount_core.models.errors import (
@@ -324,6 +326,162 @@ class TableService:
                 )
             ]
         )
+    
+    async def update_table(self, request: UpdateTableRequest) -> UpdateTableResponse:
+        """Update a table's settings and indexes.
+        
+        Supports:
+        - Updating provisioned throughput
+        - Updating billing mode
+        - Creating global secondary indexes
+        - Deleting global secondary indexes
+        """
+        # Validate table name
+        self._validate_table_name(request.TableName)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(request.TableName):
+            raise ResourceNotFoundException(
+                f"Table not found: {request.TableName}"
+            )
+        
+        # Get current table metadata
+        metadata = await self.table_manager.describe_table(request.TableName)
+        
+        # Validate and process attribute definitions if provided
+        if request.AttributeDefinitions:
+            self._validate_attribute_definitions(
+                request.AttributeDefinitions,
+                metadata.KeySchema
+            )
+            # Merge new attribute definitions with existing
+            existing_attrs = {ad.AttributeName: ad for ad in metadata.AttributeDefinitions}
+            new_attrs = {ad.AttributeName: ad for ad in request.AttributeDefinitions}
+            existing_attrs.update(new_attrs)
+            metadata.AttributeDefinitions = list(existing_attrs.values())
+        
+        # Process GSI updates
+        if request.GlobalSecondaryIndexUpdates:
+            await self._process_gsi_updates(
+                request.TableName,
+                request.GlobalSecondaryIndexUpdates,
+                metadata
+            )
+        
+        # Update billing mode if provided
+        if request.BillingMode:
+            billing_mode_value = request.BillingMode
+            if hasattr(billing_mode_value, 'value'):
+                billing_mode_value = billing_mode_value.value
+            metadata.billing_mode_summary = {"BillingMode": billing_mode_value}
+        
+        # Update provisioned throughput if provided
+        if request.ProvisionedThroughput:
+            metadata.provisioned_throughput = request.ProvisionedThroughput
+        
+        # Update deletion protection if provided
+        if request.DeletionProtectionEnabled is not None:
+            metadata.DeletionProtectionEnabled = request.DeletionProtectionEnabled
+        
+        # Store updated metadata
+        await self.table_manager._update_metadata(request.TableName, metadata)
+        
+        return UpdateTableResponse(TableDescription=metadata)
+    
+    async def _process_gsi_updates(
+        self,
+        table_name: str,
+        gsi_updates: list,
+        metadata: TableMetadata
+    ) -> None:
+        """Process global secondary index updates.
+        
+        Args:
+            table_name: Name of the table
+            gsi_updates: List of GSI update operations
+            metadata: Current table metadata (will be modified)
+        """
+        from dyscount_core.models.table import GlobalSecondaryIndex
+        
+        # Get existing GSIs
+        existing_gsis = {gsi.IndexName: gsi for gsi in (metadata.GlobalSecondaryIndexes or [])}
+        
+        for update in gsi_updates:
+            # Check for Create operation
+            if "Create" in update:
+                create_info = update["Create"]
+                index_name = create_info["IndexName"]
+                
+                # Check if index already exists
+                if index_name in existing_gsis:
+                    raise ValidationException(
+                        f"GlobalSecondaryIndex already exists: {index_name}"
+                    )
+                
+                # Check total GSI limit (max 20)
+                if len(existing_gsis) >= 20:
+                    raise ValidationException(
+                        "Cannot create more than 20 global secondary indexes"
+                    )
+                
+                # Create new GSI
+                new_gsi = GlobalSecondaryIndex(
+                    IndexName=index_name,
+                    KeySchema=create_info["KeySchema"],
+                    Projection=create_info.get("Projection", {"ProjectionType": "ALL"}),
+                    ProvisionedThroughput=create_info.get("ProvisionedThroughput"),
+                )
+                
+                # Validate the new GSI
+                self._validate_gsi_key_schema(
+                    [new_gsi],
+                    metadata.AttributeDefinitions,
+                    metadata.KeySchema
+                )
+                
+                # Add to metadata (status CREATING initially)
+                # In real DynamoDB, this would be CREAING while backfilling
+                # For simplicity, we set it to ACTIVE
+                existing_gsis[index_name] = new_gsi
+                
+                # Store the index in the database
+                await self.table_manager._add_gsi(table_name, new_gsi)
+            
+            # Check for Delete operation
+            elif "Delete" in update:
+                delete_info = update["Delete"]
+                index_name = delete_info["IndexName"]
+                
+                # Check if index exists
+                if index_name not in existing_gsis:
+                    raise ResourceNotFoundException(
+                        f"GlobalSecondaryIndex not found: {index_name}"
+                    )
+                
+                # Remove from metadata
+                del existing_gsis[index_name]
+                
+                # Remove from database
+                await self.table_manager._remove_gsi(table_name, index_name)
+            
+            # Check for Update operation (provisioned throughput only)
+            elif "Update" in update:
+                update_info = update["Update"]
+                index_name = update_info["IndexName"]
+                
+                # Check if index exists
+                if index_name not in existing_gsis:
+                    raise ResourceNotFoundException(
+                        f"GlobalSecondaryIndex not found: {index_name}"
+                    )
+                
+                # Update provisioned throughput
+                gsi = existing_gsis[index_name]
+                if "ProvisionedThroughput" in update_info:
+                    gsi.ProvisionedThroughput = update_info["ProvisionedThroughput"]
+        
+        # Update metadata with modified GSIs
+        metadata.GlobalSecondaryIndexes = list(existing_gsis.values())
     
     async def close(self):
         """Close any open resources"""
