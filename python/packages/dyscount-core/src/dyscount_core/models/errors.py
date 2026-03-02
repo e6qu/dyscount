@@ -22,3 +22,8 @@ class ValidationException(DynamoDBException):
 class ResourceNotFoundException(DynamoDBException):
     def __init__(self, message: str):
         super().__init__(message, "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException")
+
+
+class ConditionalCheckFailedException(DynamoDBException):
+    def __init__(self, message: str):
+        super().__init__(message, "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException")
