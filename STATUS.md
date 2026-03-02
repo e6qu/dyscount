@@ -1,45 +1,34 @@
 # Project Status
 
-Last Updated: 2026-03-02
+Last Updated: 2026-03-03
 
 ## Overall Progress
 
 | Milestone | Status | Progress |
 |-----------|--------|----------|
-| M1: Foundation & Core Operations | 🟡 In Progress | 95% |
+| M1: Foundation & Core Operations | 🟡 In Progress | 92% |
 | M2: Advanced Operations | ⚪ Pending | 0% |
 | M3: Streams & Events | ⚪ Pending | 0% |
 | M4: Production Readiness | ⚪ Pending | 0% |
 
 ## Current Phase
 
-**M1 Phase 5: Python Implementation - Batch & Transactions**
+**M1 Phase 7: Go Implementation - Control Plane**
 
-Status: ✅ **IN PROGRESS** - 4/6 tasks finished
+Status: 🟡 **IN PROGRESS** - Foundation implemented
 
-### Previous Phase: M1 Phase 3 ✅
+### Previous Phases
 
-| Task ID | Task | Status | Completed |
-|---------|------|--------|-----------|
-| M1P3-T1 | Implement GetItem | ✅ Complete | 2026-03-02 |
-| M1P3-T2 | Implement PutItem | ✅ Complete | 2026-03-02 |
-| M1P3-T3 | Implement DeleteItem | ✅ Complete | 2026-03-02 |
-| M1P3-T4 | Implement UpdateItem | ✅ Complete | 2026-03-02 |
-| M1P3-T5 | Condition Expressions | ✅ Complete | 2026-03-02 |
-| M1P3-T6 | E2E Tests | ✅ Complete | 2026-03-02 |
-
-**Completed**: 6/6 tasks (100%)
-
-### Previous Phase: M1 Phase 4 ✅
+#### M1 Phase 6 ✅
 
 | Task ID | Task | Status | Completed | PR |
 |---------|------|--------|-----------|-----|
-| M1P4-T1 | Query | ✅ Complete | 2026-03-02 | #10 |
-| M1P4-T2 | Scan | ✅ Complete | 2026-03-02 | #10 |
+| M1P6-T1 | Prometheus Metrics | ✅ Complete | 2026-03-03 | #15 |
+| M1P6-T2 | Tagging Operations | ✅ Complete | 2026-03-03 | #15 |
 
 **Progress**: 2/2 tasks complete (100%)
 
-### Current Phase: M1 Phase 5 ✅
+#### M1 Phase 5 ✅
 
 | Task ID | Task | Status | Completed | PR |
 |---------|------|--------|-----------|-----|
@@ -64,15 +53,17 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 
 ## Language Implementation Status
 
-| Language | Status | Current Phase | Stack |
-|----------|--------|---------------|-------|
-| Python | 🟡 Phase 5 In Progress | 4/6 tasks complete | FastAPI, uvicorn, async |
-| Go | 🔴 Not Started | Waiting for Python ref | Gin, gin-swagger |
-| Rust | 🔴 Not Started | Waiting for Python ref | Axum, utoipa |
-| Zig | 🔴 Not Started | Waiting for Python ref | TBD |
-| LSP | 🔴 Not Started | Phase 3+ | Standalone |
+| Language | Status | Current Phase | Stack | Tests |
+|----------|--------|---------------|-------|-------|
+| Python | ✅ Complete | M1 Complete | FastAPI, uvicorn, async | 309 |
+| Go | 🟡 In Progress | Control Plane | Gin, gin-swagger | 10 |
+| Rust | 🔴 Not Started | Waiting | Axum, utoipa | - |
+| Zig | 🔴 Not Started | Waiting | TBD | - |
+| LSP | 🔴 Not Started | Phase 3+ | Standalone | - |
 
 ## Test Summary
+
+### Python Tests
 
 | Test File | Tests | Status |
 |-----------|-------|--------|
@@ -99,18 +90,31 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 | test_update_table_gsi.py | 12 | ✅ All passing |
 | test_tagging.py | 15 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Total** | **309** | **✅ 309 tests passing** |
+| **Python Total** | **309** | **✅ 309 tests passing** |
+
+### Go Tests
+
+| Test File | Tests | Status |
+|-----------|-------|--------|
+| table_manager_test.go | 10 | ✅ All passing |
+| **Go Total** | **10** | **✅ 10 tests passing** |
 
 ## Implemented Operations
 
 ### Control Plane (Complete ✅)
-- ✅ CreateTable
-- ✅ DeleteTable
-- ✅ ListTables
-- ✅ DescribeTable
-- ✅ DescribeEndpoints
+- ✅ CreateTable (Python + Go)
+- ✅ DeleteTable (Python + Go)
+- ✅ ListTables (Python + Go)
+- ✅ DescribeTable (Python + Go)
+- ✅ DescribeEndpoints (Python + Go)
+- ✅ UpdateTable (Python)
 
-### Data Plane (Complete ✅)
+### Tagging Operations (Python ✅)
+- ✅ TagResource
+- ✅ UntagResource
+- ✅ ListTagsOfResource
+
+### Data Plane (Complete ✅ - Python)
 - ✅ GetItem - Primary key retrieval
 - ✅ PutItem - Create/replace items with ReturnValues
 - ✅ DeleteItem - Delete with ReturnValues
@@ -123,18 +127,22 @@ Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 - ✅ TransactGetItems - Atomic read (up to 100 items)
 - ✅ TransactWriteItems - Atomic write (up to 100 items)
 
-## Files Created in M1 Phase 6
+## Files Created in M1 Phase 7 (Go)
 
-### Metrics & Observability
-- `metrics.py` - Prometheus metrics endpoint and collectors
-- Configured in `main.py` with conditional enablement
+### Go Implementation Structure
+- `go.mod` / `go.sum` - Go module dependencies
+- `main.go` - Application entry point
+- `README.md` - Go implementation documentation
 
-### Tagging Operations
-- `models/operations.py` - TagResource, UntagResource, ListTagsOfResource models
-- `services/table_service.py` - Tagging service methods
-- `storage/table_manager.py` - _store_tags(), _remove_tags(), _get_tags()
-- `api/routes/tables.py` - Tagging route handlers
-- `tests/test_tagging.py` - 15 comprehensive tagging tests
+### Internal Packages
+- `internal/config/config.go` - Environment-based configuration
+- `internal/models/table.go` - DynamoDB table models
+- `internal/models/operations.go` - Request/response models
+- `internal/storage/table_manager.go` - SQLite storage layer
+- `internal/handlers/dynamodb.go` - HTTP handlers
+
+### Tests
+- `internal/storage/table_manager_test.go` - Storage layer tests
 
 ## Specifications Available
 
@@ -157,10 +165,9 @@ None.
 
 ## Next Actions
 
-1. ✅ **M1P5-T3 COMPLETE** - TransactGetItems implemented
-2. ✅ **M1P5-T4 COMPLETE** - TransactWriteItems implemented
-3. ✅ **M1P5-T5** - GSI CreateTable support complete
-4. ✅ **M1P5-T6** - UpdateTable for GSI complete
-5. 🔄 **M1P6** - Auth, Metrics & Tagging (in progress)
+1. ✅ **M1P6 COMPLETE** - Metrics & Tagging implemented
+2. 🔄 **M1P7** - Go Implementation (in progress)
+3. 🔜 Complete Go data plane operations (GetItem, PutItem, etc.)
+4. 🔜 M1 Phase 8 - Rust Implementation
 
 See `DO_NEXT.md` for details.
