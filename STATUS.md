@@ -6,16 +6,16 @@ Last Updated: 2026-03-02
 
 | Milestone | Status | Progress |
 |-----------|--------|----------|
-| M1: Foundation & Core Operations | 🟡 In Progress | 90% |
+| M1: Foundation & Core Operations | 🟡 In Progress | 95% |
 | M2: Advanced Operations | ⚪ Pending | 0% |
 | M3: Streams & Events | ⚪ Pending | 0% |
 | M4: Production Readiness | ⚪ Pending | 0% |
 
 ## Current Phase
 
-**M1 Phase 4: Python Implementation - Query & Scan**
+**M1 Phase 5: Python Implementation - Batch & Transactions**
 
-Status: ✅ **COMPLETE** - 2/2 tasks finished
+Status: ✅ **IN PROGRESS** - 4/6 tasks finished
 
 ### Previous Phase: M1 Phase 3 ✅
 
@@ -30,7 +30,7 @@ Status: ✅ **COMPLETE** - 2/2 tasks finished
 
 **Completed**: 6/6 tasks (100%)
 
-### Current Phase: M1 Phase 4 ✅
+### Previous Phase: M1 Phase 4 ✅
 
 | Task ID | Task | Status | Completed | PR |
 |---------|------|--------|-----------|-----|
@@ -38,6 +38,19 @@ Status: ✅ **COMPLETE** - 2/2 tasks finished
 | M1P4-T2 | Scan | ✅ Complete | 2026-03-02 | #10 |
 
 **Progress**: 2/2 tasks complete (100%)
+
+### Current Phase: M1 Phase 5 🔄
+
+| Task ID | Task | Status | Completed | PR |
+|---------|------|--------|-----------|-----|
+| M1P5-T1 | BatchGetItem | ✅ Complete | 2026-03-02 | #11 |
+| M1P5-T2 | BatchWriteItem | ✅ Complete | 2026-03-02 | #11 |
+| M1P5-T3 | TransactGetItems | ✅ Complete | 2026-03-02 | #12 |
+| M1P5-T4 | TransactWriteItems | ✅ Complete | 2026-03-02 | #12 |
+| M1P5-T5 | GSI CreateTable support | 🔄 Next | - | - |
+| M1P5-T6 | UpdateTable for GSI | ⚪ Pending | - | - |
+
+**Progress**: 4/6 tasks complete (67%)
 
 ## CI/CD Status
 
@@ -53,7 +66,7 @@ Status: ✅ **COMPLETE** - 2/2 tasks finished
 
 | Language | Status | Current Phase | Stack |
 |----------|--------|---------------|-------|
-| Python | 🟡 Phase 5 Starting | M1 Phase 4 Complete | FastAPI, uvicorn, async |
+| Python | 🟡 Phase 5 In Progress | 4/6 tasks complete | FastAPI, uvicorn, async |
 | Go | 🔴 Not Started | Waiting for Python ref | Gin, gin-swagger |
 | Rust | 🔴 Not Started | Waiting for Python ref | Axum, utoipa |
 | Zig | 🔴 Not Started | Waiting for Python ref | TBD |
@@ -78,8 +91,12 @@ Status: ✅ **COMPLETE** - 2/2 tasks finished
 | test_condition_parser.py | 41 | ✅ All passing |
 | test_query.py | 12 | ✅ All passing |
 | test_scan.py | 13 | ✅ All passing |
+| test_batch_get_item.py | 6 | ✅ All passing |
+| test_batch_write_item.py | 6 | ✅ All passing |
+| test_transact_get_items.py | 10 | ✅ All passing |
+| test_transact_write_items.py | 17 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Total** | **258** | **✅ 233 unit tests passing** |
+| **Total** | **268** | **✅ 268 tests passing** |
 
 ## Implemented Operations
 
@@ -98,19 +115,21 @@ Status: ✅ **COMPLETE** - 2/2 tasks finished
 - ✅ Condition Expressions - For PutItem, DeleteItem, UpdateItem
 - ✅ Query - KeyConditionExpression, FilterExpression, pagination
 - ✅ Scan - Full table scan, FilterExpression, pagination
+- ✅ BatchGetItem - Multi-table read (up to 100 items)
+- ✅ BatchWriteItem - Multi-table write (up to 25 items)
+- ✅ TransactGetItems - Atomic read (up to 100 items)
+- ✅ TransactWriteItems - Atomic write (up to 100 items)
 
-## Files Created in M1 Phase 4
+## Files Created in M1 Phase 5 (Transactions)
 
-### Query & Scan
-- `dyscount_core/expressions/key_condition_parser.py` - KeyConditionExpression parser
-- `tests/test_query.py` - 12 Query tests
-- `tests/test_scan.py` - 13 Scan tests
+### Transaction Operations
+- `models/operations.py` - TransactGetItemsRequest/Response, TransactWriteItemsRequest/Response
+- `tests/test_transact_get_items.py` - 10 TransactGetItems tests
+- `tests/test_transact_write_items.py` - 17 TransactWriteItems tests
 
 ### Updated Files
-- `models/operations.py` - QueryRequest, QueryResponse, ScanRequest, ScanResponse
-- `storage/table_manager.py` - query() and scan() methods
-- `services/item_service.py` - query() and scan() service methods
-- `api/routes/tables.py` - handle_query() and handle_scan() handlers
+- `services/item_service.py` - transact_get_items() and transact_write_items() methods
+- `api/routes/tables.py` - handle_transact_get_items() and handle_transact_write_items() handlers
 
 ## Specifications Available
 
@@ -133,9 +152,9 @@ None.
 
 ## Next Actions
 
-1. ✅ **M1 Phase 4 COMPLETE** - Query and Scan implemented
-2. 🔄 **M1 Phase 5** - Batch, Transactions & Indexes starting
-3. 🔜 Implement BatchGetItem and BatchWriteItem
-4. 🔜 Implement TransactGetItems and TransactWriteItems
+1. ✅ **M1P5-T3 COMPLETE** - TransactGetItems implemented
+2. ✅ **M1P5-T4 COMPLETE** - TransactWriteItems implemented
+3. 🔄 **M1P5-T5** - GSI CreateTable support (next)
+4. 🔜 **M1P5-T6** - UpdateTable for GSI
 
 See `DO_NEXT.md` for details.

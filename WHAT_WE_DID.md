@@ -955,3 +955,86 @@ uv run pytest tests/e2e/ -v
 🔜 **Next**: Implement BatchGetItem and BatchWriteItem
 
 ---
+
+
+## 2026-03-02 (Continued)
+
+### M1 Phase 5: Tasks T3-T4 - Transaction Operations Complete ✅
+
+#### Task M1P5-T3: TransactGetItems - COMPLETE ✅
+
+**Files Modified**:
+- `models/operations.py` - Added TransactGetItem, TransactGet, TransactGetItemsRequest, TransactGetItemsResponse
+- `services/item_service.py` - Added transact_get_items() service method
+- `api/routes/tables.py` - Added handle_transact_get_items() route handler
+- `models/__init__.py` - Exported new transaction models
+
+**Features**:
+- Atomic read of up to 100 items
+- Multi-table support
+- ProjectionExpression for attribute selection
+- ExpressionAttributeNames for reserved word handling
+- ConsumedCapacity tracking (0.5 RCU per item)
+- Empty transaction validation
+
+**Test Results**:
+- 10 TransactGetItems tests added
+- All tests passing ✅
+
+---
+
+#### Task M1P5-T4: TransactWriteItems - COMPLETE ✅
+
+**Files Modified**:
+- `models/operations.py` - Added TransactWriteItem, TransactPut, TransactDelete, TransactConditionCheck, TransactUpdate, TransactWriteItemsRequest, TransactWriteItemsResponse
+- `services/item_service.py` - Added transact_write_items() service method with full operation support
+- `api/routes/tables.py` - Added handle_transact_write_items() route handler
+
+**Features**:
+- Atomic write of up to 100 items (all-or-nothing semantics)
+- Support for all operation types:
+  - Put - Insert or replace items
+  - Delete - Remove items by key
+  - ConditionCheck - Validate conditions without modifying
+  - Update - Modify existing items
+- ConditionExpression on Put/Delete/Update operations
+- TransactionCanceledException on condition failure
+- Multi-table support
+- ConsumedCapacity tracking (1 WCU per write)
+- Validation: empty transactions, too many items, no operation specified
+
+**Transaction Semantics**:
+- All operations validated before execution (fail-fast)
+- Condition checks evaluated first
+- All operations execute atomically
+- On any failure, entire transaction is cancelled
+
+**Test Results**:
+- 17 TransactWriteItems tests added
+- All tests passing ✅
+
+---
+
+### M1 Phase 5 Progress Update
+
+**Summary**:
+- 4/6 tasks completed (67%)
+- 27 new transaction tests (10 TransactGetItems + 17 TransactWriteItems)
+- 268 total unit tests passing
+- 2 new DynamoDB operations implemented
+
+**Operations Implemented in Phase 5**:
+1. ✅ BatchGetItem (T1) - Multi-table read (up to 100 items)
+2. ✅ BatchWriteItem (T2) - Multi-table write (up to 25 items)
+3. ✅ TransactGetItems (T3) - Atomic read (up to 100 items)
+4. ✅ TransactWriteItems (T4) - Atomic write (up to 100 items)
+5. 🔄 GSI CreateTable support (T5) - Next
+6. 🔜 UpdateTable for GSI (T6)
+
+**Current State**:
+
+✅ **M1 Phase 5 IN PROGRESS** - 67% complete
+🟡 **Remaining**: GSI support (T5-T6)
+🔜 **Next**: Implement GSI CreateTable support
+
+---

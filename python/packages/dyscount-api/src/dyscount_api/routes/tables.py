@@ -88,6 +88,10 @@ async def dynamodb_endpoint(
         return await handle_batch_get_item(body, config)
     elif operation == "BatchWriteItem":
         return await handle_batch_write_item(body, config)
+    elif operation == "TransactGetItems":
+        return await handle_transact_get_items(body, config)
+    elif operation == "TransactWriteItems":
+        return await handle_transact_write_items(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -754,6 +758,125 @@ async def handle_batch_write_item(body: dict, config: Config) -> JSONResponse:
         # Create service and execute
         service = ItemService(config)
         response = await service.batch_write_item(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+
+# =============================================================================
+# TransactGetItems (Data Plane)
+# =============================================================================
+
+from dyscount_core.models.operations import TransactGetItemsRequest, TransactGetItemsResponse
+
+
+async def handle_transact_get_items(body: dict, config: Config) -> JSONResponse:
+    """Handle TransactGetItems operation (atomic multi-item read)."""
+    service = None
+    try:
+        # Parse request
+        request = TransactGetItemsRequest.model_validate(body)
+        
+        # Create service and execute
+        service = ItemService(config)
+        response = await service.transact_get_items(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+# =============================================================================
+# TransactWriteItems (Data Plane)
+# =============================================================================
+
+from dyscount_core.models.operations import TransactWriteItemsRequest, TransactWriteItemsResponse
+
+
+async def handle_transact_write_items(body: dict, config: Config) -> JSONResponse:
+    """Handle TransactWriteItems operation (atomic multi-item write)."""
+    service = None
+    try:
+        # Parse request
+        request = TransactWriteItemsRequest.model_validate(body)
+        
+        # Create service and execute
+        service = ItemService(config)
+        response = await service.transact_write_items(request)
         
         # Serialize response
         content = json.loads(

@@ -683,3 +683,195 @@ class BatchWriteItemResponse(BaseModel):
     unprocessed_items: Optional[dict[str, list[BatchWriteItemTableRequest]]] = Field(None, alias="UnprocessedItems")
     item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
     consumed_capacity: list[ConsumedCapacity] | None = Field(None, alias="ConsumedCapacity")
+
+
+
+# =============================================================================
+# TransactGetItems (Data Plane)
+# =============================================================================
+
+class TransactGetItemsRequest(BaseModel):
+    """Request model for TransactGetItems operation.
+    
+    Retrieves multiple items from one or more tables in a single atomic transaction.
+    
+    Attributes:
+        TransactItems: A list of Get operations (up to 100) (required)
+        ReturnConsumedCapacity: Whether to return consumed capacity (INDEXES, TOTAL, NONE)
+    """
+    model_config = {"populate_by_name": True}
+    
+    transact_items: list["TransactGetItem"] = Field(..., alias="TransactItems")
+    return_consumed_capacity: Optional[str] = Field(None, alias="ReturnConsumedCapacity")
+
+
+class TransactGetItem(BaseModel):
+    """Single Get operation within a TransactGetItems transaction.
+    
+    Attributes:
+        Get: The Get operation details
+    """
+    model_config = {"populate_by_name": True}
+    
+    get: "TransactGet" = Field(..., alias="Get")
+
+
+class TransactGet(BaseModel):
+    """Details of a Get operation within a transaction.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: The primary key of the item to retrieve (required)
+        ProjectionExpression: Attributes to retrieve
+        ExpressionAttributeNames: Substitution tokens for attribute names
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: dict[str, Any] = Field(..., alias="Key")
+    projection_expression: Optional[str] = Field(None, alias="ProjectionExpression")
+    expression_attribute_names: Optional[dict[str, str]] = Field(None, alias="ExpressionAttributeNames")
+
+
+class TransactGetItemsResponse(BaseModel):
+    """Response model for TransactGetItems operation.
+    
+    Attributes:
+        Responses: List of retrieved items in the same order as the request
+        ConsumedCapacity: The capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    responses: list[dict[str, Any]] = Field(default_factory=list, alias="Responses")
+    consumed_capacity: Optional[list[ConsumedCapacity]] = Field(None, alias="ConsumedCapacity")
+
+
+# =============================================================================
+# TransactWriteItems (Data Plane)
+# =============================================================================
+
+class TransactWriteItemsRequest(BaseModel):
+    """Request model for TransactWriteItems operation.
+    
+    Performs multiple write operations in a single atomic transaction.
+    
+    Attributes:
+        TransactItems: A list of write operations (up to 100) (required)
+        ReturnConsumedCapacity: Whether to return consumed capacity
+        ReturnItemCollectionMetrics: Whether to return item collection metrics
+        ClientRequestToken: Token for idempotency
+    """
+    model_config = {"populate_by_name": True}
+    
+    transact_items: list["TransactWriteItem"] = Field(..., alias="TransactItems")
+    return_consumed_capacity: Optional[str] = Field(None, alias="ReturnConsumedCapacity")
+    return_item_collection_metrics: Optional[str] = Field(None, alias="ReturnItemCollectionMetrics")
+    client_request_token: Optional[str] = Field(None, alias="ClientRequestToken")
+
+
+class TransactWriteItem(BaseModel):
+    """Single write operation within a TransactWriteItems transaction.
+    
+    Attributes:
+        ConditionCheck: A condition check operation
+        Put: A put operation
+        Delete: A delete operation
+        Update: An update operation
+    """
+    model_config = {"populate_by_name": True}
+    
+    condition_check: Optional["TransactConditionCheck"] = Field(None, alias="ConditionCheck")
+    put: Optional["TransactPut"] = Field(None, alias="Put")
+    delete: Optional["TransactDelete"] = Field(None, alias="Delete")
+    update: Optional["TransactUpdate"] = Field(None, alias="Update")
+
+
+class TransactConditionCheck(BaseModel):
+    """Condition check operation within a transaction.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: The primary key of the item (required)
+        ConditionExpression: The condition to evaluate (required)
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ExpressionAttributeValues: Values that can be substituted
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: dict[str, Any] = Field(..., alias="Key")
+    condition_expression: str = Field(..., alias="ConditionExpression")
+    expression_attribute_names: Optional[dict[str, str]] = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: Optional[dict[str, Any]] = Field(None, alias="ExpressionAttributeValues")
+
+
+class TransactPut(BaseModel):
+    """Put operation within a transaction.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Item: The item to put (required)
+        ConditionExpression: A condition that must be satisfied
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ExpressionAttributeValues: Values that can be substituted
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    item: dict[str, Any] = Field(..., alias="Item")
+    condition_expression: Optional[str] = Field(None, alias="ConditionExpression")
+    expression_attribute_names: Optional[dict[str, str]] = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: Optional[dict[str, Any]] = Field(None, alias="ExpressionAttributeValues")
+
+
+class TransactDelete(BaseModel):
+    """Delete operation within a transaction.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: The primary key of the item to delete (required)
+        ConditionExpression: A condition that must be satisfied
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ExpressionAttributeValues: Values that can be substituted
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: dict[str, Any] = Field(..., alias="Key")
+    condition_expression: Optional[str] = Field(None, alias="ConditionExpression")
+    expression_attribute_names: Optional[dict[str, str]] = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: Optional[dict[str, Any]] = Field(None, alias="ExpressionAttributeValues")
+
+
+class TransactUpdate(BaseModel):
+    """Update operation within a transaction.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: The primary key of the item to update (required)
+        UpdateExpression: The update expression (required)
+        ConditionExpression: A condition that must be satisfied
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ExpressionAttributeValues: Values that can be substituted
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: dict[str, Any] = Field(..., alias="Key")
+    update_expression: str = Field(..., alias="UpdateExpression")
+    condition_expression: Optional[str] = Field(None, alias="ConditionExpression")
+    expression_attribute_names: Optional[dict[str, str]] = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: Optional[dict[str, Any]] = Field(None, alias="ExpressionAttributeValues")
+
+
+class TransactWriteItemsResponse(BaseModel):
+    """Response model for TransactWriteItems operation.
+    
+    Attributes:
+        ConsumedCapacity: The capacity units consumed
+        ItemCollectionMetrics: Information about item collections
+    """
+    model_config = {"populate_by_name": True}
+    
+    consumed_capacity: Optional[list[ConsumedCapacity]] = Field(None, alias="ConsumedCapacity")
+    item_collection_metrics: Optional[dict[str, Any]] = Field(None, alias="ItemCollectionMetrics")

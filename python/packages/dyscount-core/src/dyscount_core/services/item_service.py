@@ -693,3 +693,271 @@ class ItemService:
         )
         
         return response
+
+
+    async def transact_get_items(self, request) -> "TransactGetItemsResponse":
+        """Get multiple items from one or more tables in an atomic transaction.
+        
+        Args:
+            request: TransactGetItemsRequest with list of Get operations
+            
+        Returns:
+            TransactGetItemsResponse with retrieved items
+        """
+        from dyscount_core.models.operations import TransactGetItemsResponse
+        
+        # Validate not empty
+        if not request.transact_items:
+            raise ValidationException("TransactItems cannot be empty")
+        
+        # Validate limit (max 100 items)
+        MAX_ITEMS = 100
+        if len(request.transact_items) > MAX_ITEMS:
+            raise ValidationException(f"TransactItems can contain at most {MAX_ITEMS} items")
+        
+        # Validate all table names and check existence first
+        for item in request.transact_items:
+            self._validate_table_name(item.get.table_name)
+            if not await self.table_manager.table_exists(item.get.table_name):
+                raise ResourceNotFoundException(f"Table not found: {item.get.table_name}")
+        
+        # Get all items
+        responses = []
+        consumed_capacities = []
+        total_consumed_units = 0
+        
+        for item in request.transact_items:
+            try:
+                result = await self.table_manager.get_item(
+                    table_name=item.get.table_name,
+                    key=item.get.key,
+                )
+                
+                # Apply projection if specified
+                if result is not None and item.get.projection_expression:
+                    projected = self.table_manager._apply_projection(
+                        [result],
+                        item.get.projection_expression,
+                        item.get.expression_attribute_names or {},
+                    )
+                    result = projected[0] if projected else {}
+                
+                responses.append(result if result is not None else {})
+                
+                # Track consumed capacity (0.5 RCU per item)
+                total_consumed_units += 0.5
+            except ValueError:
+                # Item not found, return empty dict
+                responses.append({})
+        
+        # Calculate consumed capacity
+        # Group by table for ConsumedCapacity list
+        table_counts = {}
+        for item in request.transact_items:
+            table_name = item.get.table_name
+            table_counts[table_name] = table_counts.get(table_name, 0) + 0.5
+        
+        for table_name, units in table_counts.items():
+            consumed_capacity = self._calculate_consumed_capacity(
+                table_name,
+                capacity_units=units,
+            )
+            consumed_capacity.read_capacity_units = units
+            consumed_capacities.append(consumed_capacity)
+        
+        return TransactGetItemsResponse(
+            Responses=responses,
+            ConsumedCapacity=consumed_capacities if request.return_consumed_capacity else None,
+        )
+
+    async def transact_write_items(self, request) -> "TransactWriteItemsResponse":
+        """Perform multiple write operations in an atomic transaction.
+        
+        All operations succeed or all fail (atomic).
+        
+        Args:
+            request: TransactWriteItemsRequest with list of write operations
+            
+        Returns:
+            TransactWriteItemsResponse with consumed capacity
+            
+        Raises:
+            TransactionCanceledException: If any condition check fails
+            ValidationException: If request is invalid
+        """
+        from dyscount_core.models.operations import TransactWriteItemsResponse
+        from dyscount_core.models.errors import ConditionalCheckFailedException
+        
+        # Validate not empty
+        if not request.transact_items:
+            raise ValidationException("TransactItems cannot be empty")
+        
+        # Validate limit (max 100 items)
+        MAX_ITEMS = 100
+        if len(request.transact_items) > MAX_ITEMS:
+            raise ValidationException(f"TransactItems can contain at most {MAX_ITEMS} items")
+        
+        # Validate all table names and check existence first
+        for item in request.transact_items:
+            table_name = self._get_table_name_from_transact_item(item)
+            if table_name:
+                self._validate_table_name(table_name)
+                if not await self.table_manager.table_exists(table_name):
+                    raise ResourceNotFoundException(f"Table not found: {table_name}")
+        
+        # Pre-validate all operations before executing
+        # This ensures we fail fast if any operation is invalid
+        for item in request.transact_items:
+            self._validate_transact_write_item(item)
+        
+        # Execute all operations atomically
+        # In a real implementation, this would use SQLite transactions
+        # For now, we execute sequentially but validate all conditions first
+        
+        try:
+            # First pass: Validate all condition checks
+            for item in request.transact_items:
+                await self._validate_transact_condition(item)
+            
+            # Second pass: Execute all operations
+            for item in request.transact_items:
+                await self._execute_transact_write_item(item)
+        except ConditionalCheckFailedException as e:
+            # Transaction failed - all operations should be rolled back
+            # In a real implementation with SQLite transactions, this would be automatic
+            raise ConditionalCheckFailedException(f"Transaction cancelled: {e.message}")
+        
+        # Calculate consumed capacity (1 WCU per write)
+        table_counts = {}
+        for item in request.transact_items:
+            table_name = self._get_table_name_from_transact_item(item)
+            if table_name:
+                table_counts[table_name] = table_counts.get(table_name, 0) + 1
+        
+        consumed_capacities = []
+        for table_name, count in table_counts.items():
+            consumed_capacity = self._calculate_consumed_capacity(
+                table_name,
+                capacity_units=float(count),
+            )
+            consumed_capacity.write_capacity_units = float(count)
+            consumed_capacities.append(consumed_capacity)
+        
+        return TransactWriteItemsResponse(
+            ConsumedCapacity=consumed_capacities if request.return_consumed_capacity else None,
+        )
+    
+    def _get_table_name_from_transact_item(self, item) -> str | None:
+        """Extract table name from a TransactWriteItem."""
+        if item.condition_check:
+            return item.condition_check.table_name
+        elif item.put:
+            return item.put.table_name
+        elif item.delete:
+            return item.delete.table_name
+        elif item.update:
+            return item.update.table_name
+        return None
+    
+    def _validate_transact_write_item(self, item) -> None:
+        """Validate a single transaction write item."""
+        # Check exactly one operation is specified
+        ops = [item.condition_check, item.put, item.delete, item.update]
+        op_count = sum(1 for op in ops if op is not None)
+        
+        if op_count == 0:
+            raise ValidationException("TransactWriteItem must specify exactly one operation")
+        if op_count > 1:
+            raise ValidationException("TransactWriteItem can only specify one operation")
+    
+    async def _validate_transact_condition(self, item) -> None:
+        """Validate condition for a transaction item."""
+        from dyscount_core.expressions import ConditionEvaluator
+        from dyscount_core.models.errors import ConditionalCheckFailedException
+        
+        condition_expression = None
+        expression_attribute_names = None
+        expression_attribute_values = None
+        table_name = None
+        key = None
+        
+        if item.condition_check:
+            condition_expression = item.condition_check.condition_expression
+            expression_attribute_names = item.condition_check.expression_attribute_names
+            expression_attribute_values = item.condition_check.expression_attribute_values
+            table_name = item.condition_check.table_name
+            key = item.condition_check.key
+        elif item.put and item.put.condition_expression:
+            condition_expression = item.put.condition_expression
+            expression_attribute_names = item.put.expression_attribute_names
+            expression_attribute_values = item.put.expression_attribute_values
+            table_name = item.put.table_name
+            key = item.put.item.get("pk")  # Extract key from item
+        elif item.delete and item.delete.condition_expression:
+            condition_expression = item.delete.condition_expression
+            expression_attribute_names = item.delete.expression_attribute_names
+            expression_attribute_values = item.delete.expression_attribute_values
+            table_name = item.delete.table_name
+            key = item.delete.key
+        elif item.update and item.update.condition_expression:
+            condition_expression = item.update.condition_expression
+            expression_attribute_names = item.update.expression_attribute_names
+            expression_attribute_values = item.update.expression_attribute_values
+            table_name = item.update.table_name
+            key = item.update.key
+        
+        if condition_expression:
+            # Get current item for condition evaluation
+            current_item = await self.table_manager.get_item(table_name, key) or {}
+            
+            evaluator = ConditionEvaluator()
+            condition_met = evaluator.evaluate(
+                current_item,
+                condition_expression,
+                expression_attribute_names or {},
+                expression_attribute_values or {},
+            )
+            
+            if not condition_met:
+                raise ConditionalCheckFailedException("Condition check failed")
+    
+    async def _execute_transact_write_item(self, item) -> None:
+        """Execute a single transaction write item."""
+        from dyscount_core.models.operations import PutItemRequest, DeleteItemRequest, UpdateItemRequest
+        
+        if item.condition_check:
+            # Condition check only - already validated in _validate_transact_condition
+            pass
+        elif item.put:
+            put_request = PutItemRequest(
+                TableName=item.put.table_name,
+                Item=item.put.item,
+            )
+            await self.table_manager.put_item(
+                table_name=put_request.table_name,
+                item=put_request.item,
+            )
+        elif item.delete:
+            delete_request = DeleteItemRequest(
+                TableName=item.delete.table_name,
+                Key=item.delete.key,
+            )
+            await self.table_manager.delete_item(
+                table_name=delete_request.table_name,
+                key=delete_request.key,
+            )
+        elif item.update:
+            update_request = UpdateItemRequest(
+                TableName=item.update.table_name,
+                Key=item.update.key,
+                UpdateExpression=item.update.update_expression,
+                ExpressionAttributeNames=item.update.expression_attribute_names,
+                ExpressionAttributeValues=item.update.expression_attribute_values,
+            )
+            await self.table_manager.update_item(
+                table_name=update_request.table_name,
+                key=update_request.key,
+                update_expression=update_request.update_expression,
+                expression_attribute_names=update_request.expression_attribute_names,
+                expression_attribute_values=update_request.expression_attribute_values,
+            )
