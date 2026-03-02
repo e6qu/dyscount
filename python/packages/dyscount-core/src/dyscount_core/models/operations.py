@@ -394,3 +394,52 @@ class DeleteItemResponse(BaseModel):
     attributes: dict[str, Any] | None = Field(None, alias="Attributes")
     consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
     item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
+
+
+# =============================================================================
+# UpdateItem (Data Plane)
+# =============================================================================
+
+class UpdateItemRequest(BaseModel):
+    """Request model for UpdateItem operation.
+    
+    Edits an existing item's attributes, or adds a new item to the table if
+    it does not already exist.
+    
+    Attributes:
+        TableName: The name of the table (required)
+        Key: A map of attribute names to AttributeValue objects representing the primary key (required)
+        UpdateExpression: An expression that describes one or more attributes to be updated (required)
+        ConditionExpression: A condition that must be satisfied
+        ExpressionAttributeNames: One or more substitution tokens for attribute names
+        ExpressionAttributeValues: One or more values that can be substituted
+        ReturnConsumedCapacity: Whether to return consumed capacity
+        ReturnItemCollectionMetrics: Whether to return item collection metrics
+        ReturnValues: Use ALL_OLD, ALL_NEW, UPDATED_OLD, or UPDATED_NEW
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., min_length=1, max_length=1024, alias="TableName")
+    key: dict[str, Any] = Field(..., alias="Key")
+    update_expression: str = Field(..., alias="UpdateExpression")
+    condition_expression: str | None = Field(None, alias="ConditionExpression")
+    expression_attribute_names: dict[str, str] | None = Field(None, alias="ExpressionAttributeNames")
+    expression_attribute_values: dict[str, Any] | None = Field(None, alias="ExpressionAttributeValues")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+    return_item_collection_metrics: str | None = Field(None, alias="ReturnItemCollectionMetrics")
+    return_values: str | None = Field(None, alias="ReturnValues")
+
+
+class UpdateItemResponse(BaseModel):
+    """Response model for UpdateItem operation.
+    
+    Attributes:
+        Attributes: The attribute values as they appeared before/after the operation
+        ConsumedCapacity: The capacity units consumed
+        ItemCollectionMetrics: Information about item collections
+    """
+    model_config = {"populate_by_name": True}
+    
+    attributes: dict[str, Any] | None = Field(None, alias="Attributes")
+    consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
+    item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")

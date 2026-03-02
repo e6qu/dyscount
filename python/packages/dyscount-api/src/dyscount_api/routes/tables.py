@@ -78,6 +78,8 @@ async def dynamodb_endpoint(
         return await handle_put_item(body, config)
     elif operation == "DeleteItem":
         return await handle_delete_item(body, config)
+    elif operation == "UpdateItem":
+        return await handle_update_item(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -447,6 +449,65 @@ async def handle_delete_item(body: dict, config: Config) -> JSONResponse:
         # Create service and execute
         service = ItemService(config)
         response = await service.delete_item(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+# =============================================================================
+# UpdateItem (Data Plane)
+# =============================================================================
+
+from dyscount_core.models.operations import UpdateItemRequest, UpdateItemResponse
+
+
+async def handle_update_item(body: dict, config: Config) -> JSONResponse:
+    """Handle UpdateItem operation."""
+    service = None
+    try:
+        # Parse request
+        request = UpdateItemRequest.model_validate(body)
+        
+        # Create service and execute
+        service = ItemService(config)
+        response = await service.update_item(request)
         
         # Serialize response
         content = json.loads(
