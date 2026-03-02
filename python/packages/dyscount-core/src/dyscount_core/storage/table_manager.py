@@ -670,3 +670,120 @@ class TableManager:
             await conn.commit()
         
         return deleted_item
+
+    async def update_item(
+        self,
+        table_name: str,
+        key: dict[str, Any],
+        update_expression: str,
+        expression_attribute_names: dict[str, str] | None = None,
+        expression_attribute_values: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Update an item in a table.
+        
+        Args:
+            table_name: Name of the table
+            key: Primary key as a dict of attribute name to AttributeValue dict
+            update_expression: The UpdateExpression to apply
+            expression_attribute_names: Optional name placeholders
+            expression_attribute_values: Optional value placeholders
+        
+        Returns:
+            Tuple of (old_item, new_item)
+        
+        Raises:
+            ValueError: If table does not exist or expression is invalid
+        """
+        from dyscount_core.expressions import ExpressionEvaluator
+        
+        import msgpack
+        
+        db_path = self._get_db_path(table_name)
+        
+        if not db_path.exists():
+            raise ValueError(f"Table does not exist: {table_name}")
+        
+        # Get table metadata to understand key schema
+        conn = await self.connection_manager.get_connection(db_path)
+        metadata = await self._load_metadata(conn, table_name)
+        
+        if metadata is None:
+            raise ValueError(f"Table metadata not found: {table_name}")
+        
+        # Extract partition key and sort key from the key dict
+        key_schema = metadata.KeySchema
+        partition_key_name = key_schema[0].AttributeName
+        partition_key_value = key.get(partition_key_name)
+        
+        if partition_key_value is None:
+            raise ValueError(f"Missing partition key attribute: {partition_key_name}")
+        
+        # Serialize partition key
+        pk_bytes = self._serialize_key_value(partition_key_value)
+        
+        # Handle sort key if present
+        sk_bytes = None
+        if len(key_schema) > 1:
+            sort_key_name = key_schema[1].AttributeName
+            sort_key_value = key.get(sort_key_name)
+            
+            if sort_key_value is None:
+                raise ValueError(f"Missing sort key attribute: {sort_key_name}")
+            
+            sk_bytes = self._serialize_key_value(sort_key_value)
+        
+        # Use empty blob for NULL sk
+        lookup_sk = sk_bytes if sk_bytes is not None else b''
+        
+        # Get the existing item
+        cursor = await conn.execute(
+            "SELECT item_data FROM items WHERE pk = ? AND sk = ?",
+            (pk_bytes, lookup_sk)
+        )
+        row = await cursor.fetchone()
+        
+        old_item = None
+        if row is not None:
+            old_item = msgpack.unpackb(row[0], raw=False)
+            new_item = dict(old_item)  # Copy for modification
+        else:
+            # Item doesn't exist - create new with just the key
+            new_item = {partition_key_name: partition_key_value}
+            if len(key_schema) > 1:
+                new_item[key_schema[1].AttributeName] = key[key_schema[1].AttributeName]
+        
+        # Apply the update expression
+        evaluator = ExpressionEvaluator()
+        try:
+            new_item = evaluator.evaluate(
+                new_item,
+                update_expression,
+                expression_attribute_names or {},
+                expression_attribute_values or {},
+            )
+        except ValueError as e:
+            raise ValueError(f"Invalid UpdateExpression: {e}") from e
+        
+        # Serialize and store the updated item
+        item_data = msgpack.packb(new_item, use_bin_type=True)
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        
+        # Get pk_type from the serialized key
+        pk_type = self._get_key_type(partition_key_value)
+        sk_type = self._get_key_type(key[key_schema[1].AttributeName]) if len(key_schema) > 1 else ""
+        
+        await conn.execute(
+            """
+            INSERT INTO items (pk, sk, pk_type, sk_type, item_data, created_at, updated_at, version)
+            VALUES (?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM items WHERE pk = ? AND sk = ?), ?), ?, 
+                    COALESCE((SELECT version FROM items WHERE pk = ? AND sk = ?), 0) + 1)
+            ON CONFLICT(pk, sk) DO UPDATE SET
+                item_data = excluded.item_data,
+                updated_at = excluded.updated_at,
+                version = excluded.version
+            """,
+            (pk_bytes, lookup_sk, pk_type, sk_type, item_data, pk_bytes, lookup_sk, now_ms, now_ms, pk_bytes, lookup_sk)
+        )
+        await conn.commit()
+        
+        return old_item, new_item

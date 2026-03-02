@@ -8,6 +8,8 @@ from dyscount_core.models.errors import (
     ValidationException,
 )
 from dyscount_core.models.operations import (
+    UpdateItemRequest,
+    UpdateItemResponse,
     DeleteItemRequest,
     DeleteItemResponse,
     PutItemRequest,
@@ -286,5 +288,85 @@ class ItemService:
         # Handle ReturnValues
         if request.return_values == "ALL_OLD" and deleted_item is not None:
             response.attributes = deleted_item
+        
+        return response
+
+    async def update_item(self, request: UpdateItemRequest) -> UpdateItemResponse:
+        """Update an item in a table.
+        
+        Args:
+            request: UpdateItemRequest with table name, key, and update expression
+        
+        Returns:
+            UpdateItemResponse with old/new attributes based on ReturnValues
+        
+        Raises:
+            ResourceNotFoundException: If table does not exist
+            ValidationException: If request is invalid
+        """
+        from dyscount_core.models.operations import UpdateItemResponse
+        
+        # Validate table name
+        self._validate_table_name(request.table_name)
+        
+        # Validate key
+        self._validate_key(request.key, request.table_name)
+        
+        # Check table exists
+        if not await self.table_manager.table_exists(request.table_name):
+            raise ResourceNotFoundException(
+                f"Table not found: {request.table_name}"
+            )
+        
+        # Update the item
+        try:
+            old_item, new_item = await self.table_manager.update_item(
+                table_name=request.table_name,
+                key=request.key,
+                update_expression=request.update_expression,
+                expression_attribute_names=request.expression_attribute_names,
+                expression_attribute_values=request.expression_attribute_values,
+            )
+        except ValueError as e:
+            if "key" in str(e).lower() or "expression" in str(e).lower():
+                raise ValidationException(str(e)) from None
+            raise
+        
+        # Calculate consumed capacity
+        # Write operation = 1 WCU
+        consumed_capacity = self._calculate_consumed_capacity(
+            request.table_name,
+            capacity_units=1.0,
+        )
+        consumed_capacity.write_capacity_units = 1.0
+        
+        # Build response
+        response = UpdateItemResponse(
+            consumed_capacity=consumed_capacity,
+        )
+        
+        # Handle ReturnValues
+        return_values = request.return_values or "NONE"
+        
+        if return_values == "ALL_OLD" and old_item is not None:
+            response.attributes = old_item
+        elif return_values == "ALL_NEW":
+            response.attributes = new_item
+        elif return_values == "UPDATED_OLD" and old_item is not None:
+            # Return only attributes that were updated
+            updated_attrs = {}
+            for key in new_item:
+                if key in old_item:
+                    updated_attrs[key] = old_item[key]
+            if updated_attrs:
+                response.attributes = updated_attrs
+        elif return_values == "UPDATED_NEW":
+            # Return only attributes that were updated
+            updated_attrs = {}
+            for key in new_item:
+                if old_item is None or key not in old_item or old_item.get(key) != new_item.get(key):
+                    updated_attrs[key] = new_item[key]
+            if updated_attrs:
+                response.attributes = updated_attrs
         
         return response
