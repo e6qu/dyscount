@@ -560,3 +560,126 @@ class ScanResponse(BaseModel):
     scanned_count: int = Field(0, alias="ScannedCount")
     last_evaluated_key: dict[str, Any] | None = Field(None, alias="LastEvaluatedKey")
     consumed_capacity: ConsumedCapacity | None = Field(None, alias="ConsumedCapacity")
+
+
+
+# =============================================================================
+# BatchGetItem (Data Plane)
+# =============================================================================
+
+class BatchGetItemRequest(BaseModel):
+    """Request model for BatchGetItem operation.
+    
+    Retrieves multiple items from one or more tables.
+    
+    Attributes:
+        RequestItems: A map of table names to GetItem requests (required)
+        ReturnConsumedCapacity: Whether to return consumed capacity (INDEXES, TOTAL, NONE)
+    """
+    model_config = {"populate_by_name": True}
+    
+    request_items: dict[str, "BatchGetItemTableRequest"] = Field(..., alias="RequestItems")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+
+
+class BatchGetItemTableRequest(BaseModel):
+    """Request for a single table in BatchGetItem.
+    
+    Attributes:
+        Keys: List of primary keys to retrieve
+        ProjectionExpression: Attributes to retrieve
+        ExpressionAttributeNames: Substitution tokens for attribute names
+        ConsistentRead: Whether to use strongly consistent reads
+    """
+    model_config = {"populate_by_name": True}
+    
+    keys: list[dict[str, Any]] = Field(..., alias="Keys")
+    projection_expression: str | None = Field(None, alias="ProjectionExpression")
+    expression_attribute_names: dict[str, str] | None = Field(None, alias="ExpressionAttributeNames")
+    consistent_read: bool = Field(False, alias="ConsistentRead")
+
+
+class BatchGetItemResponse(BaseModel):
+    """Response model for BatchGetItem operation.
+    
+    Attributes:
+        Responses: A map of table names to retrieved items
+        UnprocessedKeys: Keys that could not be processed (due to limits)
+        ConsumedCapacity: The capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    responses: dict[str, list[dict[str, Any]]] = Field(default_factory=dict, alias="Responses")
+    unprocessed_keys: Optional[dict[str, BatchGetItemTableRequest]] = Field(None, alias="UnprocessedKeys")
+    consumed_capacity: list[ConsumedCapacity] | None = Field(None, alias="ConsumedCapacity")
+
+
+# =============================================================================
+# BatchWriteItem (Data Plane)
+# =============================================================================
+
+class BatchWriteItemRequest(BaseModel):
+    """Request model for BatchWriteItem operation.
+    
+    Puts or deletes multiple items in one or more tables.
+    
+    Attributes:
+        RequestItems: A map of table names to write requests (required)
+        ReturnConsumedCapacity: Whether to return consumed capacity
+        ReturnItemCollectionMetrics: Whether to return item collection metrics
+    """
+    model_config = {"populate_by_name": True}
+    
+    request_items: dict[str, list["BatchWriteItemTableRequest"]] = Field(..., alias="RequestItems")
+    return_consumed_capacity: str | None = Field(None, alias="ReturnConsumedCapacity")
+    return_item_collection_metrics: str | None = Field(None, alias="ReturnItemCollectionMetrics")
+
+
+class BatchWriteItemTableRequest(BaseModel):
+    """Request for a single write operation in BatchWriteItem.
+    
+    Attributes:
+        PutRequest: Item to put (if present, DeleteRequest must not be)
+        DeleteRequest: Key to delete (if present, PutRequest must not be)
+    """
+    model_config = {"populate_by_name": True}
+    
+    put_request: Optional["PutRequest"] = Field(None, alias="PutRequest")
+    delete_request: Optional["DeleteRequest"] = Field(None, alias="DeleteRequest")
+
+
+class PutRequest(BaseModel):
+    """Put request for BatchWriteItem.
+    
+    Attributes:
+        Item: The item to put
+    """
+    model_config = {"populate_by_name": True}
+    
+    item: dict[str, Any] = Field(..., alias="Item")
+
+
+class DeleteRequest(BaseModel):
+    """Delete request for BatchWriteItem.
+    
+    Attributes:
+        Key: The key of the item to delete
+    """
+    model_config = {"populate_by_name": True}
+    
+    key: dict[str, Any] = Field(..., alias="Key")
+
+
+class BatchWriteItemResponse(BaseModel):
+    """Response model for BatchWriteItem operation.
+    
+    Attributes:
+        UnprocessedItems: Items that could not be processed (due to limits)
+        ItemCollectionMetrics: Information about item collections
+        ConsumedCapacity: The capacity units consumed
+    """
+    model_config = {"populate_by_name": True}
+    
+    unprocessed_items: Optional[dict[str, list[BatchWriteItemTableRequest]]] = Field(None, alias="UnprocessedItems")
+    item_collection_metrics: dict[str, Any] | None = Field(None, alias="ItemCollectionMetrics")
+    consumed_capacity: list[ConsumedCapacity] | None = Field(None, alias="ConsumedCapacity")

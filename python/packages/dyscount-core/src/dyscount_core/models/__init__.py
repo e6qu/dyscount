@@ -8,6 +8,10 @@ from .errors import (
     ValidationException,
 )
 from .operations import (
+    BatchGetItemRequest,
+    BatchGetItemResponse,
+    BatchWriteItemRequest,
+    BatchWriteItemResponse,
     CreateTableRequest,
     CreateTableResponse,
     DeleteTableRequest,
@@ -54,6 +58,10 @@ __all__ = [
     "TableMetadata",
     "TableStatus",
     # Operations
+    "BatchGetItemRequest",
+    "BatchGetItemResponse",
+    "BatchWriteItemRequest",
+    "BatchWriteItemResponse",
     "CreateTableRequest",
     "CreateTableResponse",
     "DeleteTableRequest",
