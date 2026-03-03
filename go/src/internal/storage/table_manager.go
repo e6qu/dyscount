@@ -593,3 +593,256 @@ func (tm *TableManager) DescribeTimeToLive(tableName string) (*models.TimeToLive
 		TimeToLiveStatus: status,
 	}, nil
 }
+
+
+// CreateBackup creates a backup of a table.
+func (tm *TableManager) CreateBackup(req *models.CreateBackupRequest) (*models.BackupDescription, error) {
+	sourceDBPath := tm.getDBPath(req.TableName)
+
+	// Check if table exists
+	if _, err := os.Stat(sourceDBPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("table not found: %s", req.TableName)
+	}
+
+	// Auto-generate backup name if not provided
+	backupName := req.BackupName
+	if backupName == "" {
+		backupName = fmt.Sprintf("%s_backup_%d", req.TableName, time.Now().Unix())
+	}
+
+	// Generate backup ARN
+	backupArn := fmt.Sprintf("arn:aws:dynamodb:local:000000000000:table/%s/backup/%s-%d",
+		req.TableName, backupName, time.Now().Unix())
+
+	// Create backup directory
+	backupDir := filepath.Join(tm.dataDirectory, tm.namespace, "backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	// Copy database file
+	backupFileName := fmt.Sprintf("%s_%s.db", req.TableName, backupName)
+	backupPath := filepath.Join(backupDir, backupFileName)
+
+	if err := tm.copyFile(sourceDBPath, backupPath); err != nil {
+		return nil, fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// Get file size
+	fileInfo, err := os.Stat(backupPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get backup size: %w", err)
+	}
+
+	// Store backup metadata
+	metadata := models.BackupDescription{
+		BackupArn:       backupArn,
+		BackupName:      backupName,
+		BackupStatus:    "AVAILABLE",
+		BackupType:      "USER",
+		BackupSizeBytes: fileInfo.Size(),
+		CreationDate:    time.Now().Unix(),
+		TableArn:        fmt.Sprintf("arn:aws:dynamodb:local:000000000000:table/%s", req.TableName),
+		TableName:       req.TableName,
+	}
+
+	if err := tm.storeBackupMetadata(metadata); err != nil {
+		return nil, fmt.Errorf("failed to store backup metadata: %w", err)
+	}
+
+	return &metadata, nil
+}
+
+// ListBackups lists all backups.
+func (tm *TableManager) ListBackups(req *models.ListBackupsRequest) ([]models.BackupDescription, error) {
+	backups, err := tm.loadBackupMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter by table name if specified
+	var filtered []models.BackupDescription
+	for _, backup := range backups {
+		if req.TableName != "" && backup.TableName != req.TableName {
+			continue
+		}
+		if req.BackupType != "" && req.BackupType != "ALL" && backup.BackupType != req.BackupType {
+			continue
+		}
+		filtered = append(filtered, backup)
+	}
+
+	// Apply limit
+	if req.Limit > 0 && len(filtered) > req.Limit {
+		filtered = filtered[:req.Limit]
+	}
+
+	return filtered, nil
+}
+
+// DeleteBackup deletes a backup.
+func (tm *TableManager) DeleteBackup(backupArn string) (*models.BackupDescription, error) {
+	// Find backup metadata
+	backups, err := tm.loadBackupMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	var backup *models.BackupDescription
+	var index int
+	for i, b := range backups {
+		if b.BackupArn == backupArn {
+			backup = &backups[i]
+			index = i
+			break
+		}
+	}
+
+	if backup == nil {
+		return nil, fmt.Errorf("backup not found: %s", backupArn)
+	}
+
+	// Delete backup file
+	backupDir := filepath.Join(tm.dataDirectory, tm.namespace, "backups")
+	backupFileName := fmt.Sprintf("%s_%s.db", backup.TableName, backup.BackupName)
+	backupPath := filepath.Join(backupDir, backupFileName)
+
+	if err := os.Remove(backupPath); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to delete backup file: %w", err)
+	}
+
+	// Update metadata
+	backup.BackupStatus = "DELETED"
+
+	// Remove from list
+	backups = append(backups[:index], backups[index+1:]...)
+	if err := tm.saveBackupMetadata(backups); err != nil {
+		return nil, err
+	}
+
+	return backup, nil
+}
+
+// RestoreTableFromBackup restores a table from a backup.
+func (tm *TableManager) RestoreTableFromBackup(req *models.RestoreTableFromBackupRequest) (*models.TableMetadata, error) {
+	// Find backup
+	backups, err := tm.loadBackupMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	var backup *models.BackupDescription
+	for i, b := range backups {
+		if b.BackupArn == req.BackupArn {
+			backup = &backups[i]
+			break
+		}
+	}
+
+	if backup == nil {
+		return nil, fmt.Errorf("backup not found: %s", req.BackupArn)
+	}
+
+	// Check if target table exists
+	targetDBPath := tm.getDBPath(req.TargetTableName)
+	if _, err := os.Stat(targetDBPath); err == nil {
+		return nil, fmt.Errorf("target table already exists: %s", req.TargetTableName)
+	}
+
+	// Copy backup to new table
+	backupDir := filepath.Join(tm.dataDirectory, tm.namespace, "backups")
+	backupFileName := fmt.Sprintf("%s_%s.db", backup.TableName, backup.BackupName)
+	backupPath := filepath.Join(backupDir, backupFileName)
+
+	if err := tm.copyFile(backupPath, targetDBPath); err != nil {
+		return nil, fmt.Errorf("failed to restore table: %w", err)
+	}
+
+	// Get metadata from restored table
+	metadata, err := tm.DescribeTable(req.TargetTableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get restored table metadata: %w", err)
+	}
+
+	// Update table name in metadata
+	metadata.TableName = req.TargetTableName
+	metadata.TableARN = fmt.Sprintf("arn:aws:dynamodb:local:%s:table/%s", tm.namespace, req.TargetTableName)
+
+	// Store updated metadata
+	db, err := sql.Open("sqlite3", targetDBPath)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	if err := tm.storeTableMetadata(db, metadata); err != nil {
+		return nil, err
+	}
+
+	return metadata, nil
+}
+
+// copyFile copies a file from source to destination.
+func (tm *TableManager) copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = destFile.ReadFrom(sourceFile)
+	return err
+}
+
+// storeBackupMetadata stores backup metadata.
+func (tm *TableManager) storeBackupMetadata(backup models.BackupDescription) error {
+	backups, err := tm.loadBackupMetadata()
+	if err != nil {
+		backups = []models.BackupDescription{}
+	}
+
+	backups = append(backups, backup)
+	return tm.saveBackupMetadata(backups)
+}
+
+// loadBackupMetadata loads all backup metadata.
+func (tm *TableManager) loadBackupMetadata() ([]models.BackupDescription, error) {
+	metadataPath := filepath.Join(tm.dataDirectory, tm.namespace, "backups", "metadata.json")
+
+	data, err := os.ReadFile(metadataPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []models.BackupDescription{}, nil
+		}
+		return nil, err
+	}
+
+	var backups []models.BackupDescription
+	if err := json.Unmarshal(data, &backups); err != nil {
+		return nil, err
+	}
+
+	return backups, nil
+}
+
+// saveBackupMetadata saves all backup metadata.
+func (tm *TableManager) saveBackupMetadata(backups []models.BackupDescription) error {
+	backupDir := filepath.Join(tm.dataDirectory, tm.namespace, "backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return err
+	}
+
+	metadataPath := filepath.Join(backupDir, "metadata.json")
+	data, err := json.Marshal(backups)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(metadataPath, data, 0644)
+}

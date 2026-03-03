@@ -2,101 +2,84 @@
 
 ## Current Status
 
-Go implementation has M1 (Foundation) complete with 16/61 operations.
+Go implementation:
+- **M1 (Foundation)**: ✅ Complete - 16 operations
+- **M2 (Feature Parity)**: ✅ Complete - All phases finished
+- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅
 
-**Missing Critical Features:**
-- Condition expressions (ConditionExpression, FilterExpression)
-- Batch operations (BatchGetItem, BatchWriteItem)
-- Transactions (TransactGetItems, TransactWriteItems)
-- UpdateExpression parser
+**Current Operations**: 26/61 (43%)
+**Tests**: 126 passing
 
-## Next Phase: M2 Feature Parity
+## Completed Work
+
+### M1 Foundation ✅
+- Control Plane: CreateTable, DeleteTable, ListTables, DescribeTable, DescribeEndpoints
+- Data Plane: GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan
+- GSI/LSI support
+
+### M2 Feature Parity ✅
+- **Phase 1**: Condition Expressions (AND, OR, NOT, begins_with, contains) - 28 tests
+- **Phase 2**: Batch Operations (BatchGetItem, BatchWriteItem) - 10 tests
+- **Phase 3**: Transactions (TransactGetItems, TransactWriteItems) - 10 tests
+- **Phase 4**: UpdateExpression (SET, ADD, REMOVE, DELETE) - 8 tests
+- **Phase 5**: UpdateTable GSI (Create/Update/Delete GSI) - 8 tests
+
+### M3 Advanced Features 🚧
+- **Phase 1**: TTL (UpdateTimeToLive, DescribeTimeToLive) - 6 tests ✅
+- **Phase 2**: Backup/Restore (CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup) - 9 tests ✅
+
+## Next Phase: M3 Phase 3 - Point-in-Time Recovery (PITR)
 
 ### Goal
-Implement critical missing features to reach feature parity with Python's core data plane functionality.
+Implement continuous backups and point-in-time recovery operations.
 
 ### Tasks
 
-#### Phase 1: Condition Expressions (Week 1)
-**Priority: Critical**
-
-Implement expression parser and evaluator for:
-- Comparison operators (=, <>, <, <=, >, >=)
-- BETWEEN, IN operators
-- attribute_exists, begins_with functions
-- AND, OR, NOT logical operators
-
-**Files to modify:**
-- `go/src/internal/expression/expression.go` - extend existing
-
-**Tests:**
-- Unit tests for all operators
-- Integration tests with PutItem/UpdateItem/DeleteItem
-
-#### Phase 2: Batch Operations (Week 1-2)
+#### Phase 3: Point-in-Time Recovery
 **Priority: High**
 
 Implement:
-1. **BatchGetItem** - Retrieve up to 100 items
-2. **BatchWriteItem** - Put/Delete up to 25 items
+1. **UpdateContinuousBackups** - Enable/disable PITR on a table
+2. **DescribeContinuousBackups** - Get PITR configuration
+3. **RestoreTableToPointInTime** - Restore table to specific timestamp
 
 **Files to modify:**
-- `go/src/internal/storage/item_manager.go`
-- `go/src/internal/handlers/dynamodb.go`
+- `go/src/internal/storage/table_manager.go` - add PITR methods
+- `go/src/internal/handlers/dynamodb.go` - add PITR handlers
 
 **Tests:**
-- Test batch limits
-- Test partial failures
-- Test unprocessed items handling
+- Test enabling PITR
+- Test disabling PITR
+- Test restoring to specific timestamp
+- Test error cases
 
-#### Phase 3: Transactions (Week 2)
-**Priority: High**
+## Future M3 Phases
 
-Implement:
-1. **TransactGetItems** - Atomic multi-item read
-2. **TransactWriteItems** - Atomic multi-item write
-
-**Files to modify:**
-- `go/src/internal/storage/item_manager.go`
-- `go/src/internal/handlers/dynamodb.go`
-
-**Tests:**
-- Test transaction limits (100 items)
-- Test all-or-nothing semantics
-- Test conflict detection
-
-#### Phase 4: UpdateExpression Parser (Week 3)
-**Priority: Medium**
-
-Extend UpdateItem with full UpdateExpression support:
-- SET clause (including arithmetic, list_append, if_not_exists)
-- REMOVE clause
-- ADD clause
-- DELETE clause (for sets)
-
-**Files to modify:**
-- `go/src/internal/expression/expression.go`
-
-**Tests:**
-- Test all UpdateExpression clauses
-- Test complex expressions with multiple clauses
-
-#### Phase 5: UpdateTable GSI (Week 3-4)
+### M3 Phase 4: PartiQL Support
 **Priority: Medium**
 
 Implement:
-- Create GSI via UpdateTable
-- Delete GSI via UpdateTable
-- Update GSI provisioned throughput
+- ExecuteStatement
+- BatchExecuteStatement
 
-**Files to modify:**
-- `go/src/internal/storage/table_manager.go`
-- `go/src/internal/handlers/dynamodb.go`
+### M3 Phase 5: Import/Export
+**Priority: Low**
 
-**Tests:**
-- Test GSI creation
-- Test GSI deletion
-- Test backfilling (if applicable)
+Implement:
+- ExportTableToPointInTime
+- ImportTable
+- ListImports
+- DescribeImport
+- etc.
+
+### M3 Phase 6: DynamoDB Streams
+**Priority: Low**
+
+Implement:
+- ListStreams
+- DescribeStream
+- GetShardIterator
+- GetRecords
 
 ## Testing Strategy
 
