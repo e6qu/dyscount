@@ -118,6 +118,24 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleListBackups(c)
 	case "RestoreTableFromBackup":
 		h.handleRestoreTableFromBackup(c)
+	// PartiQL operations
+	case "ExecuteStatement":
+		h.handleExecuteStatement(c)
+	case "BatchExecuteStatement":
+		h.handleBatchExecuteStatement(c)
+	// Import/Export operations
+	case "ExportTableToPointInTime":
+		h.handleExportTableToPointInTime(c)
+	case "DescribeExport":
+		h.handleDescribeExport(c)
+	case "ListExports":
+		h.handleListExports(c)
+	case "ImportTable":
+		h.handleImportTable(c)
+	case "DescribeImport":
+		h.handleDescribeImport(c)
+	case "ListImports":
+		h.handleListImports(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -1117,5 +1135,282 @@ func (h *DynamoDBHandler) handleRestoreTableFromBackup(c *gin.Context) {
 	resp := models.RestoreTableFromBackupResponse{
 		TableDescription: *metadata,
 	}
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleExecuteStatement handles ExecuteStatement (PartiQL) requests.
+func (h *DynamoDBHandler) handleExecuteStatement(c *gin.Context) {
+	var req models.ExecuteStatementRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.Statement == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "Statement is required",
+		})
+		return
+	}
+
+	// Create PartiQL engine
+	partiqlEngine := storage.NewPartiQLEngine(h.tableManager, h.itemManager)
+	
+	resp, err := partiqlEngine.ExecuteStatement(&req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleBatchExecuteStatement handles BatchExecuteStatement (PartiQL) requests.
+func (h *DynamoDBHandler) handleBatchExecuteStatement(c *gin.Context) {
+	var req models.BatchExecuteStatementRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.Statements) == 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "Statements are required",
+		})
+		return
+	}
+
+	// Create PartiQL engine
+	partiqlEngine := storage.NewPartiQLEngine(h.tableManager, h.itemManager)
+	
+	resp, err := partiqlEngine.BatchExecuteStatement(&req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleExportTableToPointInTime handles ExportTableToPointInTime requests.
+func (h *DynamoDBHandler) handleExportTableToPointInTime(c *gin.Context) {
+	var req models.ExportTableToPointInTimeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.TableArn == "" || req.S3Bucket == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TableArn and S3Bucket are required",
+		})
+		return
+	}
+
+	// Create import/export manager
+	importExportManager := storage.NewImportExportManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	exportDesc, err := importExportManager.ExportTableToPointInTime(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.ExportTableToPointInTimeResponse{
+		ExportDescription: *exportDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeExport handles DescribeExport requests.
+func (h *DynamoDBHandler) handleDescribeExport(c *gin.Context) {
+	var req models.DescribeExportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.ExportArn == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "ExportArn is required",
+		})
+		return
+	}
+
+	// Create import/export manager
+	importExportManager := storage.NewImportExportManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	exportDesc, err := importExportManager.DescribeExport(req.ExportArn)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeExportResponse{
+		ExportDescription: *exportDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleListExports handles ListExports requests.
+func (h *DynamoDBHandler) handleListExports(c *gin.Context) {
+	var req models.ListExportsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Empty body is allowed
+		req = models.ListExportsRequest{}
+	}
+
+	// Create import/export manager
+	importExportManager := storage.NewImportExportManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	resp, err := importExportManager.ListExports(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleImportTable handles ImportTable requests.
+func (h *DynamoDBHandler) handleImportTable(c *gin.Context) {
+	var req models.ImportTableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.TableName == "" || req.S3BucketSource == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TableName and S3BucketSource are required",
+		})
+		return
+	}
+
+	// Create import/export manager
+	importExportManager := storage.NewImportExportManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	importDesc, err := importExportManager.ImportTable(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.ImportTableResponse{
+		ImportDescription: *importDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeImport handles DescribeImport requests.
+func (h *DynamoDBHandler) handleDescribeImport(c *gin.Context) {
+	var req models.DescribeImportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.ImportArn == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "ImportArn is required",
+		})
+		return
+	}
+
+	// Create import/export manager
+	importExportManager := storage.NewImportExportManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	importDesc, err := importExportManager.DescribeImport(req.ImportArn)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeImportResponse{
+		ImportDescription: *importDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleListImports handles ListImports requests.
+func (h *DynamoDBHandler) handleListImports(c *gin.Context) {
+	var req models.ListImportsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Empty body is allowed
+		req = models.ListImportsRequest{}
+	}
+
+	// Create import/export manager
+	importExportManager := storage.NewImportExportManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	resp, err := importExportManager.ListImports(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, resp)
 }

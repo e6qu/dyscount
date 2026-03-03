@@ -5,10 +5,10 @@
 Go implementation:
 - **M1 (Foundation)**: ✅ Complete - 16 operations
 - **M2 (Feature Parity)**: ✅ Complete - All phases finished
-- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅
+- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅
 
-**Current Operations**: 31/61 (51%)
-**Tests**: 150 passing
+**Current Operations**: 39/61 (64%)
+**Tests**: 162 passing
 
 ## Completed Work
 
@@ -30,15 +30,18 @@ Go implementation:
 - **Phase 2.5**: Pagination (Query/Scan with LastEvaluatedKey) - 9 tests ✅
 - **Phase 2.6**: Tagging (TagResource, UntagResource, ListTagsOfResource) - 8 tests ✅
 - **Phase 2.7**: ListTables Pagination (Limit, ExclusiveStartTableName) - 5 tests ✅
+- **Phase 2.8**: DescribeBackup - 2 tests ✅
+- **Phase 3**: PartiQL (ExecuteStatement, BatchExecuteStatement) - 6 tests ✅
+- **Phase 4**: Import/Export (ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports) - 6 tests ✅
 
-## Next Phase: M3 Phase 3 - Point-in-Time Recovery (PITR)
+## Next Phase: M3 Phase 5 - Point-in-Time Recovery (PITR) and Streams
 
 ### Goal
-Implement continuous backups and point-in-time recovery operations.
+Implement PITR and DynamoDB Streams operations.
 
 ### Tasks
 
-#### Phase 3: Point-in-Time Recovery
+#### Phase 5: Point-in-Time Recovery
 **Priority: High**
 
 Implement:
@@ -46,19 +49,30 @@ Implement:
 2. **DescribeContinuousBackups** - Get PITR configuration
 3. **RestoreTableToPointInTime** - Restore table to specific timestamp
 
+#### Phase 6: DynamoDB Streams
+**Priority: Medium**
+
+Implement:
+1. **ListStreams** - List all streams
+2. **DescribeStream** - Get stream details
+3. **GetShardIterator** - Get iterator for reading records
+4. **GetRecords** - Read records from stream
+
 **Files to modify:**
-- `go/src/internal/storage/table_manager.go` - add PITR methods
-- `go/src/internal/handlers/dynamodb.go` - add PITR handlers
+- `go/src/internal/storage/table_manager.go` - add PITR and stream methods
+- `go/src/internal/handlers/dynamodb.go` - add handlers
+- `go/src/internal/models/operations.go` - add models
 
 **Tests:**
-- Test enabling PITR
-- Test disabling PITR
-- Test restoring to specific timestamp
-- Test error cases
+- Test PITR enable/disable
+- Test stream creation and reading
 
-## Future M3 Phases
+## Future Phases
 
-### M3 Phase 4: PartiQL Support
+### Global Tables
+**Priority: Low**
+
+- CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables
 **Priority: Medium**
 
 Implement:

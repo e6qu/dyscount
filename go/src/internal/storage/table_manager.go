@@ -36,6 +36,16 @@ func NewTableManager(dataDirectory, namespace string) (*TableManager, error) {
 	}, nil
 }
 
+// GetDataDirectory returns the data directory.
+func (tm *TableManager) GetDataDirectory() string {
+	return tm.dataDirectory
+}
+
+// GetNamespace returns the namespace.
+func (tm *TableManager) GetNamespace() string {
+	return tm.namespace
+}
+
 // getDBPath returns the SQLite database file path for a table.
 func (tm *TableManager) getDBPath(tableName string) string {
 	return filepath.Join(tm.dataDirectory, tm.namespace, fmt.Sprintf("%s.db", tableName))
