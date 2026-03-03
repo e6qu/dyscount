@@ -4,6 +4,7 @@ use crate::items::{ItemError, ItemManager};
 use crate::models::*;
 use crate::storage::{StorageError, TableManager};
 use axum::{
+    body::Bytes,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::Json,
@@ -22,7 +23,7 @@ pub struct AppState {
 pub async fn dynamodb_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(request): Json<DynamoDBRequest>,
+    body: Bytes,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Get X-Amz-Target header
     let amz_target = headers
@@ -45,39 +46,125 @@ pub async fn dynamodb_handler(
 
     info!("Processing operation: {}", operation);
 
-    // Route to appropriate handler
+    // Parse body based on operation type
     match operation {
-        // Control plane operations
-        "CreateTable" => handle_create_table(state, request).await,
-        "DeleteTable" => handle_delete_table(state, request).await,
-        "ListTables" => handle_list_tables(state).await,
-        "DescribeTable" => handle_describe_table(state, request).await,
-        "TagResource" => handle_tag_resource(state, request).await,
-        "UntagResource" => handle_untag_resource(state, request).await,
-        "ListTagsOfResource" => handle_list_tags_of_resource(state, request).await,
-        "DescribeEndpoints" => handle_describe_endpoints().await,
-        // Data plane operations
-        "GetItem" => handle_get_item(state, request).await,
-        "PutItem" => handle_put_item(state, request).await,
-        "UpdateItem" => handle_update_item(state, request).await,
-        "DeleteItem" => handle_delete_item(state, request).await,
-        "Query" => handle_query(state, request).await,
-        "Scan" => handle_scan(state, request).await,
-        // Batch operations
-        "BatchGetItem" => handle_batch_get_item(state, request).await,
-        "BatchWriteItem" => handle_batch_write_item(state, request).await,
+        // TTL operations
+        "UpdateTimeToLive" => {
+            let request: UpdateTimeToLiveRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_update_time_to_live(state, request).await
+        }
+        "DescribeTimeToLive" => {
+            let request: DescribeTimeToLiveRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_time_to_live(state, request).await
+        }
+        // Batch operations need special parsing
+        "BatchGetItem" => {
+            let request: BatchGetItemRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_batch_get_item(state, request).await
+        }
+        "BatchWriteItem" => {
+            let request: BatchWriteItemRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_batch_write_item(state, request).await
+        }
         // Transaction operations
-        "TransactGetItems" => handle_transact_get_items(state, request).await,
-        "TransactWriteItems" => handle_transact_write_items(state, request).await,
+        "TransactGetItems" => {
+            let request: TransactGetItemsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_transact_get_items(state, request).await
+        }
+        "TransactWriteItems" => {
+            let request: TransactWriteItemsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_transact_write_items(state, request).await
+        }
+        // All other operations use DynamoDBRequest
         _ => {
-            warn!("Unknown operation: {}", operation);
-            Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse::validation_exception(format!(
-                    "Unknown operation: {}",
-                    operation
-                ))),
-            ))
+            let request: DynamoDBRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            
+            // Route to appropriate handler
+            match operation {
+                // Control plane operations
+                "CreateTable" => handle_create_table(state, request).await,
+                "DeleteTable" => handle_delete_table(state, request).await,
+                "ListTables" => handle_list_tables(state).await,
+                "DescribeTable" => handle_describe_table(state, request).await,
+                "UpdateTable" => handle_update_table(state, request).await,
+                "TagResource" => handle_tag_resource(state, request).await,
+                "UntagResource" => handle_untag_resource(state, request).await,
+                "ListTagsOfResource" => handle_list_tags_of_resource(state, request).await,
+                "DescribeEndpoints" => handle_describe_endpoints().await,
+                // Data plane operations
+                "GetItem" => handle_get_item(state, request).await,
+                "PutItem" => handle_put_item(state, request).await,
+                "UpdateItem" => handle_update_item(state, request).await,
+                "DeleteItem" => handle_delete_item(state, request).await,
+                "Query" => handle_query(state, request).await,
+                "Scan" => handle_scan(state, request).await,
+                _ => {
+                    warn!("Unknown operation: {}", operation);
+                    Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(ErrorResponse::validation_exception(format!(
+                            "Unknown operation: {}",
+                            operation
+                        ))),
+                    ))
+                }
+            }
         }
     }
 }
@@ -234,6 +321,53 @@ async fn handle_describe_table(
     }
 }
 
+/// Handle UpdateTable operation
+async fn handle_update_table(
+    state: AppState,
+    request: DynamoDBRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let table_name = request.table_name.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception("Table name is required")),
+        )
+    })?;
+
+    let update_request = UpdateTableRequest {
+        table_name,
+        attribute_definitions: request.attribute_definitions,
+        billing_mode: request.billing_mode,
+        global_secondary_index_updates: None, // Will be parsed from raw request in full implementation
+        provisioned_throughput: request.provisioned_throughput,
+    };
+
+    match state.table_manager.update_table(&update_request) {
+        Ok(metadata) => {
+            info!("Updated table: {}", metadata.table_name);
+            Ok(Json(DynamoDBResponse {
+                table_description: Some(metadata),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    update_request.table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to update table: {}", e);
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(e.to_string())),
+            ))
+        }
+    }
+}
+
 /// Handle TagResource operation
 async fn handle_tag_resource(
     _state: AppState,
@@ -319,6 +453,82 @@ async fn handle_describe_endpoints() -> Result<Json<DynamoDBResponse>, (StatusCo
     }))
 }
 
+/// Handle UpdateTimeToLive operation
+async fn handle_update_time_to_live(
+    state: AppState,
+    request: UpdateTimeToLiveRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let table_name = request.table_name;
+
+    match state
+        .table_manager
+        .update_time_to_live(&table_name, &request.time_to_live_specification)
+    {
+        Ok(description) => {
+            info!(
+                "Updated TTL for table {}: enabled={}, attribute={}",
+                table_name,
+                request.time_to_live_specification.enabled,
+                request.time_to_live_specification.attribute_name
+            );
+            Ok(Json(DynamoDBResponse {
+                time_to_live_description: Some(description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to update TTL for table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeTimeToLive operation
+async fn handle_describe_time_to_live(
+    state: AppState,
+    request: DescribeTimeToLiveRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let table_name = request.table_name;
+
+    match state.table_manager.describe_time_to_live(&table_name) {
+        Ok(description) => {
+            info!("Described TTL for table {}: status={}", table_name, description.time_to_live_status);
+            Ok(Json(DynamoDBResponse {
+                time_to_live_description: Some(description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe TTL for table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
 // ==================== Data Plane Handlers ====================
 
 /// Handle GetItem operation
@@ -389,8 +599,18 @@ async fn handle_put_item(
 
     let return_values = request.return_values.as_deref().unwrap_or("NONE");
     let return_old = return_values == "ALL_OLD";
+    let condition_expression = request.condition_expression.as_deref();
+    let expression_names = request.expression_attribute_names.as_ref();
+    let expression_values = request.expression_attribute_values.as_ref();
 
-    match state.item_manager.put_item(&table_name, &item, return_old) {
+    match state.item_manager.put_item(
+        &table_name,
+        &item,
+        return_old,
+        condition_expression,
+        expression_names,
+        expression_values,
+    ) {
         Ok(old_item) => {
             let response = if return_values == "ALL_OLD" {
                 DynamoDBResponse {
@@ -409,6 +629,14 @@ async fn handle_put_item(
                     "Table not found: {}",
                     table_name
                 ))),
+            ))
+        }
+        Err(ItemError::ConditionCheckFailed(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::conditional_check_failed(
+                    "The conditional request failed",
+                )),
             ))
         }
         Err(e) => {
@@ -443,6 +671,8 @@ async fn handle_update_item(
     let return_values = request.return_values.as_deref().unwrap_or("NONE");
     let update_expression = request.update_expression.as_deref();
     let expression_values = request.expression_attribute_values.as_ref();
+    let condition_expression = request.condition_expression.as_deref();
+    let expression_names = request.expression_attribute_names.as_ref();
 
     match state.item_manager.update_item(
         &table_name,
@@ -450,6 +680,8 @@ async fn handle_update_item(
         update_expression,
         expression_values,
         return_values,
+        condition_expression,
+        expression_names,
     ) {
         Ok((new_item, old_item)) => {
             let response = match return_values {
@@ -472,6 +704,14 @@ async fn handle_update_item(
                     "Table not found: {}",
                     table_name
                 ))),
+            ))
+        }
+        Err(ItemError::ConditionCheckFailed(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::conditional_check_failed(
+                    "The conditional request failed",
+                )),
             ))
         }
         Err(e) => {
@@ -505,8 +745,18 @@ async fn handle_delete_item(
 
     let return_values = request.return_values.as_deref().unwrap_or("NONE");
     let return_old = return_values == "ALL_OLD";
+    let condition_expression = request.condition_expression.as_deref();
+    let expression_names = request.expression_attribute_names.as_ref();
+    let expression_values = request.expression_attribute_values.as_ref();
 
-    match state.item_manager.delete_item(&table_name, &key, return_old) {
+    match state.item_manager.delete_item(
+        &table_name,
+        &key,
+        return_old,
+        condition_expression,
+        expression_names,
+        expression_values,
+    ) {
         Ok(old_item) => {
             let response = if return_values == "ALL_OLD" {
                 DynamoDBResponse {
@@ -525,6 +775,14 @@ async fn handle_delete_item(
                     "Table not found: {}",
                     table_name
                 ))),
+            ))
+        }
+        Err(ItemError::ConditionCheckFailed(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::conditional_check_failed(
+                    "The conditional request failed",
+                )),
             ))
         }
         Err(e) => {
@@ -670,22 +928,109 @@ fn extract_table_name_from_arn(arn: &str) -> Option<String> {
 
 /// Handle BatchGetItem operation
 async fn handle_batch_get_item(
-    _state: AppState,
-    _request: DynamoDBRequest,
+    state: AppState,
+    request: BatchGetItemRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Stub implementation - returning empty responses
-    // Full implementation would parse and process request
-    Ok(Json(DynamoDBResponse::default()))
+    let request_items = request.request_items;
+
+    // Validate that at least one table is specified
+    if request_items.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "At least one table must be specified in RequestItems",
+            )),
+        ));
+    }
+
+    // Validate the 100 item limit
+    let total_keys: usize = request_items.values().map(|k| k.keys.len()).sum();
+    if total_keys > 100 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "BatchGetItem can retrieve up to 100 items per operation",
+            )),
+        ));
+    }
+
+    match state.item_manager.batch_get_item(&request_items) {
+        Ok((responses, unprocessed)) => {
+            Ok(Json(DynamoDBResponse {
+                batch_responses: Some(responses),
+                unprocessed_keys: if unprocessed.is_empty() {
+                    None
+                } else {
+                    Some(unprocessed)
+                },
+                ..Default::default()
+            }))
+        }
+        Err(ItemError::InvalidKey(msg)) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(msg)),
+        )),
+        Err(e) => {
+            error!("Failed to batch get items: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 /// Handle BatchWriteItem operation
 async fn handle_batch_write_item(
-    _state: AppState,
-    _request: DynamoDBRequest,
+    state: AppState,
+    request: BatchWriteItemRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Stub implementation - returning empty unprocessed items
-    // Full implementation would parse and process request
-    Ok(Json(DynamoDBResponse::default()))
+    let request_items = request.request_items;
+
+    // Validate that at least one table is specified
+    if request_items.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "At least one table must be specified in RequestItems",
+            )),
+        ));
+    }
+
+    // Validate the 25 item limit
+    let total_items: usize = request_items.values().map(|v| v.len()).sum();
+    if total_items > 25 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "BatchWriteItem can write up to 25 items per operation",
+            )),
+        ));
+    }
+
+    match state.item_manager.batch_write_item(&request_items) {
+        Ok(unprocessed) => {
+            Ok(Json(DynamoDBResponse {
+                unprocessed_items: if unprocessed.is_empty() {
+                    None
+                } else {
+                    Some(unprocessed)
+                },
+                ..Default::default()
+            }))
+        }
+        Err(ItemError::InvalidKey(msg)) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(msg)),
+        )),
+        Err(e) => {
+            error!("Failed to batch write items: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 // ==================== Transaction Handlers ====================
@@ -693,7 +1038,7 @@ async fn handle_batch_write_item(
 /// Handle TransactGetItems operation
 async fn handle_transact_get_items(
     _state: AppState,
-    _request: DynamoDBRequest,
+    _request: TransactGetItemsRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Stub implementation - returning empty responses
     // Full implementation would parse and process request
@@ -703,7 +1048,7 @@ async fn handle_transact_get_items(
 /// Handle TransactWriteItems operation
 async fn handle_transact_write_items(
     _state: AppState,
-    _request: DynamoDBRequest,
+    _request: TransactWriteItemsRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Stub implementation - returning success
     // Full implementation would parse and process request

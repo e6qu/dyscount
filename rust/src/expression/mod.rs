@@ -37,6 +37,16 @@ pub enum Condition {
     AttributeNotExists {
         path: String,
     },
+    /// Begins with check: begins_with(path, value)
+    BeginsWith {
+        path: String,
+        value: ValueReference,
+    },
+    /// Contains check: contains(path, value)
+    Contains {
+        path: String,
+        value: ValueReference,
+    },
     /// Logical AND of conditions
     And(Box<Condition>, Box<Condition>),
     /// Logical OR of conditions

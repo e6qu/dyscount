@@ -11,7 +11,7 @@
 |---------------|------------|---------------|--------|
 | **Python** | 53/61 (87%) | 372 tests | ✅ Production-ready |
 | **Go** | 50/61 (82%) | 183 tests | ✅ Feature Complete |
-| **Rust** | 13/61 (21%) | 21 tests | ⚠️ Basic functionality |
+| **Rust** | 18/61 (30%) | 50 tests | 🚧 M2 Phase 1 Complete |
 | **Zig** | 16/61 (26%) | 19 tests | ⚠️ Basic Data Plane |
 
 **Total API Coverage**: 53/61 DynamoDB operations (87%)
@@ -137,23 +137,23 @@
 
 ## 3. Rust Implementation Analysis
 
-### ✅ Implemented (13 operations)
+### ✅ Implemented (18 operations)
 
 | Category | Operations |
 |----------|------------|
-| Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable, TagResource*, UntagResource*, ListTagsOfResource*, DescribeEndpoints |
+| Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable, UpdateTable, TagResource*, UntagResource*, ListTagsOfResource*, DescribeEndpoints |
 | Data Plane | GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan |
+| Batch | BatchGetItem, BatchWriteItem |
+| TTL | UpdateTimeToLive, DescribeTimeToLive |
+| ConditionExpressions | Full support |
 
-*Tagging operations are stubs (not yet implemented messages)
+*Tagging operations are stubs
 
-### 🚫 Missing (48 operations)
+### 🚫 Missing (43 operations)
 
-Same critical gaps as Go had:
-1. ❌ **No batch operations**
-2. ❌ **No transactions**
-3. ❌ **No condition expressions**
-4. ❌ **Limited UpdateExpression support**
-5. ❌ **No advanced features** (TTL, Backup, PITR, PartiQL, Import/Export)
+Critical gaps:
+1. ❌ **No transactions** - TransactGetItems, TransactWriteItems
+2. ❌ **No advanced features** (Backup, PITR, PartiQL, Import/Export, Streams)
 
 ---
 
@@ -199,17 +199,17 @@ Same critical gaps as Go had:
 | DeleteItem | ✅ | ✅ | ✅ | ✅ |
 | Query | ✅ | ✅ | ✅ | ✅ |
 | Scan | ✅ | ✅ | ✅ | ✅ |
-| BatchGetItem | ✅ | ✅ | ❌ | ⚠️ |
-| BatchWriteItem | ✅ | ✅ | ❌ | ⚠️ |
+| BatchGetItem | ✅ | ✅ | ✅ | ⚠️ |
+| BatchWriteItem | ✅ | ✅ | ✅ | ⚠️ |
 | **Transactions** |
 | TransactGetItems | ✅ | ✅ | ❌ | ❌ |
 | TransactWriteItems | ✅ | ✅ | ❌ | ❌ |
 | **Condition Expressions** |
-| ConditionExpression | ✅ | ✅ | ❌ | ❌ |
-| FilterExpression | ✅ | ✅ | ❌ | ❌ |
+| ConditionExpression | ✅ | ✅ | ✅ | ❌ |
+| FilterExpression | ✅ | ✅ | ⚠️ | ❌ |
 | KeyConditionExpression | ✅ | ✅ | ⚠️ | ⚠️ |
 | **Advanced Features** |
-| TTL (2 ops) | ✅ | ✅ | ❌ | ❌ |
+| TTL (2 ops) | ✅ | ✅ | ✅ | ❌ |
 | Backup/Restore (5 ops) | ✅ | ✅ | ❌ | ❌ |
 | PITR (3 ops) | ✅ | ✅ | ❌ | ❌ |
 | PartiQL (2 ops) | ✅ | ✅ | ❌ | ❌ |

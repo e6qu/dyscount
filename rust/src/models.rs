@@ -291,6 +291,13 @@ impl ErrorResponse {
             message,
         )
     }
+
+    pub fn conditional_check_failed(message: impl Into<String>) -> Self {
+        Self::new(
+            "com.amazonaws.dynamodb.v20120810#ConditionalCheckFailedException",
+            message,
+        )
+    }
 }
 
 /// DynamoDB request wrapper
@@ -382,6 +389,18 @@ pub struct DynamoDBResponse {
     pub scanned_count: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "LastEvaluatedKey")]
     pub last_evaluated_key: Option<Item>,
+
+    // Batch operation fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "Responses")]
+    pub batch_responses: Option<HashMap<String, Vec<Item>>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "UnprocessedKeys")]
+    pub unprocessed_keys: Option<HashMap<String, KeysAndAttributes>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "UnprocessedItems")]
+    pub unprocessed_items: Option<HashMap<String, Vec<WriteRequest>>>,
+
+    // Time to live fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "TimeToLiveDescription")]
+    pub time_to_live_description: Option<TimeToLiveDescription>,
 }
 
 /// Endpoint information
@@ -634,6 +653,56 @@ pub struct UpdateTableRequest {
 pub struct UpdateTableResponse {
     #[serde(rename = "TableDescription")]
     pub table_description: TableMetadata,
+}
+
+// ============== Time To Live Operations ==============
+
+/// Time to live specification for enabling/disabling TTL
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TimeToLiveSpecification {
+    #[serde(rename = "Enabled")]
+    pub enabled: bool,
+    #[serde(rename = "AttributeName")]
+    pub attribute_name: String,
+}
+
+/// Time to live description returned by DescribeTimeToLive and UpdateTimeToLive
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TimeToLiveDescription {
+    #[serde(rename = "TimeToLiveStatus")]
+    pub time_to_live_status: String,
+    #[serde(rename = "AttributeName", skip_serializing_if = "Option::is_none")]
+    pub attribute_name: Option<String>,
+}
+
+/// UpdateTimeToLive request
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateTimeToLiveRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "TimeToLiveSpecification")]
+    pub time_to_live_specification: TimeToLiveSpecification,
+}
+
+/// UpdateTimeToLive response
+#[derive(Debug, Serialize)]
+pub struct UpdateTimeToLiveResponse {
+    #[serde(rename = "TimeToLiveDescription")]
+    pub time_to_live_description: TimeToLiveDescription,
+}
+
+/// DescribeTimeToLive request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeTimeToLiveRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+}
+
+/// DescribeTimeToLive response
+#[derive(Debug, Serialize)]
+pub struct DescribeTimeToLiveResponse {
+    #[serde(rename = "TimeToLiveDescription")]
+    pub time_to_live_description: TimeToLiveDescription,
 }
 
 #[cfg(test)]
