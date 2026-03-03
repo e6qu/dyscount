@@ -112,11 +112,6 @@ type DeleteGlobalSecondaryIndexAction struct {
 	IndexName string `json:"IndexName" binding:"required"`
 }
 
-// ReplicaUpdate represents a replica update (placeholder).
-type ReplicaUpdate struct {
-	// Placeholder for replica updates
-}
-
 // SSESpecification represents server-side encryption settings.
 type SSESpecification struct {
 	Enabled        bool   `json:"Enabled,omitempty"`

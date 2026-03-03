@@ -74,9 +74,9 @@ Go implementation using Gin framework with SQLite backend.
 ### Advanced Features (0/20) ❌
 | Category | Operations | Status |
 |----------|------------|--------|
-| TTL | UpdateTimeToLive, DescribeTimeToLive | ❌ |
+| TTL | UpdateTimeToLive, DescribeTimeToLive | ✅ |
 | Backup | CreateBackup, DescribeBackup, RestoreTableFromBackup, ListBackups, DeleteBackup | ✅ |
-| PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime | ❌ |
+| PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime | ✅ |
 | PartiQL | ExecuteStatement, BatchExecuteStatement | ✅ |
 | Import/Export | ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports | ✅ |
 | Streams | ListStreams, DescribeStream, GetShardIterator, GetRecords | ✅ |
@@ -92,9 +92,9 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 172 (+10 Streams tests)
+- **Test Count**: 182 (+10 PITR and Global Tables tests)
 - **Test Coverage**: ~76%
-- **Operations**: 43/61 (70%)
+- **Operations**: 51/61 (84%)
 - **M2 Feature Parity**: ✅ COMPLETE
   - Condition Expressions: ✅
   - Batch Operations: ✅
@@ -109,6 +109,8 @@ Go implementation using Gin framework with SQLite backend.
   - PartiQL: ✅ Complete
   - Import/Export: ✅ Complete
   - Streams: ✅ Complete
+  - PITR: ✅ Complete
+  - Global Tables: ✅ Complete
 
 ## Next Phase: M3 Advanced Features
 

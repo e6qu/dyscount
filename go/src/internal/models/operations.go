@@ -850,3 +850,178 @@ type GetRecordsResponse struct {
 	Records            []Record `json:"Records,omitempty"`
 	NextShardIterator  string   `json:"NextShardIterator,omitempty"`
 }
+
+
+// PITR (Point-in-Time Recovery) Models
+
+// PointInTimeRecoveryStatus represents PITR status.
+type PointInTimeRecoveryStatus string
+
+const (
+	PointInTimeRecoveryStatusEnabled  PointInTimeRecoveryStatus = "ENABLED"
+	PointInTimeRecoveryStatusDisabled PointInTimeRecoveryStatus = "DISABLED"
+)
+
+// ContinuousBackupsDescription represents continuous backups description.
+type ContinuousBackupsDescription struct {
+	ContinuousBackupsStatus  PointInTimeRecoveryStatus `json:"ContinuousBackupsStatus,omitempty"`
+	PointInTimeRecoveryDescription *PointInTimeRecoveryDescription `json:"PointInTimeRecoveryDescription,omitempty"`
+}
+
+// PointInTimeRecoveryDescription represents PITR description.
+type PointInTimeRecoveryDescription struct {
+	PointInTimeRecoveryStatus PointInTimeRecoveryStatus `json:"PointInTimeRecoveryStatus,omitempty"`
+	EarliestRestorableDateTime int64 `json:"EarliestRestorableDateTime,omitempty"`
+	LatestRestorableDateTime   int64 `json:"LatestRestorableDateTime,omitempty"`
+}
+
+// UpdateContinuousBackupsRequest represents an UpdateContinuousBackups request.
+type UpdateContinuousBackupsRequest struct {
+	TableName string `json:"TableName" binding:"required"`
+	PointInTimeRecoverySpecification *PointInTimeRecoverySpecification `json:"PointInTimeRecoverySpecification,omitempty"`
+}
+
+// PointInTimeRecoverySpecification represents PITR specification.
+type PointInTimeRecoverySpecification struct {
+	PointInTimeRecoveryEnabled bool `json:"PointInTimeRecoveryEnabled,omitempty"`
+}
+
+// UpdateContinuousBackupsResponse represents an UpdateContinuousBackups response.
+type UpdateContinuousBackupsResponse struct {
+	ContinuousBackupsDescription ContinuousBackupsDescription `json:"ContinuousBackupsDescription,omitempty"`
+}
+
+// DescribeContinuousBackupsRequest represents a DescribeContinuousBackups request.
+type DescribeContinuousBackupsRequest struct {
+	TableName string `json:"TableName" binding:"required"`
+}
+
+// DescribeContinuousBackupsResponse represents a DescribeContinuousBackups response.
+type DescribeContinuousBackupsResponse struct {
+	ContinuousBackupsDescription ContinuousBackupsDescription `json:"ContinuousBackupsDescription,omitempty"`
+}
+
+// RestoreTableToPointInTimeRequest represents a RestoreTableToPointInTime request.
+type RestoreTableToPointInTimeRequest struct {
+	SourceTableName string `json:"SourceTableName" binding:"required"`
+	TargetTableName string `json:"TargetTableName" binding:"required"`
+	UseLatestRestorableTime bool `json:"UseLatestRestorableTime,omitempty"`
+	RestoreDateTime int64 `json:"RestoreDateTime,omitempty"`
+}
+
+// RestoreTableToPointInTimeResponse represents a RestoreTableToPointInTime response.
+type RestoreTableToPointInTimeResponse struct {
+	TableDescription TableMetadata `json:"TableDescription,omitempty"`
+}
+
+// Global Tables Models
+
+// GlobalTableStatus represents global table status.
+type GlobalTableStatus string
+
+const (
+	GlobalTableStatusCreating   GlobalTableStatus = "CREATING"
+	GlobalTableStatusActive     GlobalTableStatus = "ACTIVE"
+	GlobalTableStatusDeleting   GlobalTableStatus = "DELETING"
+	GlobalTableStatusUpdating   GlobalTableStatus = "UPDATING"
+)
+
+// Replica represents a replica in a global table.
+type Replica struct {
+	RegionName string `json:"RegionName,omitempty"`
+}
+
+// ReplicaDescription represents a replica description.
+type ReplicaDescription struct {
+	RegionName string `json:"RegionName,omitempty"`
+	ReplicaStatus GlobalTableStatus `json:"ReplicaStatus,omitempty"`
+}
+
+// GlobalTable represents a global table.
+type GlobalTable struct {
+	GlobalTableName string `json:"GlobalTableName,omitempty"`
+	ReplicationGroup []Replica `json:"ReplicationGroup,omitempty"`
+}
+
+// GlobalTableDescription represents a global table description.
+type GlobalTableDescription struct {
+	GlobalTableName string `json:"GlobalTableName,omitempty"`
+	GlobalTableStatus GlobalTableStatus `json:"GlobalTableStatus,omitempty"`
+	ReplicationGroup []ReplicaDescription `json:"ReplicationGroup,omitempty"`
+}
+
+// CreateGlobalTableRequest represents a CreateGlobalTable request.
+type CreateGlobalTableRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+	ReplicationGroup []Replica `json:"ReplicationGroup" binding:"required"`
+}
+
+// CreateGlobalTableResponse represents a CreateGlobalTable response.
+type CreateGlobalTableResponse struct {
+	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
+}
+
+// UpdateGlobalTableRequest represents an UpdateGlobalTable request.
+type UpdateGlobalTableRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+	ReplicaUpdates []ReplicaUpdate `json:"ReplicaUpdates" binding:"required"`
+}
+
+// ReplicaUpdate represents a replica update.
+type ReplicaUpdate struct {
+	Create *CreateReplicaAction `json:"Create,omitempty"`
+	Delete *DeleteReplicaAction `json:"Delete,omitempty"`
+}
+
+// CreateReplicaAction represents a create replica action.
+type CreateReplicaAction struct {
+	RegionName string `json:"RegionName,omitempty"`
+}
+
+// DeleteReplicaAction represents a delete replica action.
+type DeleteReplicaAction struct {
+	RegionName string `json:"RegionName,omitempty"`
+}
+
+// UpdateGlobalTableResponse represents an UpdateGlobalTable response.
+type UpdateGlobalTableResponse struct {
+	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
+}
+
+// DescribeGlobalTableRequest represents a DescribeGlobalTable request.
+type DescribeGlobalTableRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+}
+
+// DescribeGlobalTableResponse represents a DescribeGlobalTable response.
+type DescribeGlobalTableResponse struct {
+	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
+}
+
+// ListGlobalTablesRequest represents a ListGlobalTables request.
+type ListGlobalTablesRequest struct {
+	Limit int `json:"Limit,omitempty"`
+	ExclusiveStartGlobalTableName string `json:"ExclusiveStartGlobalTableName,omitempty"`
+}
+
+// ListGlobalTablesResponse represents a ListGlobalTables response.
+type ListGlobalTablesResponse struct {
+	GlobalTables []GlobalTable `json:"GlobalTables,omitempty"`
+	LastEvaluatedGlobalTableName string `json:"LastEvaluatedGlobalTableName,omitempty"`
+}
+
+// UpdateGlobalTableSettingsRequest represents an UpdateGlobalTableSettings request.
+type UpdateGlobalTableSettingsRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+	ReplicaSettingsUpdate []ReplicaSettingsUpdate `json:"ReplicaSettingsUpdate,omitempty"`
+}
+
+// ReplicaSettingsUpdate represents replica settings update.
+type ReplicaSettingsUpdate struct {
+	RegionName string `json:"RegionName,omitempty"`
+}
+
+// UpdateGlobalTableSettingsResponse represents an UpdateGlobalTableSettings response.
+type UpdateGlobalTableSettingsResponse struct {
+	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
+}
