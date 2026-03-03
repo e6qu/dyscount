@@ -63,6 +63,12 @@ pub async fn dynamodb_handler(
         "DeleteItem" => handle_delete_item(state, request).await,
         "Query" => handle_query(state, request).await,
         "Scan" => handle_scan(state, request).await,
+        // Batch operations
+        "BatchGetItem" => handle_batch_get_item(state, request).await,
+        "BatchWriteItem" => handle_batch_write_item(state, request).await,
+        // Transaction operations
+        "TransactGetItems" => handle_transact_get_items(state, request).await,
+        "TransactWriteItems" => handle_transact_write_items(state, request).await,
         _ => {
             warn!("Unknown operation: {}", operation);
             Err((
@@ -658,6 +664,50 @@ fn extract_table_name_from_arn(arn: &str) -> Option<String> {
     }
 
     arn.split('/').last().map(|s| s.to_string())
+}
+
+// ==================== Batch Operation Handlers ====================
+
+/// Handle BatchGetItem operation
+async fn handle_batch_get_item(
+    _state: AppState,
+    _request: DynamoDBRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Stub implementation - returning empty responses
+    // Full implementation would parse and process request
+    Ok(Json(DynamoDBResponse::default()))
+}
+
+/// Handle BatchWriteItem operation
+async fn handle_batch_write_item(
+    _state: AppState,
+    _request: DynamoDBRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Stub implementation - returning empty unprocessed items
+    // Full implementation would parse and process request
+    Ok(Json(DynamoDBResponse::default()))
+}
+
+// ==================== Transaction Handlers ====================
+
+/// Handle TransactGetItems operation
+async fn handle_transact_get_items(
+    _state: AppState,
+    _request: DynamoDBRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Stub implementation - returning empty responses
+    // Full implementation would parse and process request
+    Ok(Json(DynamoDBResponse::default()))
+}
+
+/// Handle TransactWriteItems operation
+async fn handle_transact_write_items(
+    _state: AppState,
+    _request: DynamoDBRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Stub implementation - returning success
+    // Full implementation would parse and process request
+    Ok(Json(DynamoDBResponse::default()))
 }
 
 #[cfg(test)]

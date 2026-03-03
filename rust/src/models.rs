@@ -391,6 +391,251 @@ pub struct Endpoint {
     pub cache_period_in_minutes: i64,
 }
 
+// ============== Batch Operations ==============
+
+/// Keys and attributes for batch get
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeysAndAttributes {
+    #[serde(rename = "Keys")]
+    pub keys: Vec<Item>,
+    #[serde(rename = "AttributesToGet")]
+    pub attributes_to_get: Option<Vec<String>>,
+    #[serde(rename = "ConsistentRead")]
+    pub consistent_read: Option<bool>,
+    #[serde(rename = "ExpressionAttributeNames")]
+    pub expression_attribute_names: Option<HashMap<String, String>>,
+    #[serde(rename = "ProjectionExpression")]
+    pub projection_expression: Option<String>,
+}
+
+/// Batch get item request
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchGetItemRequest {
+    #[serde(rename = "RequestItems")]
+    pub request_items: HashMap<String, KeysAndAttributes>,
+    #[serde(rename = "ReturnConsumedCapacity")]
+    pub return_consumed_capacity: Option<String>,
+}
+
+/// Batch get item response
+#[derive(Debug, Serialize, Default)]
+pub struct BatchGetItemResponse {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "Responses")]
+    pub responses: Option<HashMap<String, Vec<Item>>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "UnprocessedKeys")]
+    pub unprocessed_keys: Option<HashMap<String, KeysAndAttributes>>,
+}
+
+/// Put request for batch write
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PutRequest {
+    #[serde(rename = "Item")]
+    pub item: Item,
+}
+
+/// Delete request for batch write
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteRequest {
+    #[serde(rename = "Key")]
+    pub key: Item,
+}
+
+/// Write request for batch write (either put or delete)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WriteRequest {
+    #[serde(rename = "PutRequest")]
+    pub put_request: Option<PutRequest>,
+    #[serde(rename = "DeleteRequest")]
+    pub delete_request: Option<DeleteRequest>,
+}
+
+/// Batch write item request
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchWriteItemRequest {
+    #[serde(rename = "RequestItems")]
+    pub request_items: HashMap<String, Vec<WriteRequest>>,
+    #[serde(rename = "ReturnConsumedCapacity")]
+    pub return_consumed_capacity: Option<String>,
+}
+
+/// Batch write item response
+#[derive(Debug, Serialize, Default)]
+pub struct BatchWriteItemResponse {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "UnprocessedItems")]
+    pub unprocessed_items: Option<HashMap<String, Vec<WriteRequest>>>,
+}
+
+// ============== Transaction Operations ==============
+
+/// Transact get item
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactGet {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Key")]
+    pub key: Item,
+    #[serde(rename = "ProjectionExpression")]
+    pub projection_expression: Option<String>,
+    #[serde(rename = "ExpressionAttributeNames")]
+    pub expression_attribute_names: Option<HashMap<String, String>>,
+}
+
+/// Transact get item wrapper
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactGetItem {
+    #[serde(rename = "Get")]
+    pub get: TransactGet,
+}
+
+/// Transact get items request
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactGetItemsRequest {
+    #[serde(rename = "TransactItems")]
+    pub transact_items: Vec<TransactGetItem>,
+}
+
+/// Item response for transact get
+#[derive(Debug, Serialize, Default)]
+pub struct ItemResponse {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "Item")]
+    pub item: Option<Item>,
+}
+
+/// Transact get items response
+#[derive(Debug, Serialize, Default)]
+pub struct TransactGetItemsResponse {
+    #[serde(rename = "Responses")]
+    pub responses: Vec<ItemResponse>,
+}
+
+/// Transact put operation
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactPut {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Item")]
+    pub item: Item,
+    #[serde(rename = "ConditionExpression")]
+    pub condition_expression: Option<String>,
+}
+
+/// Transact update operation
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactUpdate {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Key")]
+    pub key: Item,
+    #[serde(rename = "UpdateExpression")]
+    pub update_expression: Option<String>,
+}
+
+/// Transact delete operation
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactDelete {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Key")]
+    pub key: Item,
+    #[serde(rename = "ConditionExpression")]
+    pub condition_expression: Option<String>,
+}
+
+/// Transact condition check
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactConditionCheck {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Key")]
+    pub key: Item,
+    #[serde(rename = "ConditionExpression")]
+    pub condition_expression: String,
+}
+
+/// Transact write item (one of put, update, delete, condition check)
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactWriteItem {
+    #[serde(rename = "Put")]
+    pub put: Option<TransactPut>,
+    #[serde(rename = "Update")]
+    pub update: Option<TransactUpdate>,
+    #[serde(rename = "Delete")]
+    pub delete: Option<TransactDelete>,
+    #[serde(rename = "ConditionCheck")]
+    pub condition_check: Option<TransactConditionCheck>,
+}
+
+/// Transact write items request
+#[derive(Debug, Clone, Deserialize)]
+pub struct TransactWriteItemsRequest {
+    #[serde(rename = "TransactItems")]
+    pub transact_items: Vec<TransactWriteItem>,
+}
+
+// ============== UpdateTable Operations ==============
+
+/// Create global secondary index action
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateGlobalSecondaryIndexAction {
+    #[serde(rename = "IndexName")]
+    pub index_name: String,
+    #[serde(rename = "KeySchema")]
+    pub key_schema: Vec<KeySchemaElement>,
+    #[serde(rename = "Projection")]
+    pub projection: Projection,
+    #[serde(rename = "ProvisionedThroughput")]
+    pub provisioned_throughput: Option<ProvisionedThroughput>,
+}
+
+/// Update global secondary index action
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateGlobalSecondaryIndexAction {
+    #[serde(rename = "IndexName")]
+    pub index_name: String,
+    #[serde(rename = "ProvisionedThroughput")]
+    pub provisioned_throughput: Option<ProvisionedThroughput>,
+}
+
+/// Delete global secondary index action
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeleteGlobalSecondaryIndexAction {
+    #[serde(rename = "IndexName")]
+    pub index_name: String,
+}
+
+/// Global secondary index update
+#[derive(Debug, Clone, Deserialize)]
+pub struct GlobalSecondaryIndexUpdate {
+    #[serde(rename = "Create")]
+    pub create: Option<CreateGlobalSecondaryIndexAction>,
+    #[serde(rename = "Update")]
+    pub update: Option<UpdateGlobalSecondaryIndexAction>,
+    #[serde(rename = "Delete")]
+    pub delete: Option<DeleteGlobalSecondaryIndexAction>,
+}
+
+/// Update table request
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateTableRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "AttributeDefinitions")]
+    pub attribute_definitions: Option<Vec<AttributeDefinition>>,
+    #[serde(rename = "BillingMode")]
+    pub billing_mode: Option<String>,
+    #[serde(rename = "GlobalSecondaryIndexUpdates")]
+    pub global_secondary_index_updates: Option<Vec<GlobalSecondaryIndexUpdate>>,
+    #[serde(rename = "ProvisionedThroughput")]
+    pub provisioned_throughput: Option<ProvisionedThroughput>,
+}
+
+/// Update table response
+#[derive(Debug, Serialize)]
+pub struct UpdateTableResponse {
+    #[serde(rename = "TableDescription")]
+    pub table_description: TableMetadata,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
