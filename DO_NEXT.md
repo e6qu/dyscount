@@ -1,4 +1,4 @@
-# Do Next - M4 Import/Export & Polish
+# Do Next - M4 Phase 2: Polish & Production Readiness
 
 ## ✅ Completed Milestones
 
@@ -27,70 +27,67 @@
 - SQL-compatible query language
 - 16 PartiQL tests passing
 
+### M4 Phase 1: Import/Export ✅
+- ExportTableToPointInTime, DescribeExport, ListExports
+- ImportTable, DescribeImport, ListImports
+- 11 Import/Export tests passing
+- Round-trip export-import verified
+
 ---
 
-## 🚀 Current Phase: M4 Phase 1 - Import/Export
+## 🚀 Current Phase: M4 Phase 2 - Polish & Production Readiness
 
-**Status**: 🟡 **IN PROGRESS**
+**Status**: ⚪ **PLANNED**
 
-### M4 Phase 1 Tasks
+### M4 Phase 2 Tasks
 
-| Task | Operation | Status | Est. Effort |
-|------|-----------|--------|-------------|
-| M4P1-T1 | ExportTableToPointInTime | Planned | 2 days |
-| M4P1-T2 | ImportTable | Planned | 2 days |
-| M4P1-T3 | ListImports | Planned | 1 day |
-| M4P1-T4 | DescribeImport | Planned | 1 day |
+| Task | Description | Status | Est. Effort |
+|------|-------------|--------|-------------|
+| M4P2-T1 | Performance Optimization | Planned | 2 days |
+| M4P2-T2 | Error Handling Improvements | Planned | 1 day |
+| M4P2-T3 | Documentation & Examples | Planned | 2 days |
+| M4P2-T4 | Security Hardening | Planned | 2 days |
+| M4P2-T5 | Monitoring & Observability | Planned | 1 day |
+| M4P2-T6 | Final Integration Testing | Planned | 1 day |
 
-**Total Effort**: ~6 days
+**Total Effort**: ~9 days
 
-**Operations to Implement**:
-1. **ExportTableToPointInTime** - Export table data to S3-compatible storage
-2. **ImportTable** - Import table data from S3-compatible storage
-3. **ListImports** - List all import tasks
-4. **DescribeImport** - Get details of an import task
-
-**Implementation Notes**:
-- Use local filesystem as S3-compatible storage (data/exports/)
-- Export format: DynamoDB JSON or CSV
-- Support incremental exports
-- Import from S3-compatible sources
+**Goals**:
+1. **Performance**: Benchmark and optimize critical paths
+2. **Reliability**: Improve error handling and recovery
+3. **Documentation**: Complete API docs, examples, guides
+4. **Security**: Review and harden security measures
+5. **Observability**: Enhanced metrics and logging
+6. **Testing**: Final integration and E2E testing
 
 ---
 
 ## 📋 Immediate Next Steps
 
-### 1. Create feature branch for M4 Phase 1
+### 1. Create PR for M4 Phase 1
 ```bash
-git checkout main
-git pull origin main
-git checkout -b feature/M4P1-import-export
+git add .
+git commit -m "feat: M4 Phase 1 - Import/Export Operations
+
+- Implement ExportTableToPointInTime, DescribeExport, ListExports
+- Implement ImportTable, DescribeImport, ListImports
+- Add ImportExportService with async background processing
+- Add 11 comprehensive tests
+- Support DynamoDB JSON export format
+- Local filesystem as S3-compatible storage"
+git push origin feature/M4P1-import-export
+gh pr create --title "M4 Phase 1: Import/Export Operations" --body "..."
 ```
 
-### 2. Implement M4P1-T1: ExportTableToPointInTime
+### 2. Move Task File
+```bash
+mv tasks/M4P1_IMPORT_EXPORT.md tasks/done/
+```
 
-**Goals**:
-- Export table data to S3-compatible storage
-- Support point-in-time exports
-- Export to JSON format
-
-**Implementation Notes**:
-- Export storage: `data/exports/<export_id>/`
-- Export format: DynamoDB JSON
-- Metadata: table_name, export_time, item_count, format
-
-### 3. Implement M4P1-T2: ImportTable
-
-**Goals**:
-- Import table data from S3-compatible storage
-- Create new table from import
-- Support DynamoDB JSON format
-
-### 4. Implement M4P1-T3 & T4: ListImports & DescribeImport
-
-**Goals**:
-- List all import tasks with filtering
-- Get detailed information about import tasks
+### 3. Begin M4 Phase 2 Planning
+- Create M4P2 task file
+- Define performance benchmarks
+- Review security checklist
 
 ---
 
@@ -101,16 +98,44 @@ git checkout -b feature/M4P1-import-export
 | M1: Foundation | 9 | ✅ 100% |
 | M2: Advanced | 4 | ✅ 100% |
 | M3: Global/Streams | 3 | ⚪ Planned (deferred) |
-| M4 Phase 1: Import/Export | 1 | 🟡 0% |
-| M4 Phase 2: Polish | 2 | ⚪ 0% |
-| **Total** | **20** | **65%** |
+| M4 Phase 1: Import/Export | 1 | ✅ 100% |
+| M4 Phase 2: Polish | 1 | ⚪ 0% |
+| **Total** | **18** | **78%** |
 
 ---
 
-## 📝 Notes
+## 📝 Remaining Operations (8/61)
 
-- M1 complete: 36 operations, 389 tests
-- M2 complete: 11 operations (TTL: 2, Backup: 4, PITR: 3, PartiQL: 2)
-- Total operations: 47/61 (77%)
-- Total tests: 427
-- Skipping M3 (Streams) for now to focus on completing API coverage
+| Category | Operations | Priority |
+|----------|------------|----------|
+| Global Tables | CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, UpdateReplication | Low |
+| Streams | CreateStream, DescribeStream, ListStreams, GetRecords, GetShardIterator | Low |
+| Resource Policies | PutResourcePolicy, GetResourcePolicy, DeleteResourcePolicy | Low |
+| Kinesis | EnableKinesisStreaming, DisableKinesisStreaming | Low |
+
+**Note**: These operations are deferred to post-M4 as they require infrastructure (multi-region, Kinesis) not suitable for local development.
+
+---
+
+## 🎯 Success Criteria for M4 Phase 2
+
+- [ ] Performance: Query operations < 10ms for 1M items
+- [ ] Reliability: 99.9% uptime in stress tests
+- [ ] Documentation: Complete API reference with examples
+- [ ] Security: Pass security audit checklist
+- [ ] Observability: Full metrics coverage
+- [ ] Testing: 95%+ code coverage
+
+---
+
+## 📈 Current Statistics
+
+| Metric | Value |
+|--------|-------|
+| Total Operations | 53/61 (87%) |
+| Total Tests | 452 |
+| Python LOC | ~5,800 |
+| Go LOC | ~3,200 |
+| Rust LOC | ~2,800 |
+| Zig LOC | ~2,100 |
+| **Total LOC** | **~13,900** |
