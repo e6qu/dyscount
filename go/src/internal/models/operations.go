@@ -1067,3 +1067,42 @@ type UpdateReplicationRequest struct {
 type UpdateReplicationResponse struct {
 	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
 }
+
+
+// DeleteGlobalTableRequest represents a DeleteGlobalTable request.
+type DeleteGlobalTableRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+}
+
+// DeleteGlobalTableResponse represents a DeleteGlobalTable response.
+type DeleteGlobalTableResponse struct {
+	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
+}
+
+// ListTagsOfResourceRequest represents a ListTagsOfResource request.
+type ListTagsOfResourceRequest struct {
+	ResourceARN string `json:"ResourceArn" binding:"required"`
+}
+
+// ListTagsOfResourceResponse represents a ListTagsOfResource response.
+type ListTagsOfResourceResponse struct {
+	Tags []Tag `json:"Tags,omitempty"`
+}
+
+// TagResourceRequest represents a TagResource request.
+type TagResourceRequest struct {
+	ResourceARN string `json:"ResourceArn" binding:"required"`
+	Tags        []Tag  `json:"Tags" binding:"required"`
+}
+
+// TagResourceResponse represents a TagResource response.
+type TagResourceResponse struct{}
+
+// UntagResourceRequest represents an UntagResource request.
+type UntagResourceRequest struct {
+	ResourceARN string   `json:"ResourceArn" binding:"required"`
+	TagKeys     []string `json:"TagKeys" binding:"required"`
+}
+
+// UntagResourceResponse represents an UntagResource response.
+type UntagResourceResponse struct{}
