@@ -5,9 +5,9 @@
 Go implementation:
 - **M1 (Foundation)**: ✅ Complete - 16 operations
 - **M2 (Feature Parity)**: ✅ Complete - All phases finished
-- **M3 (Advanced Features)**: ✅ Complete - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅, Streams ✅, PITR ✅, Global Tables ✅
+- **M3 (Advanced Features)**: ✅ Complete - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅, Streams ✅, PITR ✅, Global Tables ✅, Limits ✅
 
-**Current Operations**: 51/61 (84%)
+**Current Operations**: 54/61 (89%)
 **Tests**: 182 passing
 
 ## Completed Work

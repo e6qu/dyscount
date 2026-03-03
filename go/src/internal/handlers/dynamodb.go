@@ -163,6 +163,12 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleListGlobalTables(c)
 	case "UpdateGlobalTableSettings":
 		h.handleUpdateGlobalTableSettings(c)
+	case "DescribeGlobalTableSettings":
+		h.handleDescribeGlobalTableSettings(c)
+	case "UpdateReplication":
+		h.handleUpdateReplication(c)
+	case "DescribeLimits":
+		h.handleDescribeLimits(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -1922,6 +1928,123 @@ func (h *DynamoDBHandler) handleUpdateGlobalTableSettings(c *gin.Context) {
 	}
 
 	resp := models.UpdateGlobalTableSettingsResponse{
+		GlobalTableDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleDescribeLimits handles DescribeLimits requests.
+func (h *DynamoDBHandler) handleDescribeLimits(c *gin.Context) {
+	// Return default limits
+	resp := models.DescribeLimitsResponse{
+		AccountMaxReadCapacityUnits:  100000,
+		AccountMaxWriteCapacityUnits: 100000,
+		TableMaxReadCapacityUnits:    100000,
+		TableMaxWriteCapacityUnits:   100000,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeGlobalTableSettings handles DescribeGlobalTableSettings requests.
+func (h *DynamoDBHandler) handleDescribeGlobalTableSettings(c *gin.Context) {
+	var req models.DescribeGlobalTableSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := gtm.DescribeGlobalTable(req.GlobalTableName)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// Build replica settings
+	var replicaSettings []models.ReplicaSettingsDescription
+	for _, replica := range desc.ReplicationGroup {
+		replicaSettings = append(replicaSettings, models.ReplicaSettingsDescription{
+			RegionName:    replica.RegionName,
+			ReplicaStatus: string(replica.ReplicaStatus),
+		})
+	}
+
+	resp := models.DescribeGlobalTableSettingsResponse{
+		GlobalTableName: req.GlobalTableName,
+		ReplicaSettings: replicaSettings,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleUpdateReplication handles UpdateReplication requests.
+func (h *DynamoDBHandler) handleUpdateReplication(c *gin.Context) {
+	var req models.UpdateReplicationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	// Convert to UpdateGlobalTableRequest
+	updateReq := &models.UpdateGlobalTableRequest{
+		GlobalTableName: req.GlobalTableName,
+		ReplicaUpdates:  req.ReplicaUpdates,
+	}
+	
+	desc, err := gtm.UpdateGlobalTable(updateReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.UpdateReplicationResponse{
 		GlobalTableDescription: *desc,
 	}
 	c.JSON(http.StatusOK, resp)
