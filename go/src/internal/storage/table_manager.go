@@ -493,3 +493,103 @@ func (tm *TableManager) storeIndexMetadata(db *sql.DB, index interface{}, indexT
 
 	return err
 }
+
+
+// UpdateTimeToLive updates the TTL configuration for a table.
+func (tm *TableManager) UpdateTimeToLive(req *models.UpdateTimeToLiveRequest) (*models.TimeToLiveDescription, error) {
+	dbPath := tm.getDBPath(req.TableName)
+
+	// Check if table exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("table not found: %s", req.TableName)
+	}
+
+	// Open database
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Create TTL metadata table if not exists
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS __ttl_metadata (
+			attribute_name TEXT PRIMARY KEY,
+			enabled INTEGER NOT NULL,
+			status TEXT NOT NULL
+		)
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create TTL metadata table: %w", err)
+	}
+
+	// Determine status
+	status := "ENABLED"
+	if !req.TimeToLiveSpecification.Enabled {
+		status = "DISABLED"
+	}
+
+	// Store TTL configuration
+	_, err = db.Exec(`
+		INSERT OR REPLACE INTO __ttl_metadata (attribute_name, enabled, status)
+		VALUES (?, ?, ?)
+	`, req.TimeToLiveSpecification.AttributeName, req.TimeToLiveSpecification.Enabled, status)
+	if err != nil {
+		return nil, fmt.Errorf("failed to store TTL configuration: %w", err)
+	}
+
+	return &models.TimeToLiveDescription{
+		AttributeName:    req.TimeToLiveSpecification.AttributeName,
+		TimeToLiveStatus: status,
+	}, nil
+}
+
+// DescribeTimeToLive returns the TTL configuration for a table.
+func (tm *TableManager) DescribeTimeToLive(tableName string) (*models.TimeToLiveDescription, error) {
+	dbPath := tm.getDBPath(tableName)
+
+	// Check if table exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("table not found: %s", tableName)
+	}
+
+	// Open database
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Check if TTL metadata table exists
+	var exists bool
+	err = db.QueryRow(`
+		SELECT 1 FROM sqlite_master WHERE type='table' AND name='__ttl_metadata'
+	`).Scan(&exists)
+	if err != nil || !exists {
+		// TTL not configured
+		return &models.TimeToLiveDescription{
+			TimeToLiveStatus: "DISABLED",
+		}, nil
+	}
+
+	// Get TTL configuration
+	var attributeName string
+	var enabled bool
+	var status string
+	err = db.QueryRow(`
+		SELECT attribute_name, enabled, status FROM __ttl_metadata LIMIT 1
+	`).Scan(&attributeName, &enabled, &status)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &models.TimeToLiveDescription{
+				TimeToLiveStatus: "DISABLED",
+			}, nil
+		}
+		return nil, fmt.Errorf("failed to get TTL configuration: %w", err)
+	}
+
+	return &models.TimeToLiveDescription{
+		AttributeName:    attributeName,
+		TimeToLiveStatus: status,
+	}, nil
+}

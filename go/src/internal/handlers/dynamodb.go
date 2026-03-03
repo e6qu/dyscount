@@ -104,6 +104,10 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleTransactGetItems(c)
 	case "TransactWriteItems":
 		h.handleTransactWriteItems(c)
+	case "UpdateTimeToLive":
+		h.handleUpdateTimeToLive(c)
+	case "DescribeTimeToLive":
+		h.handleDescribeTimeToLive(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -852,5 +856,58 @@ func (h *DynamoDBHandler) handleTransactWriteItems(c *gin.Context) {
 	}
 
 	resp := models.TransactWriteItemsResponse{}
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleUpdateTimeToLive handles UpdateTimeToLive requests.
+func (h *DynamoDBHandler) handleUpdateTimeToLive(c *gin.Context) {
+	var req models.UpdateTimeToLiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	ttlDesc, err := h.tableManager.UpdateTimeToLive(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.UpdateTimeToLiveResponse{
+		TimeToLiveDescription: *ttlDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeTimeToLive handles DescribeTimeToLive requests.
+func (h *DynamoDBHandler) handleDescribeTimeToLive(c *gin.Context) {
+	var req models.DescribeTimeToLiveRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	ttlDesc, err := h.tableManager.DescribeTimeToLive(req.TableName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeTimeToLiveResponse{
+		TimeToLiveDescription: *ttlDesc,
+	}
 	c.JSON(http.StatusOK, resp)
 }

@@ -91,16 +91,20 @@ Go implementation using Gin framework with SQLite backend.
 
 ## Metrics
 
-- **Lines of Code**: ~3,900 (+100)
-- **Test Count**: 103 (+8 UpdateExpression tests)
-- **Test Coverage**: ~72%
-- **Operations**: 20/61 (33%)
-- **Condition Expressions**: ✅ Complete
-- **Batch Operations**: ✅ Complete
-- **Transactions**: ✅ Complete
-- **UpdateExpression**: ✅ Complete
+- **Lines of Code**: ~4,200 (+300)
+- **Test Count**: 117 (+14 tests)
+- **Test Coverage**: ~76%
+- **Operations**: 22/61 (36%)
+- **M2 Feature Parity**: ✅ COMPLETE
+  - Condition Expressions: ✅
+  - Batch Operations: ✅
+  - Transactions: ✅
+  - UpdateExpression: ✅
+  - UpdateTable GSI: ✅
+- **M3 In Progress**:
+  - TTL: ✅ Complete
 
-## Next Phase: M2 Feature Parity
+## Next Phase: M3 Advanced Features
 
 ### Priority 1: Critical Features
 1. ConditionExpression parser/evaluator

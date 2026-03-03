@@ -170,3 +170,61 @@ The UpdateExpression implementation was already comprehensive:
 - Phase 5: UpdateTable GSI support
 
 ---
+
+
+## 2026-03-03: Go M3 Phase 1 - TTL Implementation
+
+**Branch**: `feature/GO-M3-ttl`
+
+### Summary
+
+Implemented Time-To-Live (TTL) support for Go - enabling automatic expiration of items.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/ttl_test.go`**
+   - Tests for enabling TTL
+   - Tests for disabling TTL
+   - Tests for describing TTL configuration
+   - Tests for non-existent table error handling
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added `TimeToLiveSpecification` model
+   - Added `UpdateTimeToLiveRequest/Response` models
+   - Added `DescribeTimeToLiveRequest/Response` models
+   - Added `TimeToLiveDescription` model
+
+2. **`go/src/internal/storage/table_manager.go`**
+   - Added `UpdateTimeToLive()` method
+   - Added `DescribeTimeToLive()` method
+   - Stores TTL configuration in `__ttl_metadata` table
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added `handleUpdateTimeToLive()` handler
+   - Added `handleDescribeTimeToLive()` handler
+   - Added routing for TTL operations
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| UpdateTimeToLive | ✅ | Enable/disable TTL on a table |
+| DescribeTimeToLive | ✅ | Get TTL configuration |
+| TTL Attribute | ✅ | Configurable TTL attribute name |
+| TTL Status | ✅ | ENABLING, ENABLED, DISABLING, DISABLED |
+
+### Tests
+
+- 6 TTL tests added
+- All 117 Go tests passing
+
+### Next Steps
+
+- Go M3 Phase 2: Backup/Restore operations
+- Or: Implement TTL cleanup background task
+
+---

@@ -412,3 +412,37 @@ type TransactWriteItemsResponse struct {
 	ConsumedCapacity     []ConsumedCapacity       `json:"ConsumedCapacity,omitempty"`
 	ItemCollectionMetrics map[string]ItemCollectionMetrics `json:"ItemCollectionMetrics,omitempty"`
 }
+
+
+// TimeToLiveSpecification represents the TTL specification for a table.
+type TimeToLiveSpecification struct {
+	AttributeName string `json:"AttributeName" binding:"required"`
+	Enabled       bool   `json:"Enabled" binding:"required"`
+}
+
+// UpdateTimeToLiveRequest represents an UpdateTimeToLive request.
+type UpdateTimeToLiveRequest struct {
+	TableName               string                  `json:"TableName" binding:"required"`
+	TimeToLiveSpecification TimeToLiveSpecification `json:"TimeToLiveSpecification" binding:"required"`
+}
+
+// TimeToLiveDescription represents the TTL description for a table.
+type TimeToLiveDescription struct {
+	AttributeName   string `json:"AttributeName,omitempty"`
+	TimeToLiveStatus string `json:"TimeToLiveStatus,omitempty"` // ENABLING, ENABLED, DISABLING, DISABLED
+}
+
+// UpdateTimeToLiveResponse represents an UpdateTimeToLive response.
+type UpdateTimeToLiveResponse struct {
+	TimeToLiveDescription TimeToLiveDescription `json:"TimeToLiveDescription,omitempty"`
+}
+
+// DescribeTimeToLiveRequest represents a DescribeTimeToLive request.
+type DescribeTimeToLiveRequest struct {
+	TableName string `json:"TableName" binding:"required"`
+}
+
+// DescribeTimeToLiveResponse represents a DescribeTimeToLive response.
+type DescribeTimeToLiveResponse struct {
+	TimeToLiveDescription TimeToLiveDescription `json:"TimeToLiveDescription,omitempty"`
+}
