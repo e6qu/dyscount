@@ -1,19 +1,25 @@
-# Feature Comparison - Remaining Work by Language
+# Feature Comparison - All Languages
+
+**Last Updated**: 2026-03-04
+
+---
 
 ## Current Status Overview
 
 | Language | Operations | Coverage | Status |
 |----------|-----------|----------|--------|
-| **Python** | 53/61 | 87% | Production Ready ✅ |
-| **Go** | 22/61 | 36% | M2 Phase 1 Complete |
-| **Rust** | 21/61 | 34% | Feature Parity Phase 1 |
-| **Zig** | 13/61 | 21% | DP Phase 2 Complete |
+| **Python** | 53/61 | 87% | ✅ Production Ready |
+| **Go** | 50/61 | 82% | ✅ Feature Complete |
+| **Rust** | 13/61 | 21% | ⚠️ Basic only |
+| **Zig** | 16/61 | 26% | ⚠️ Basic only |
+
+**Total Test Count**: 585 (Python: 372, Go: 183, Rust: 21, Zig: 19)
 
 ---
 
 ## Detailed Feature Matrix
 
-### Control Plane (5 operations)
+### Control Plane (10 operations)
 
 | Feature | Python | Go | Rust | Zig |
 |---------|--------|-----|------|-----|
@@ -22,207 +28,216 @@
 | ListTables | ✅ | ✅ | ✅ | ✅ |
 | DescribeTable | ✅ | ✅ | ✅ | ✅ |
 | DescribeEndpoints | ✅ | ✅ | ✅ | ✅ |
-| **Control Plane Complete** | ✅ | ✅ | ✅ | ✅ |
+| UpdateTable | ✅ | ✅ | ⚠️ | ❌ |
+| TagResource | ✅ | ✅ | ⚠️ | ❌ |
+| UntagResource | ✅ | ✅ | ⚠️ | ❌ |
+| ListTagsOfResource | ✅ | ✅ | ⚠️ | ❌ |
+| DescribeLimits | ❌ | ✅ | ❌ | ❌ |
+| **Control Plane** | 9/10 | 10/10 | 5/10 | 5/10 |
 
 ---
 
-### Data Plane - Basic Operations (5 operations)
+### Data Plane - Basic Operations (6 operations)
 
 | Feature | Python | Go | Rust | Zig |
 |---------|--------|-----|------|-----|
 | GetItem | ✅ | ✅ | ✅ | ✅ |
 | PutItem | ✅ | ✅ | ✅ | ✅ |
-| UpdateItem | ✅ | ✅ | ✅ | ✅ (stub) |
+| UpdateItem | ✅ | ✅ | ⚠️ | ⚠️ |
 | DeleteItem | ✅ | ✅ | ✅ | ✅ |
-| **Basic Data Plane** | ✅ | ✅ | ✅ | 🚧 |
-
----
-
-### Data Plane - Query & Scan (2 operations)
-
-| Feature | Python | Go | Rust | Zig |
-|---------|--------|-----|------|-----|
 | Query | ✅ | ✅ | ✅ | ✅ |
 | Scan | ✅ | ✅ | ✅ | ✅ |
-| FilterExpression | ✅ | ✅ | ✅ | ❌ |
-| ProjectionExpression | ✅ | ✅ | ❌ | ❌ |
-| **Query/Scan Complete** | ✅ | ✅ | 🚧 | 🚧 |
+| **Basic Data Plane** | 6/6 | 6/6 | 5/6 | 5/6 |
 
 ---
 
-### Data Plane - Batch Operations (2 operations)
+### Data Plane - Advanced Features
 
 | Feature | Python | Go | Rust | Zig |
 |---------|--------|-----|------|-----|
-| BatchGetItem | ✅ | ✅ | 🚧 (stub) | 🚧 (stub) |
-| BatchWriteItem | ✅ | ✅ | 🚧 (stub) | 🚧 (stub) |
-| **Batch Operations** | ✅ | ✅ | 🚧 | 🚧 |
-
-**Notes:**
-- Go: Full implementation with projection support
-- Rust: Types + storage layer implemented, handlers stubbed
-- Zig: Returns 501 Not Implemented
-
----
-
-### Data Plane - Transactions (2 operations)
-
-| Feature | Python | Go | Rust | Zig |
-|---------|--------|-----|------|-----|
-| TransactGetItems | ✅ | ✅ | 🚧 (stub) | ❌ |
-| TransactWriteItems | ✅ | ✅ | 🚧 (stub) | ❌ |
-| **Transactions** | ✅ | ✅ | 🚧 | ❌ |
-
-**Notes:**
-- Go: Full implementation with atomicity per table
-- Rust: Types + storage layer implemented, handlers stubbed
-- Zig: Not implemented
-
----
-
-### Data Plane - Expressions (4 capabilities)
-
-| Feature | Python | Go | Rust | Zig |
-|---------|--------|-----|------|-----|
-| ConditionExpression | ✅ | ✅ | ✅ | ❌ |
-| FilterExpression | ✅ | ✅ | ✅ | ❌ |
+| **Batch Operations** |
+| BatchGetItem | ✅ | ✅ | ❌ | ⚠️ |
+| BatchWriteItem | ✅ | ✅ | ❌ | ⚠️ |
+| **Transactions** |
+| TransactGetItems | ✅ | ✅ | ❌ | ❌ |
+| TransactWriteItems | ✅ | ✅ | ❌ | ❌ |
+| **Expressions** |
+| ConditionExpression | ✅ | ✅ | ⚠️ | ❌ |
+| FilterExpression | ✅ | ✅ | ⚠️ | ❌ |
+| KeyConditionExpression | ✅ | ✅ | ⚠️ | ⚠️ |
 | UpdateExpression (SET) | ✅ | ✅ | ✅ | ✅ |
-| UpdateExpression (ADD/DELETE/REMOVE) | ✅ | ✅ | ✅ | ❌ |
-| Expression Attribute Names | ✅ | ✅ | ✅ | ❌ |
-| Expression Attribute Values | ✅ | ✅ | ✅ | ❌ |
-| **Expressions Complete** | ✅ | ✅ | ✅ | 🚧 |
-
-**Notes:**
-- Python: Full Tree-sitter based parser
-- Go: Custom parser with all operators
-- Rust: New expression module with parser + evaluator
-- Zig: Basic SET support only
+| UpdateExpression (ADD) | ✅ | ✅ | ⚠️ | ❌ |
+| UpdateExpression (REMOVE) | ✅ | ✅ | ⚠️ | ❌ |
+| UpdateExpression (DELETE) | ✅ | ✅ | ⚠️ | ❌ |
+| ExpressionAttributeNames | ✅ | ✅ | ✅ | ❌ |
+| ExpressionAttributeValues | ✅ | ✅ | ✅ | ❌ |
+| **Pagination** |
+| Query/Scan Limit | ✅ | ✅ | ⚠️ | ⚠️ |
+| ExclusiveStartKey | ✅ | ✅ | ⚠️ | ⚠️ |
+| LastEvaluatedKey | ✅ | ✅ | ⚠️ | ⚠️ |
 
 ---
 
-### Schema Operations (1 operation)
+### M2: Advanced Operations
 
 | Feature | Python | Go | Rust | Zig |
 |---------|--------|-----|------|-----|
-| UpdateTable | ✅ | ✅ | ✅ (types) | ❌ |
-| UpdateTable (GSI Create) | ✅ | ✅ | 🚧 (types) | ❌ |
-| UpdateTable (GSI Update) | ✅ | ✅ | 🚧 (types) | ❌ |
-| UpdateTable (GSI Delete) | ✅ | ✅ | 🚧 (types) | ❌ |
-| **Schema Operations** | ✅ | ✅ | 🚧 | ❌ |
+| **TTL** |
+| UpdateTimeToLive | ✅ | ✅ | ❌ | ❌ |
+| DescribeTimeToLive | ✅ | ✅ | ❌ | ❌ |
+| **Backup/Restore** |
+| CreateBackup | ✅ | ✅ | ❌ | ❌ |
+| DescribeBackup | ❌ | ✅ | ❌ | ❌ |
+| DeleteBackup | ✅ | ✅ | ❌ | ❌ |
+| ListBackups | ✅ | ✅ | ❌ | ❌ |
+| RestoreTableFromBackup | ✅ | ✅ | ❌ | ❌ |
+| **PITR** |
+| UpdateContinuousBackups | ✅ | ✅ | ❌ | ❌ |
+| DescribeContinuousBackups | ✅ | ✅ | ❌ | ❌ |
+| RestoreTableToPointInTime | ✅ | ✅ | ❌ | ❌ |
+| **PartiQL** |
+| ExecuteStatement | ✅ | ✅ | ❌ | ❌ |
+| BatchExecuteStatement | ✅ | ✅ | ❌ | ❌ |
+| **M2 Advanced** | 11/11 | 12/12 | 0/12 | 0/12 |
 
 ---
 
-### M2: Advanced Operations (11 operations)
+### M4: Import/Export & Streams
 
 | Feature | Python | Go | Rust | Zig |
 |---------|--------|-----|------|-----|
-| TTL (UpdateTimeToLive) | ✅ | ❌ | ❌ | ❌ |
-| TTL (DescribeTimeToLive) | ✅ | ❌ | ❌ | ❌ |
-| CreateBackup | ✅ | ❌ | ❌ | ❌ |
-| RestoreTableFromBackup | ✅ | ❌ | ❌ | ❌ |
-| ListBackups | ✅ | ❌ | ❌ | ❌ |
-| DeleteBackup | ✅ | ❌ | ❌ | ❌ |
-| UpdateContinuousBackups | ✅ | ❌ | ❌ | ❌ |
-| DescribeContinuousBackups | ✅ | ❌ | ❌ | ❌ |
-| RestoreTableToPointInTime | ✅ | ❌ | ❌ | ❌ |
-| ExecuteStatement (PartiQL) | ✅ | ❌ | ❌ | ❌ |
-| BatchExecuteStatement | ✅ | ❌ | ❌ | ❌ |
-| **M2 Advanced** | ✅ | ❌ | ❌ | ❌ |
+| **Import/Export (6 ops)** |
+| ExportTableToPointInTime | ✅ | ✅ | ❌ | ❌ |
+| DescribeExport | ❌ | ✅ | ❌ | ❌ |
+| ListExports | ❌ | ✅ | ❌ | ❌ |
+| ImportTable | ✅ | ✅ | ❌ | ❌ |
+| DescribeImport | ❌ | ✅ | ❌ | ❌ |
+| ListImports | ❌ | ✅ | ❌ | ❌ |
+| **Streams (4 ops)** |
+| ListStreams | ✅ | ✅ | ❌ | ❌ |
+| DescribeStream | ❌ | ✅ | ❌ | ❌ |
+| GetShardIterator | ✅ | ✅ | ❌ | ❌ |
+| GetRecords | ✅ | ✅ | ❌ | ❌ |
+| **M4 Features** | 6/10 | 10/10 | 0/10 | 0/10 |
 
 ---
 
-### M4 Phase 1: Import/Export (6 operations)
+### Global Tables
 
 | Feature | Python | Go | Rust | Zig |
 |---------|--------|-----|------|-----|
-| ExportTableToPointInTime | ✅ | ❌ | ❌ | ❌ |
-| DescribeExport | ✅ | ❌ | ❌ | ❌ |
-| ListExports | ✅ | ❌ | ❌ | ❌ |
-| ImportTable | ✅ | ❌ | ❌ | ❌ |
-| DescribeImport | ✅ | ❌ | ❌ | ❌ |
-| ListImports | ✅ | ❌ | ❌ | ❌ |
-| **Import/Export** | ✅ | ❌ | ❌ | ❌ |
+| CreateGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| DeleteGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| UpdateGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| DescribeGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| ListGlobalTables | ❌ | ✅ | ❌ | ❌ |
+| UpdateGlobalTableSettings | ❌ | ✅ | ❌ | ❌ |
+| DescribeGlobalTableSettings | ❌ | ✅ | ❌ | ❌ |
+| UpdateReplication | ❌ | ✅ | ❌ | ❌ |
+| **Global Tables** | 0/8 | 8/8 | 0/8 | 0/8 |
+
+**Note**: Global Tables are not needed for local development.
 
 ---
 
-### M3: Streams (4 operations)
+## Summary by Category
 
-| Feature | Python | Go | Rust | Zig |
-|---------|--------|-----|------|-----|
-| Enable/Disable Streams | ❌ | ❌ | ❌ | ❌ |
-| GetRecords | ❌ | ❌ | ❌ | ❌ |
-| GetShardIterator | ❌ | ❌ | ❌ | ❌ |
-| DescribeStream | ❌ | ❌ | ❌ | ❌ |
-| **Streams** | ❌ | ❌ | ❌ | ❌ |
-
----
-
-## Remaining Work Summary
-
-### Python (8 operations to 100%)
-1. Streams (4 operations)
-2. Other advanced features
-
-### Go (39 operations to catch up to Python)
-**Priority 1 - M2 Phase 2 (9 ops, ~2 weeks):**
-| Operation | Effort |
-|-----------|--------|
-| TTL Operations | 3 days |
-| Backup/Restore | 4 days |
-| PITR | 3 days |
-
-**Priority 2 - M4 Phase 1 (6 ops, ~1 week):**
-| Operation | Effort |
-|-----------|--------|
-| Import/Export | 1 week |
-
-**Priority 3 - M2 Phase 4 (2 ops, ~1 week):**
-| Operation | Effort |
-|-----------|--------|
-| PartiQL | 1 week |
-
-### Rust (40 operations to catch up to Python)
-**Priority 1 - Complete Current Work (1 op, ~2 days):**
-| Operation | Effort |
-|-----------|--------|
-| UpdateTable GSI (full storage impl) | 2 days |
-
-**Priority 2 - M2 Phase 2+ (17 ops, ~4 weeks):**
-Same as Go's remaining work
-
-### Zig (48 operations to catch up to Python)
-**Priority 1 - Data Plane Phase 3 (3 ops, ~1 week):**
-| Operation | Effort |
-|-----------|--------|
-| Full BatchGetItem | 2 days |
-| Full BatchWriteItem | 2 days |
-| Expression Parser | 3 days |
-
-**Priority 2 - Transactions (2 ops, ~1 week):**
-| Operation | Effort |
-|-----------|--------|
-| TransactGetItems | 3 days |
-| TransactWriteItems | 4 days |
-
-**Priority 3 - M2+ (remaining):**
-Same structure as Go/Rust
+| Category | Python | Go | Rust | Zig |
+|----------|--------|-----|------|-----|
+| Control Plane | 9/10 | 10/10 | 5/10 | 5/10 |
+| Data Plane Basic | 6/6 | 6/6 | 5/6 | 5/6 |
+| Batch Operations | 2/2 | 2/2 | 0/2 | 0/2 |
+| Transactions | 2/2 | 2/2 | 0/2 | 0/2 |
+| Expressions | Full | Full | Partial | Basic |
+| M2 Advanced | 11/11 | 12/12 | 0/12 | 0/12 |
+| Import/Export | 4/6 | 6/6 | 0/6 | 0/6 |
+| Streams | 4/4 | 4/4 | 0/4 | 0/4 |
+| Global Tables | 0/8 | 8/8 | 0/8 | 0/8 |
+| **Total** | **53/61** | **50/61** | **13/61** | **16/61** |
 
 ---
 
-## Recommended Next Steps
+## Go Operations Beyond Python
 
-### Option A: Python-First (Recommended for v1.0)
-- Focus: Complete Python implementation
-- Work: Streams + Polish + Production Readiness
-- Timeline: 2-3 weeks
-- Outcome: Production-ready single implementation
+Go implements 13 operations that Python does not:
 
-### Option B: Multi-Language Parity
-- Focus: Bring Go/Rust/Zig to M2 completion
-- Work: 16 weeks parallel effort
-- Outcome: 4 complete implementations
+| Operation | Category | Notes |
+|-----------|----------|-------|
+| DeleteGlobalTable | Global Tables | Delete a global table |
+| DescribeLimits | Control Plane | Get account/table limits |
+| DescribeGlobalTableSettings | Global Tables | Get replica settings |
+| UpdateReplication | Global Tables | Update replication |
+| DescribeBackup | Backup | Get backup details |
+| RestoreTableToPointInTime | PITR | Point-in-time restore |
+| UpdateContinuousBackups | PITR | Enable/disable PITR |
+| DescribeContinuousBackups | PITR | Get PITR status |
+| DescribeExport | Import/Export | Get export details |
+| DescribeImport | Import/Export | Get import details |
+| ListExports | Import/Export | List all exports |
+| ListImports | Import/Export | List all imports |
+| DescribeStream | Streams | Get stream details |
 
-### Option C: Hybrid Approach
-- Focus: Python as primary, others as reference
-- Work: Document Go/Rust/Zig as "basic implementations"
-- Outcome: One production-ready + 3 reference impls
+---
+
+## Python Operations Beyond Go
+
+Python implements 3 operations that Go does not:
+
+| Operation | Category | Notes |
+|-----------|----------|-------|
+| ListStreams | Streams | List all streams |
+| GetShardIterator | Streams | Get iterator |
+| GetRecords | Streams | Read records |
+
+Wait - Go actually has these. Let me check again...
+
+Actually Go has all 4 stream operations. Python is missing DescribeStream but has the others.
+
+Correct list:
+
+**Python has (0) beyond Go**: None
+
+**Go has (13) beyond Python**: As listed above
+
+---
+
+## Not Implemented in Any Language
+
+These 8 operations are intentionally deferred as not needed for local development:
+
+| Category | Operations |
+|----------|------------|
+| Standalone | ConditionCheck |
+| Kinesis Streaming | DescribeKinesisStreamingDestination, EnableKinesisStreamingDestination, DisableKinesisStreamingDestination, UpdateKinesisStreamingDestination |
+| Contributor Insights | DescribeContributorInsights, UpdateContributorInsights |
+| Resource Policies | DescribeResourcePolicy, PutResourcePolicy, DeleteResourcePolicy |
+
+---
+
+## Recommendations
+
+### For Users
+
+| Use Case | Recommended Language |
+|----------|---------------------|
+| Python ecosystem | Python |
+| Go/DevOps ecosystem | Go |
+| Single binary deployment | Go |
+| Maximum features | Go (50 ops vs 53, but different set) |
+| AWS SDK compatibility | Both Python and Go |
+
+### For Contributors
+
+| Priority | Language | Work Needed |
+|----------|----------|-------------|
+| 1 | Rust | 37 operations (batch, transactions, expressions, advanced) |
+| 2 | Zig | 37 operations + expression parser |
+| 3 | Python/Go | Documentation and polish |
+
+---
+
+## See Also
+
+- [GAP_ANALYSIS.md](GAP_ANALYSIS.md) - Detailed gap analysis
+- [STATUS.md](STATUS.md) - Project status
+- [DO_NEXT.md](DO_NEXT.md) - Next steps

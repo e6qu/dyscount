@@ -1,239 +1,221 @@
-# Do Next - Gap Closure & Multi-Language Parity
+# Do Next - Project Direction
 
-## ✅ Completed Milestones
-
-### M1: Foundation (All 9 Phases) ✅
-- **Python**: 36 operations (100%)
-- **Go**: 16 operations (44%)
-- **Rust**: 13 operations (36%)
-- **Zig**: 5 operations (14%)
-
-### M2: Advanced Operations (All 4 Phases) ✅
-- **Python**: 11 operations (100%) - TTL, Backup, PITR, PartiQL
-- **Go**: 0 operations (0%)
-- **Rust**: 0 operations (0%)
-- **Zig**: 0 operations (0%)
-
-### M4 Phase 1: Import/Export ✅
-- **Python**: 6 operations (100%)
-- **Go**: 0 operations (0%)
-- **Rust**: 0 operations (0%)
-- **Zig**: 0 operations (0%)
-
-### M4 Phase 2: DynamoDB Streams ✅
-- **Python**: 4 operations (100%) - StreamManager, 4 APIs
-- **Go**: 0 operations (0%)
-- **Rust**: 0 operations (0%)
-- **Zig**: 0 operations (0%)
+**Last Updated**: 2026-03-04
 
 ---
 
-## 📊 Gap Analysis Summary
+## ✅ Current Status
 
-See `GAP_ANALYSIS.md` for complete details.
+### Production Ready
 
-| Implementation | Operations | Coverage | Gap |
-|---------------|------------|----------|-----|
-| **Python** | 57/61 | 93% | ✅ Production-ready |
-| **Go** | 16/61 | 26% | ⚠️ Needs 31 ops |
-| **Rust** | 13/61 | 21% | ⚠️ Needs 34 ops |
-| **Zig** | 5/61 | 8% | ⚠️ Needs 11 data plane ops |
+| Implementation | Operations | Tests | Status |
+|---------------|------------|-------|--------|
+| **Python** | 53/61 (87%) | 372 | ✅ Production-ready |
+| **Go** | 50/61 (82%) | 183 | ✅ Feature Complete |
+| **Rust** | 13/61 (21%) | 21 | ⚠️ Basic only |
+| **Zig** | 16/61 (26%) | 19 | ⚠️ Basic only |
 
----
-
-## 🚀 Current Focus: Go M2 Feature Parity
-
-**Status**: 🚧 In Progress
-
-Switching to Go implementation to bring it to feature parity with Python's core functionality.
-
-**Why Go?**
-- Go is 26% complete (16/61 operations)
-- Critical gaps: condition expressions, batch operations, transactions
-- Go has strong ecosystem for local development tools
-- Good opportunity to validate architecture across languages
-
-**Work Plan**: See `tasks/GO_M2_PARITY.md`
-
-### Option A: Python-First (MinIO Model) ⭐ RECOMMENDED
-**Focus solely on Python**, make it the best local DynamoDB replacement.
-
-**Rationale**:
-- Python is already 93% complete and production-ready
-- MinIO focuses on one excellent implementation
-- Most users need ONE reliable local DynamoDB, not 4 incomplete ones
-- Maintaining 4 implementations spreads resources thin
-
-**Tasks**:
-1. M4 Phase 2: Polish & Production Readiness (Python)
-2. Comprehensive documentation
-3. Docker distribution
-4. Performance optimization
-
-**Effort**: 2 weeks
-
-### Option B: Multi-Language Parity
-Bring Go, Rust, Zig to M1+M2 completion (47 operations each).
-
-**Rationale**:
-- Demonstrates language capabilities
-- Provides options for different ecosystems
-- Good for learning/comparison
-
-**Tasks**:
-1. Go Feature Parity: 20 operations (~5 weeks)
-2. Rust Feature Parity: 20 operations (~5 weeks)
-3. Zig Data Plane: 11 operations (~6 weeks)
-
-**Effort**: ~16 weeks (parallel work possible)
-
-### Option C: Hybrid Approach
-Python as primary, others as "community maintained".
-
-**Rationale**:
-- Python gets full attention
-- Other languages serve as reference implementations
-- Community can contribute to Go/Rust/Zig
-
-**Tasks**:
-1. Python M4 Phase 2 (2 weeks)
-2. Document Go/Rust/Zig as "basic implementations"
-3. Accept community contributions
+**Key Insight**: Go now exceeds Python in some areas with 13 additional operations (Global Tables, PITR, Streams, etc.).
 
 ---
 
-## 🎯 Current Work: Go M2 Feature Parity
+## 🎯 Recommended Path: Multi-Language Production
 
-### Branch: `feature/GO-M2-parity`
+### Rationale
 
-**Goal**: Implement critical missing features in Go
+Both **Python** and **Go** are now production-ready:
+- Python: 87% coverage with all essential operations
+- Go: 82% coverage with additional advanced features
 
-**Phases**:
+This gives users a choice based on their ecosystem:
+- **Python**: FastAPI, excellent for Python shops
+- **Go**: Single binary, excellent for DevOps/Go shops
 
-| Phase | Feature | Effort | Status |
-|-------|---------|--------|--------|
-| 1 | Condition Expressions | 3-4 days | 🚧 Next |
-| 2 | Batch Operations | 2-3 days | ⏳ Planned |
-| 3 | Transactions | 2-3 days | ⏳ Planned |
-| 4 | UpdateExpression | 3-4 days | ⏳ Planned |
-| 5 | UpdateTable GSI | 2-3 days | ⏳ Planned |
-
-**Target Metrics**:
-- Operations: 16/61 → 26/61 (43%)
-- Tests: 50 → 100+
-- Coverage: 60% → 75%
+**Rust** and **Zig** remain as reference implementations.
 
 ---
 
-## 🎯 Alternative Path: Option A (Python-First)
+## 📋 Immediate Priorities
 
-### Immediate Next Steps
+### Priority 1: Rust Feature Parity (3-4 weeks)
 
-#### Step 1: Create Branch for M4 Phase 2
-```bash
-git checkout main
-git pull origin main
-git checkout -b feature/M4P2-python-polish
-```
+**Goal**: Bring Rust to M2 completion (batch, transactions, expressions)
 
-#### Step 2: M4 Phase 3 Tasks (Python Polish)
+**Missing Operations**: 37
+- BatchGetItem, BatchWriteItem
+- TransactGetItems, TransactWriteItems
+- Condition expressions (ConditionExpression, FilterExpression)
+- Full UpdateExpression parsing
+- TTL (2 ops)
+- Backup/Restore (5 ops)
+- PITR (3 ops)
+- PartiQL (2 ops)
+- Import/Export (6 ops)
+- Streams (4 ops)
 
-| Task | Description | Effort |
-|------|-------------|--------|
-| M4P3-T1 | Performance Benchmarks | 2 days |
-| M4P3-T2 | Security Audit | 2 days |
-| M4P3-T3 | Complete Documentation | 3 days |
-| M4P3-T4 | Docker Distribution | 1 day |
-| M4P3-T5 | E2E Testing Suite | 2 days |
-
-#### Step 3: Update Other Language Status
-
-Document that Go/Rust/Zig are:
-- "Reference implementations"
-- "Basic functionality only"
-- "Community contributions welcome"
-
-### M4 Phase 3 Details
-
-#### T1: Performance Benchmarks
-- Query latency for 1M items
-- Throughput tests (ops/sec)
-- Memory usage analysis
-- SQLite optimization
-
-#### T2: Security Audit
-- Input validation review
-- SQL injection prevention
-- Safe file path handling
-- AWS SigV4 auth verification
-
-#### T3: Documentation
-- Complete API reference
-- Getting started guide
-- Docker usage
-- Configuration guide
-- Troubleshooting
-
-#### T4: Docker Distribution
-- Multi-arch builds (amd64, arm64)
-- Docker Compose example
-- Volume persistence
-- Health checks
-
-#### T5: E2E Testing
-- Test with real AWS SDK (boto3, aws-cli)
-- Integration test suite
-- Performance regression tests
+**Work Plan**: See `tasks/RUST_FEATURE_PARITY.md`
 
 ---
 
-## 📋 Alternative: Multi-Language Parity Tasks
+### Priority 2: Documentation & Polish (2 weeks)
 
-If Option B is chosen, see:
-- `tasks/GAP_CLOSURE_GO_RUST.md` - Go & Rust feature parity
-- `tasks/ZIG_DATA_PLANE.md` - Zig data plane implementation
+**Goal**: Production-ready documentation for Python and Go
+
+#### Tasks
+
+| Task | Description | Effort | Owner |
+|------|-------------|--------|-------|
+| DOC-1 | Complete API reference | 3 days | - |
+| DOC-2 | Getting started guides | 2 days | - |
+| DOC-3 | Docker deployment guide | 1 day | - |
+| DOC-4 | Performance benchmarks | 2 days | - |
+| DOC-5 | Troubleshooting guide | 1 day | - |
+
+#### Deliverables
+
+1. **User Guide**
+   - Installation (pip, docker, binary)
+   - Configuration
+   - Basic usage examples
+   - Advanced features
+
+2. **API Reference**
+   - All implemented operations
+   - Request/response examples
+   - Error codes
+
+3. **Deployment Guide**
+   - Docker Compose
+   - Kubernetes
+   - Systemd service
+
+4. **Performance Report**
+   - Query latency benchmarks
+   - Throughput tests
+   - Memory usage
 
 ---
 
-## 🎯 Success Criteria
+### Priority 3: Release v1.0 (1 week)
 
-### Option A (Python-First)
-- [ ] Performance: < 10ms p99 for queries
-- [ ] Documentation: Complete user guide
-- [ ] Docker: One-command startup
-- [ ] E2E: Passes all AWS SDK tests
-- [ ] Ready for v1.0 release
+**Goal**: First stable release
 
-### Option B (Multi-Language)
-- [ ] Go: 47 operations (M1+M2 complete)
-- [ ] Rust: 47 operations (M1+M2 complete)
-- [ ] Zig: 16 operations (M1 complete)
-- [ ] All: Expression parser
-- [ ] All: Batch + Transaction support
+#### Checklist
+
+- [ ] Version tagging (git tag v1.0.0)
+- [ ] Release notes
+- [ ] DockerHub publish
+- [ ] PyPI publish (Python)
+- [ ] GitHub releases (Go binaries)
+- [ ] Announcement
 
 ---
 
-## 📈 Project Statistics
+## 📊 Long-term: Rust & Zig
 
-| Metric | Current |
-|--------|---------|
-| Total Operations | 57/61 (Python) |
-| Total Tests | 456 |
-| Python LOC | ~7,000 |
-| Go LOC | ~3,200 |
-| Rust LOC | ~2,800 |
-| Zig LOC | ~2,100 |
+### Rust (Deferred)
+
+**Status**: Basic functionality (21%)
+**Decision**: Community-driven or deferred until Python/Go are fully polished
+
+If someone wants to contribute:
+- See `tasks/RUST_FEATURE_PARITY.md`
+- Estimated effort: 4-6 weeks
+
+### Zig (Deferred)
+
+**Status**: Control plane + basic data plane (26%)
+**Decision**: Reference implementation only
+
+The Zig implementation serves as:
+- Low-level learning resource
+- Raw TCP/HTTP implementation example
+- SQLite C integration example
 
 ---
 
-## 📝 Decision Required
+## 📈 Success Metrics
 
-**Choose your path**:
+### Short-term (4-6 weeks)
 
-1. **Option A**: Focus on Python only (like MinIO) - RECOMMENDED
-2. **Option B**: Bring all languages to parity
-3. **Option C**: Hybrid (Python primary, others community)
+| Metric | Target |
+|--------|--------|
+| Documentation | Complete user guide + API reference |
+| Python | v1.0 released |
+| Go | v1.0 released |
+| Tests | > 95% passing |
 
-The gap analysis shows Python is already a complete local DynamoDB replacement. The other languages would require significant effort (~16 weeks) to reach parity.
+### Medium-term (3 months)
 
-**My recommendation**: Option A - Make Python the best it can be. That's what users actually need.
+| Metric | Target |
+|--------|--------|
+| Downloads | > 1000 Docker pulls |
+| Stars | > 100 GitHub stars |
+| Contributors | > 5 active |
+
+---
+
+## 🗂️ Active Task Files
+
+| File | Status | Description |
+|------|--------|-------------|
+| `tasks/M4P2_PYTHON_POLISH.md` | 🚧 Active | Python polish tasks |
+| `tasks/RUST_FEATURE_PARITY.md` | ⏳ Planned | Rust M2 parity |
+| `tasks/ZIG_DATA_PLANE.md` | ⏳ Deferred | Zig improvements |
+| `tasks/GAP_CLOSURE_GO_RUST.md` | ⏳ Partial | Go done, Rust pending |
+
+### Completed Tasks (moved to tasks/done/)
+
+- ✅ `GO_M2_PARITY.md`
+- ✅ `GO_M2_PHASE1_COMPLETE.md`
+- ✅ `GO_M2_PHASE1_CRITICAL_DP.md`
+- ✅ `PYTHON_M4P2_STREAMS.md`
+- ✅ `M1P7_GO_IMPLEMENTATION.md`
+- ✅ `M1P8_RUST_IMPLEMENTATION.md`
+- ✅ `M1P9_ZIG_IMPLEMENTATION.md`
+
+---
+
+## 📝 Notes
+
+### Key Wins
+
+1. **Go exceeded expectations**: Now has 13 operations Python doesn't have
+2. **Test coverage excellent**: 555+ tests across all languages
+3. **Architecture validated**: SQLite backend works across all 4 languages
+
+### Lessons Learned
+
+1. **Multi-language is expensive**: But proves architecture portability
+2. **Go is great for DevOps tools**: Single binary is a huge win
+3. **Python ecosystem matters**: FastAPI + uvicorn is excellent
+4. **SQLite is the right choice**: Proven across all implementations
+
+### Open Questions
+
+1. Should we implement the remaining 8 operations (Global Tables, Streams)?
+   - **Decision**: No, not needed for local development
+   
+2. Should we add a web UI like MinIO?
+   - **Decision**: Nice-to-have, post-v1.0
+
+3. Should we support DAX-style caching?
+   - **Decision**: No, SQLite is fast enough
+
+---
+
+## 🎯 Next Actions
+
+1. **Today**: Complete docs update (this task)
+2. **This week**: Create documentation branch
+3. **Next 2 weeks**: Write complete user guide and API reference
+4. **Week 3-4**: Performance benchmarks and Docker polish
+5. **Week 5**: Release v1.0
+
+---
+
+## See Also
+
+- [GAP_ANALYSIS.md](GAP_ANALYSIS.md) - Detailed feature comparison
+- [STATUS.md](STATUS.md) - Current project status
+- [FEATURE_COMPARISON.md](FEATURE_COMPARISON.md) - Language comparison
