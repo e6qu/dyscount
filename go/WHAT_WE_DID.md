@@ -122,9 +122,51 @@ Added comprehensive tests for TransactGetItems and TransactWriteItems operations
 - 10 transaction tests added
 - All 95 Go tests passing
 
+## 2026-03-03: M2 Phase 4 - UpdateExpression Tests
+
+**Branch**: `feature/GO-M2-update-expression`
+
+### Summary
+
+Added comprehensive tests for UpdateExpression operations (SET, ADD, REMOVE).
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/update_expression_test.go`**
+   - Tests for SET action (simple attributes, numbers)
+   - Tests for ADD action (number arithmetic)
+   - Tests for REMOVE action (attribute removal)
+   - Tests for creating new items with UpdateItem
+   - Tests for ReturnValues (returning old values)
+
+### Features Verified
+
+| Feature | Status | Tests |
+|---------|--------|-------|
+| SET | ✅ | Simple attributes, number attributes |
+| ADD | ✅ | Number arithmetic (10 + 5 = 15) |
+| REMOVE | ✅ | Attribute removal |
+| Create on Update | ✅ | Creating new items with UpdateItem |
+| ReturnValues | ✅ | Returning old item values |
+
+### Tests
+
+- 8 UpdateExpression tests added
+- All 103 Go tests passing
+
+### Notes
+
+The UpdateExpression implementation was already comprehensive:
+- SET: Simple value assignment
+- ADD: Number arithmetic and set operations
+- REMOVE: Attribute removal
+- DELETE: Set element removal
+- Multiple actions in single expression
+
 ### Next Steps
 
-- Phase 4: UpdateExpression improvements (SET, REMOVE, ADD, DELETE)
 - Phase 5: UpdateTable GSI support
 
 ---
