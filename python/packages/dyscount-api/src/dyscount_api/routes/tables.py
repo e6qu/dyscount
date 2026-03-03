@@ -128,6 +128,14 @@ async def dynamodb_endpoint(
         return await handle_describe_import(body, config)
     elif operation == "ListImports":
         return await handle_list_imports(body, config)
+    elif operation == "DescribeStream":
+        return await handle_describe_stream(body, config)
+    elif operation == "GetRecords":
+        return await handle_get_records(body, config)
+    elif operation == "GetShardIterator":
+        return await handle_get_shard_iterator(body, config)
+    elif operation == "ListStreams":
+        return await handle_list_streams(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -2019,3 +2027,298 @@ async def handle_list_imports(body: dict, config: Config) -> JSONResponse:
                 "message": str(e)
             }
         )
+
+
+
+# =============================================================================
+# Stream Operations (DynamoDB Streams)
+# =============================================================================
+
+from dyscount_core.storage.stream_manager import StreamManager, StreamViewType
+
+
+async def handle_describe_stream(body: dict, config: Config) -> JSONResponse:
+    """Handle DescribeStream operation."""
+    stream_manager = None
+    try:
+        # Parse request
+        table_name = body.get("TableName")
+        if not table_name:
+            # Try to extract from stream ARN
+            stream_arn = body.get("StreamArn", "")
+            if stream_arn:
+                # Parse ARN format: arn:aws:dynamodb:region:account:table/table-name/stream/...
+                parts = stream_arn.split("/")
+                if len(parts) >= 2:
+                    table_name = parts[1]
+        
+        if not table_name:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "__type": "com.amazonaws.dynamodb.v20120810#ValidationException",
+                    "message": "TableName or StreamArn is required"
+                }
+            )
+        
+        # Create stream manager
+        stream_manager = StreamManager(config.storage.data_directory)
+        
+        # Get stream metadata
+        stream_meta = await stream_manager.describe_stream(table_name)
+        
+        if not stream_meta:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "__type": "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+                    "message": f"Stream not found for table: {table_name}"
+                }
+            )
+        
+        # Build response
+        response = {
+            "StreamDescription": {
+                "StreamArn": stream_meta.stream_arn,
+                "StreamLabel": stream_meta.stream_label,
+                "StreamStatus": stream_meta.stream_status.value,
+                "StreamViewType": stream_meta.stream_view_type.value,
+                "CreationDateTime": stream_meta.creation_date_time,
+                "TableName": stream_meta.table_name,
+                "KeySchema": [{"AttributeName": "pk", "KeyType": "HASH"}],
+                "Shards": [
+                    {
+                        "ShardId": "shardId-000000000000",
+                        "SequenceNumberRange": {
+                            "StartingSequenceNumber": "0"
+                        }
+                    }
+                ]
+            }
+        }
+        
+        return JSONResponse(status_code=200, content=response)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if stream_manager:
+            await stream_manager.close()
+
+
+async def handle_get_records(body: dict, config: Config) -> JSONResponse:
+    """Handle GetRecords operation."""
+    stream_manager = None
+    try:
+        # Parse request
+        shard_iterator = body.get("ShardIterator", "0")
+        limit = body.get("Limit", 100)
+        
+        # Extract table name from shard iterator
+        # Format: table_name:sequence_number
+        if ":" in shard_iterator:
+            parts = shard_iterator.split(":", 1)
+            table_name = parts[0]
+            sequence_number = parts[1] if len(parts) > 1 else "0"
+        else:
+            table_name = shard_iterator
+            sequence_number = "0"
+        
+        # Create stream manager
+        stream_manager = StreamManager(config.storage.data_directory)
+        
+        # Get records
+        records, next_iterator = await stream_manager.get_records(
+            table_name=table_name,
+            shard_iterator=sequence_number,
+            limit=limit,
+        )
+        
+        # Build response
+        response_records = []
+        for record in records:
+            response_record = {
+                "eventID": record.event_id,
+                "eventName": record.event_name.value,
+                "eventVersion": record.event_version,
+                "eventSource": record.event_source,
+                "awsRegion": record.aws_region,
+                "dynamodb": {
+                    "ApproximateCreationDateTime": record.approximate_creation_date_time,
+                    "Keys": record.keys,
+                    "SequenceNumber": record.sequence_number,
+                    "SizeBytes": record.size_bytes,
+                    "StreamViewType": record.stream_view_type.value,
+                }
+            }
+            
+            if record.old_image:
+                response_record["dynamodb"]["OldImage"] = record.old_image
+            if record.new_image:
+                response_record["dynamodb"]["NewImage"] = record.new_image
+            
+            response_records.append(response_record)
+        
+        response = {
+            "Records": response_records,
+        }
+        
+        if next_iterator:
+            response["NextShardIterator"] = f"{table_name}:{next_iterator}"
+        
+        return JSONResponse(status_code=200, content=response)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if stream_manager:
+            await stream_manager.close()
+
+
+async def handle_get_shard_iterator(body: dict, config: Config) -> JSONResponse:
+    """Handle GetShardIterator operation."""
+    stream_manager = None
+    try:
+        # Parse request
+        stream_arn = body.get("StreamArn", "")
+        shard_id = body.get("ShardId", "")
+        iterator_type = body.get("ShardIteratorType", "TRIM_HORIZON")
+        sequence_number = body.get("SequenceNumber", "0")
+        
+        # Extract table name from stream ARN
+        table_name = None
+        if stream_arn:
+            parts = stream_arn.split("/")
+            if len(parts) >= 2:
+                table_name = parts[1]
+        
+        if not table_name:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "__type": "com.amazonaws.dynamodb.v20120810#ValidationException",
+                    "message": "StreamArn is required"
+                }
+            )
+        
+        # Create stream manager
+        stream_manager = StreamManager(config.storage.data_directory)
+        
+        # Get stream metadata to verify it exists
+        stream_meta = await stream_manager.describe_stream(table_name)
+        if not stream_meta:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "__type": "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+                    "message": f"Stream not found: {stream_arn}"
+                }
+            )
+        
+        # Build shard iterator based on type
+        if iterator_type == "LATEST":
+            # Get the latest sequence number
+            conn = await stream_manager._get_connection(table_name)
+            async with conn.execute(
+                "SELECT MAX(sequence_number) FROM __stream_records WHERE stream_arn = ?",
+                (stream_meta.stream_arn,)
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row and row[0]:
+                    sequence_number = row[0]
+                else:
+                    sequence_number = "0"
+        elif iterator_type == "TRIM_HORIZON":
+            sequence_number = "0"
+        elif iterator_type == "AT_SEQUENCE_NUMBER" or iterator_type == "AFTER_SEQUENCE_NUMBER":
+            # Use the provided sequence number
+            pass
+        
+        shard_iterator = f"{table_name}:{sequence_number}"
+        
+        response = {
+            "ShardIterator": shard_iterator
+        }
+        
+        return JSONResponse(status_code=200, content=response)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if stream_manager:
+            await stream_manager.close()
+
+
+async def handle_list_streams(body: dict, config: Config) -> JSONResponse:
+    """Handle ListStreams operation."""
+    stream_manager = None
+    try:
+        # Parse request
+        table_name = body.get("TableName")
+        limit = body.get("Limit", 100)
+        
+        # Create stream manager
+        stream_manager = StreamManager(config.storage.data_directory)
+        
+        # List all tables
+        from dyscount_core.storage.table_manager import TableManager
+        table_manager = TableManager(config.storage.data_directory)
+        tables = await table_manager.list_tables()
+        
+        streams = []
+        for t in tables:
+            # Skip if filtering by table name
+            if table_name and t != table_name:
+                continue
+            
+            # Check if stream is enabled
+            stream_meta = await stream_manager.describe_stream(t)
+            if stream_meta and stream_meta.stream_status.value == "ENABLED":
+                streams.append(stream_meta.stream_arn)
+                
+                if len(streams) >= limit:
+                    break
+        
+        response = {
+            "Streams": [{"StreamArn": arn} for arn in streams]
+        }
+        
+        return JSONResponse(status_code=200, content=response)
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if stream_manager:
+            await stream_manager.close()

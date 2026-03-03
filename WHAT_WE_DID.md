@@ -778,3 +778,68 @@ pub const BatchWriteOperation = union(enum) {
 - `zig/src/main.zig`: Fixed JSON parsers and key extraction
 - `zig/STATUS.md`: Updated with current status
 
+
+## 2026-03-03
+
+### Python M4 Phase 2: DynamoDB Streams Implementation
+
+**Branch**: `feature/PYTHON-M4P2-streams`
+
+Implemented DynamoDB Streams support for change data capture, enabling applications to subscribe to item-level changes (INSERT, MODIFY, REMOVE).
+
+#### New Components
+
+1. **StreamManager** (`python/packages/dyscount-core/src/dyscount_core/storage/stream_manager.py`)
+   - SQLite-backed stream storage with TTL (24 hours)
+   - Support for all stream view types: KEYS_ONLY, NEW_IMAGE, OLD_IMAGE, NEW_AND_OLD_IMAGES
+   - Event types: INSERT, MODIFY, REMOVE
+   - Tables: `__stream_metadata`, `__stream_records`
+
+2. **Stream API Handlers** (`python/packages/dyscount-api/src/dyscount_api/routes/tables.py`)
+   - `DescribeStream`: Get stream metadata
+   - `GetRecords`: Read stream records from a shard
+   - `GetShardIterator`: Get iterator for reading records
+   - `ListStreams`: List all enabled streams
+
+3. **Stream Integration**
+   - `TableService`: Enable/disable streams on CreateTable/UpdateTable
+   - `ItemService`: Write stream records on PutItem, DeleteItem, UpdateItem
+
+#### Operations Implemented
+
+| Operation | Description | Status |
+|-----------|-------------|--------|
+| CreateTable with StreamSpec | Enable streams on table creation | ✅ |
+| UpdateTable StreamSpec | Enable/disable streams on existing table | ✅ |
+| DescribeStream | Get stream metadata | ✅ |
+| GetRecords | Read stream records | ✅ |
+| GetShardIterator | Get iterator for reading | ✅ |
+| ListStreams | List all streams | ✅ |
+
+#### Tests Added
+
+- `test_create_table_with_stream`: Verify stream creation on table create
+- `test_enable_stream_via_update_table`: Verify stream enable via UpdateTable
+- `test_put_item_creates_stream_record`: Verify INSERT/MODIFY records
+- `test_delete_item_creates_stream_record`: Verify REMOVE records
+
+**Test Results**: 365 tests passing (all), 4 new stream tests
+
+#### Files Modified
+
+- `python/packages/dyscount-core/src/dyscount_core/storage/stream_manager.py` (new)
+- `python/packages/dyscount-core/src/dyscount_core/storage/table_manager.py`
+- `python/packages/dyscount-core/src/dyscount_core/storage/__init__.py`
+- `python/packages/dyscount-core/src/dyscount_core/services/item_service.py`
+- `python/packages/dyscount-core/src/dyscount_core/services/table_service.py`
+- `python/packages/dyscount-api/src/dyscount_api/routes/tables.py`
+- `python/tests/test_streams.py` (new)
+- `python/STATUS.md`, `python/WHAT_WE_DID.md`, `python/DO_NEXT.md`
+
+#### Metrics
+
+- **Lines Added**: ~1,200
+- **Tests Added**: 4
+- **Test Coverage**: 85% (maintained)
+- **Operations**: 35+/61 implemented
+

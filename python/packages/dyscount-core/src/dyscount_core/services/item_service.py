@@ -1,6 +1,6 @@
 """Item service layer for data plane operations."""
 
-from typing import Any
+from typing import Any, Optional
 
 from dyscount_core.config import Config
 from dyscount_core.models.errors import (
@@ -20,6 +20,7 @@ from dyscount_core.models.operations import (
     GetItemResponse,
 )
 from dyscount_core.storage.table_manager import TableManager
+from dyscount_core.storage.stream_manager import StreamManager, EventName
 from dyscount_core.expressions import ConditionEvaluator
 
 
@@ -29,6 +30,7 @@ class ItemService:
     def __init__(self, config: Config):
         self.config = config
         self.table_manager = TableManager(config.storage.data_directory)
+        self.stream_manager = StreamManager(config.storage.data_directory)
 
     def _validate_table_name(self, table_name: str) -> None:
         """Validate table name according to DynamoDB rules."""
@@ -148,6 +150,7 @@ class ItemService:
     async def close(self):
         """Close any open resources."""
         await self.table_manager.close()
+        await self.stream_manager.close()
 
     def _validate_item(self, item: dict[str, Any], table_name: str) -> None:
         """Validate the item format.
@@ -237,6 +240,27 @@ class ItemService:
                 return total
         return len(json.dumps(attr_value).encode('utf-8'))
     
+    def _extract_keys(self, table_name: str, item: dict[str, Any]) -> dict[str, Any]:
+        """Extract primary key attributes from an item.
+        
+        Args:
+            table_name: Name of the table
+            item: The item containing key attributes
+            
+        Returns:
+            Dict with only the key attributes
+        """
+        # Get key schema from table metadata
+        # For now, we extract based on common patterns
+        keys = {}
+        for key in ['pk', 'sk', 'PK', 'SK']:
+            if key in item:
+                keys[key] = item[key]
+        # Also check for standard DynamoDB key names
+        if 'id' in item:
+            keys['id'] = item['id']
+        return keys
+
     async def put_item(self, request: PutItemRequest) -> PutItemResponse:
         """Put an item into a table.
         
@@ -279,6 +303,17 @@ class ItemService:
             if "ConditionalCheckFailedException" in str(e):
                 raise ConditionalCheckFailedException(str(e).replace("ConditionalCheckFailedException: ", "")) from None
             raise
+        
+        # Write to stream
+        keys = self._extract_keys(request.table_name, request.item)
+        event_name = EventName.MODIFY if old_item else EventName.INSERT
+        await self.stream_manager.write_stream_record(
+            table_name=request.table_name,
+            event_name=event_name,
+            keys=keys,
+            old_image=old_item,
+            new_image=request.item,
+        )
         
         # Calculate consumed capacity
         # Write operation = 1 WCU
@@ -342,6 +377,16 @@ class ItemService:
                 raise ConditionalCheckFailedException(str(e).replace("ConditionalCheckFailedException: ", "")) from None
             raise
         
+        # Write to stream if item was actually deleted
+        if deleted_item:
+            await self.stream_manager.write_stream_record(
+                table_name=request.table_name,
+                event_name=EventName.REMOVE,
+                keys=request.key,
+                old_image=deleted_item,
+                new_image=None,
+            )
+        
         # Calculate consumed capacity
         # Write operation = 1 WCU
         consumed_capacity = self._calculate_consumed_capacity(
@@ -404,6 +449,17 @@ class ItemService:
             if "key" in str(e).lower() or "UpdateExpression" in str(e):
                 raise ValidationException(str(e)) from None
             raise
+        
+        # Write to stream
+        if new_item:
+            event_name = EventName.MODIFY if old_item else EventName.INSERT
+            await self.stream_manager.write_stream_record(
+                table_name=request.table_name,
+                event_name=event_name,
+                keys=request.key,
+                old_image=old_item,
+                new_image=new_item,
+            )
         
         # Calculate consumed capacity
         # Write operation = 1 WCU

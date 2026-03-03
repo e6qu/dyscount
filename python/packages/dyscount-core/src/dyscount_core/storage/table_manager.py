@@ -17,6 +17,7 @@ from ..models.table import (
     KeySchemaElement,
     LocalSecondaryIndex,
     ProvisionedThroughput,
+    StreamSpecification,
     TableMetadata,
     TableStatus,
 )
@@ -84,6 +85,7 @@ class TableManager:
         provisioned_throughput: Optional[ProvisionedThroughput] = None,
         global_secondary_indexes: Optional[List[GlobalSecondaryIndex]] = None,
         local_secondary_indexes: Optional[List[LocalSecondaryIndex]] = None,
+        stream_specification: Optional[StreamSpecification] = None,
     ) -> TableMetadata:
         """Create a new table.
         
@@ -95,6 +97,7 @@ class TableManager:
             provisioned_throughput: Provisioned throughput settings
             global_secondary_indexes: Optional list of global secondary indexes
             local_secondary_indexes: Optional list of local secondary indexes
+            stream_specification: Optional stream specification for change data capture
             
         Returns:
             TableMetadata for the created table
@@ -145,6 +148,10 @@ class TableManager:
         
         if local_secondary_indexes:
             await self._store_index_metadata(conn, local_secondary_indexes, "LSI")
+        
+        # Store stream specification if provided
+        if stream_specification and stream_specification.StreamEnabled:
+            await self._store_stream_specification(conn, stream_specification)
         
         return metadata
 
@@ -221,6 +228,11 @@ class TableManager:
         
         if metadata is None:
             raise ValueError(f"Table metadata not found: {table_name}")
+        
+        # Load stream specification
+        stream_spec = await self._get_stream_specification(table_name)
+        if stream_spec:
+            metadata.StreamSpecification = stream_spec
         
         return metadata
 
@@ -427,6 +439,70 @@ class TableManager:
             )
         
         await conn.commit()
+
+    async def _store_stream_specification(
+        self,
+        conn: aiosqlite.Connection,
+        stream_specification: StreamSpecification,
+    ) -> None:
+        """Store stream specification in the database.
+        
+        Args:
+            conn: SQLite connection
+            stream_specification: Stream specification to store
+        """
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS __stream_spec (
+                stream_enabled INTEGER NOT NULL,
+                stream_view_type TEXT
+            )
+            """
+        )
+        
+        # Clear existing
+        await conn.execute("DELETE FROM __stream_spec")
+        
+        # Store new spec
+        await conn.execute(
+            "INSERT INTO __stream_spec (stream_enabled, stream_view_type) VALUES (?, ?)",
+            (
+                1 if stream_specification.StreamEnabled else 0,
+                stream_specification.StreamViewType,
+            )
+        )
+        
+        await conn.commit()
+
+    async def _get_stream_specification(
+        self,
+        table_name: str,
+    ) -> Optional[StreamSpecification]:
+        """Get stream specification for a table.
+        
+        Args:
+            table_name: Name of the table
+            
+        Returns:
+            StreamSpecification if enabled, None otherwise
+        """
+        try:
+            conn = await self._get_connection(table_name)
+        except Exception:
+            return None
+        
+        async with conn.execute(
+            "SELECT stream_enabled, stream_view_type FROM __stream_spec LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+            
+            if not row or not row[0]:
+                return None
+            
+            return StreamSpecification(
+                StreamEnabled=bool(row[0]),
+                StreamViewType=row[1],
+            )
 
     async def _load_metadata(
         self,

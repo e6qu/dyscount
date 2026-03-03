@@ -249,7 +249,22 @@ class TableService:
             attribute_definitions=request.attribute_definitions,
             global_secondary_indexes=request.global_secondary_indexes,
             local_secondary_indexes=request.local_secondary_indexes,
+            stream_specification=request.stream_specification,
         )
+        
+        # Enable streams if specified
+        if request.stream_specification and request.stream_specification.StreamEnabled:
+            from dyscount_core.storage.stream_manager import StreamManager, StreamViewType
+            stream_manager = StreamManager(self.config.storage.data_directory)
+            try:
+                view_type_str = request.stream_specification.StreamViewType or "NEW_AND_OLD_IMAGES"
+                view_type = StreamViewType(view_type_str)
+                await stream_manager.enable_stream(
+                    table_name=request.table_name,
+                    stream_view_type=view_type,
+                )
+            finally:
+                await stream_manager.close()
         
         # Get the created table metadata
         metadata = await self.table_manager.describe_table(request.table_name)
@@ -401,6 +416,32 @@ class TableService:
         # Update deletion protection if provided
         if request.DeletionProtectionEnabled is not None:
             metadata.DeletionProtectionEnabled = request.DeletionProtectionEnabled
+        
+        # Handle stream specification updates
+        if request.StreamSpecification is not None:
+            from dyscount_core.storage.stream_manager import StreamManager, StreamViewType
+            stream_manager = StreamManager(self.config.storage.data_directory)
+            
+            try:
+                if request.StreamSpecification.StreamEnabled:
+                    # Determine view type
+                    view_type_str = request.StreamSpecification.StreamViewType or "NEW_AND_OLD_IMAGES"
+                    view_type = StreamViewType(view_type_str)
+                    
+                    # Enable stream
+                    await stream_manager.enable_stream(
+                        table_name=request.TableName,
+                        stream_view_type=view_type,
+                    )
+                    
+                    # Update metadata
+                    metadata.StreamSpecification = request.StreamSpecification
+                else:
+                    # Disable stream
+                    await stream_manager.disable_stream(request.TableName)
+                    metadata.StreamSpecification = None
+            finally:
+                await stream_manager.close()
         
         # Store updated metadata
         await self.table_manager._update_metadata(request.TableName, metadata)
