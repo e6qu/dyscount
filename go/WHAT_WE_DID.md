@@ -88,10 +88,43 @@ Added comprehensive tests for BatchGetItem and BatchWriteItem operations.
 - 10 batch operation tests added
 - All 88 Go tests passing
 
+## 2026-03-03: M2 Phase 3 - Transactions
+
+**Branch**: `feature/GO-M2-transactions`
+
+### Summary
+
+Added comprehensive tests for TransactGetItems and TransactWriteItems operations.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/transactions_test.go`**
+   - Tests for TransactGetItems (3 test cases)
+   - Tests for TransactWriteItems (6 test cases)
+   - Tests for transaction limits and error cases
+
+### Features Verified
+
+| Feature | Status | Tests |
+|---------|--------|-------|
+| TransactGetItems | ✅ | Get existing items, mix of items, empty items |
+| TransactWriteItems Put | ✅ | Put multiple items atomically |
+| TransactWriteItems Delete | ✅ | Delete items atomically |
+| TransactWriteItems ConditionCheck | ✅ | Condition checks in transactions |
+| TransactWriteItems Mixed | ✅ | Combined put/delete operations |
+| Transaction limits | ✅ | 25 item limit enforced |
+| Error handling | ✅ | Non-existent table handling |
+
+### Tests
+
+- 10 transaction tests added
+- All 95 Go tests passing
+
 ### Next Steps
 
-- Phase 3: Transactions (TransactGetItems, TransactWriteItems)
-- Phase 4: UpdateExpression improvements
+- Phase 4: UpdateExpression improvements (SET, REMOVE, ADD, DELETE)
 - Phase 5: UpdateTable GSI support
 
 ---

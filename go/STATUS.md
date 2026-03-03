@@ -37,11 +37,11 @@ Go implementation using Gin framework with SQLite backend.
 | BatchGetItem | ✅ | Complete |
 | BatchWriteItem | ✅ | Complete |
 
-### Transactions (0/2) ❌
+### Transactions (2/2) ✅
 | Operation | Status | Priority |
 |-----------|--------|----------|
-| TransactGetItems | ❌ | High |
-| TransactWriteItems | ❌ | High |
+| TransactGetItems | ✅ | Complete |
+| TransactWriteItems | ✅ | Complete |
 
 ### Condition Expressions ✅ (Phase 1 Complete)
 | Feature | Status | Priority |
@@ -76,12 +76,13 @@ Go implementation using Gin framework with SQLite backend.
 
 ## Metrics
 
-- **Lines of Code**: ~3,700 (+100)
-- **Test Count**: 88 (+10 batch tests)
-- **Test Coverage**: ~68%
-- **Operations**: 18/61 (30%)
+- **Lines of Code**: ~3,800 (+100)
+- **Test Count**: 95 (+7 transaction tests)
+- **Test Coverage**: ~70%
+- **Operations**: 20/61 (33%)
 - **Condition Expressions**: ✅ Complete
 - **Batch Operations**: ✅ Complete
+- **Transactions**: ✅ Complete
 
 ## Next Phase: M2 Feature Parity
 
