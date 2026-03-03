@@ -319,3 +319,96 @@ type BatchWriteItemResponse struct {
 	ItemCollectionMetrics map[string]ItemCollectionMetrics `json:"ItemCollectionMetrics,omitempty"`
 	ConsumedCapacity []ConsumedCapacity `json:"ConsumedCapacity,omitempty"`
 }
+
+// TransactGetItem represents a single get operation in a transaction.
+type TransactGetItem struct {
+	Get *TransactGet `json:"Get,omitempty"`
+}
+
+// TransactGet represents the Get operation details.
+type TransactGet struct {
+	TableName                string            `json:"TableName" binding:"required"`
+	Key                      Item              `json:"Key" binding:"required"`
+	ProjectionExpression     string            `json:"ProjectionExpression,omitempty"`
+	ExpressionAttributeNames map[string]string `json:"ExpressionAttributeNames,omitempty"`
+}
+
+// TransactGetItemsRequest represents a TransactGetItems request.
+type TransactGetItemsRequest struct {
+	TransactItems          []TransactGetItem `json:"TransactItems" binding:"required"`
+	ReturnConsumedCapacity string            `json:"ReturnConsumedCapacity,omitempty"`
+}
+
+// TransactGetItemsResponse represents a TransactGetItems response.
+type TransactGetItemsResponse struct {
+	Responses        []ItemResponse     `json:"Responses,omitempty"`
+	ConsumedCapacity []ConsumedCapacity `json:"ConsumedCapacity,omitempty"`
+}
+
+// ItemResponse represents a single item response in TransactGetItems.
+type ItemResponse struct {
+	Item Item `json:"Item,omitempty"`
+}
+
+// TransactWriteItem represents a single write operation in a transaction.
+type TransactWriteItem struct {
+	Put            *TransactPut            `json:"Put,omitempty"`
+	Update         *TransactUpdate         `json:"Update,omitempty"`
+	Delete         *TransactDelete         `json:"Delete,omitempty"`
+	ConditionCheck *TransactConditionCheck `json:"ConditionCheck,omitempty"`
+}
+
+// TransactPut represents a Put operation in a transaction.
+type TransactPut struct {
+	TableName                   string                       `json:"TableName" binding:"required"`
+	Item                        Item                         `json:"Item" binding:"required"`
+	ConditionExpression         string                       `json:"ConditionExpression,omitempty"`
+	ExpressionAttributeNames    map[string]string            `json:"ExpressionAttributeNames,omitempty"`
+	ExpressionAttributeValues   map[string]AttributeValue    `json:"ExpressionAttributeValues,omitempty"`
+	ReturnValuesOnConditionCheckFailure string                `json:"ReturnValuesOnConditionCheckFailure,omitempty"`
+}
+
+// TransactUpdate represents an Update operation in a transaction.
+type TransactUpdate struct {
+	TableName                   string                       `json:"TableName" binding:"required"`
+	Key                         Item                         `json:"Key" binding:"required"`
+	UpdateExpression            string                       `json:"UpdateExpression,omitempty"`
+	ConditionExpression         string                       `json:"ConditionExpression,omitempty"`
+	ExpressionAttributeNames    map[string]string            `json:"ExpressionAttributeNames,omitempty"`
+	ExpressionAttributeValues   map[string]AttributeValue    `json:"ExpressionAttributeValues,omitempty"`
+	ReturnValuesOnConditionCheckFailure string                `json:"ReturnValuesOnConditionCheckFailure,omitempty"`
+}
+
+// TransactDelete represents a Delete operation in a transaction.
+type TransactDelete struct {
+	TableName                   string                       `json:"TableName" binding:"required"`
+	Key                         Item                         `json:"Key" binding:"required"`
+	ConditionExpression         string                       `json:"ConditionExpression,omitempty"`
+	ExpressionAttributeNames    map[string]string            `json:"ExpressionAttributeNames,omitempty"`
+	ExpressionAttributeValues   map[string]AttributeValue    `json:"ExpressionAttributeValues,omitempty"`
+	ReturnValuesOnConditionCheckFailure string                `json:"ReturnValuesOnConditionCheckFailure,omitempty"`
+}
+
+// TransactConditionCheck represents a ConditionCheck operation in a transaction.
+type TransactConditionCheck struct {
+	TableName                   string                       `json:"TableName" binding:"required"`
+	Key                         Item                         `json:"Key" binding:"required"`
+	ConditionExpression         string                       `json:"ConditionExpression" binding:"required"`
+	ExpressionAttributeNames    map[string]string            `json:"ExpressionAttributeNames,omitempty"`
+	ExpressionAttributeValues   map[string]AttributeValue    `json:"ExpressionAttributeValues,omitempty"`
+	ReturnValuesOnConditionCheckFailure string                `json:"ReturnValuesOnConditionCheckFailure,omitempty"`
+}
+
+// TransactWriteItemsRequest represents a TransactWriteItems request.
+type TransactWriteItemsRequest struct {
+	TransactItems              []TransactWriteItem `json:"TransactItems" binding:"required"`
+	ReturnConsumedCapacity      string              `json:"ReturnConsumedCapacity,omitempty"`
+	ReturnItemCollectionMetrics string              `json:"ReturnItemCollectionMetrics,omitempty"`
+	ClientRequestToken          string              `json:"ClientRequestToken,omitempty"`
+}
+
+// TransactWriteItemsResponse represents a TransactWriteItems response.
+type TransactWriteItemsResponse struct {
+	ConsumedCapacity     []ConsumedCapacity       `json:"ConsumedCapacity,omitempty"`
+	ItemCollectionMetrics map[string]ItemCollectionMetrics `json:"ItemCollectionMetrics,omitempty"`
+}

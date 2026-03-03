@@ -98,6 +98,10 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleBatchGetItem(c)
 	case "BatchWriteItem":
 		h.handleBatchWriteItem(c)
+	case "TransactGetItems":
+		h.handleTransactGetItems(c)
+	case "TransactWriteItems":
+		h.handleTransactWriteItems(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -707,5 +711,88 @@ func (h *DynamoDBHandler) handleBatchWriteItem(c *gin.Context) {
 		UnprocessedItems: unprocessedItems,
 	}
 
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleTransactGetItems handles TransactGetItems requests.
+func (h *DynamoDBHandler) handleTransactGetItems(c *gin.Context) {
+	var req models.TransactGetItemsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.TransactItems) == 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TransactItems cannot be empty",
+		})
+		return
+	}
+
+	if len(req.TransactItems) > 25 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TransactItems can contain up to 25 items",
+		})
+		return
+	}
+
+	responses, err := h.itemManager.TransactGetItems(req.TransactItems)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.TransactGetItemsResponse{
+		Responses: responses,
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleTransactWriteItems handles TransactWriteItems requests.
+func (h *DynamoDBHandler) handleTransactWriteItems(c *gin.Context) {
+	var req models.TransactWriteItemsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.TransactItems) == 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TransactItems cannot be empty",
+		})
+		return
+	}
+
+	if len(req.TransactItems) > 25 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TransactItems can contain up to 25 items",
+		})
+		return
+	}
+
+	err := h.itemManager.TransactWriteItems(req.TransactItems)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.TransactWriteItemsResponse{}
 	c.JSON(http.StatusOK, resp)
 }
