@@ -1,5 +1,6 @@
 """DynamoDB API Control Plane operation models."""
 
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
@@ -1288,3 +1289,414 @@ class BatchExecuteStatementResponse(BaseModel):
     
     responses: List[BatchStatementResponse] = Field(default_factory=list, alias="Responses")
     consumed_capacity: Optional[List[Dict[str, Any]]] = Field(default=None, alias="ConsumedCapacity")
+
+
+# =============================================================================
+# Export/Import Operations
+# =============================================================================
+
+class S3BucketSource(BaseModel):
+    """S3 bucket source for import operations.
+    
+    Attributes:
+        S3Bucket: The name of the S3 bucket
+        S3BucketOwner: The account ID that owns the bucket (for cross-account)
+        S3KeyPrefix: The prefix for S3 keys
+    """
+    model_config = {"populate_by_name": True}
+    
+    s3_bucket: str = Field(..., alias="S3Bucket")
+    s3_bucket_owner: Optional[str] = Field(default=None, alias="S3BucketOwner")
+    s3_key_prefix: Optional[str] = Field(default=None, alias="S3KeyPrefix")
+
+
+class ExportFormat(str, Enum):
+    """Export format types."""
+    DYNAMODB_JSON = "DYNAMODB_JSON"
+    ION = "ION"
+
+
+class ExportType(str, Enum):
+    """Export type."""
+    FULL_EXPORT = "FULL_EXPORT"
+    INCREMENTAL_EXPORT = "INCREMENTAL_EXPORT"
+
+
+class ExportStatus(str, Enum):
+    """Export task status."""
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ExportDescription(BaseModel):
+    """Description of an export task.
+    
+    Attributes:
+        ExportArn: ARN of the export
+        ExportStatus: Current status of the export
+        ExportType: Type of export (FULL_EXPORT or INCREMENTAL_EXPORT)
+        ExportFormat: Format of the export
+        TableArn: ARN of the source table
+        TableId: ID of the source table
+        S3Bucket: Destination S3 bucket
+        S3Prefix: Prefix for export files
+        S3BucketOwner: Account ID of the bucket owner
+        S3SseAlgorithm: Server-side encryption algorithm
+        S3SseKmsKeyId: KMS key ID for encryption
+        ExportTime: Point-in-time for the export
+        StartTime: When the export started
+        EndTime: When the export completed
+        ItemCount: Number of items exported
+        BilledSizeBytes: Billed size of the export
+        ProcessedSizeBytes: Actual size processed
+        ExportManifest: Location of the manifest file
+        FailureCode: Error code if failed
+        FailureMessage: Error message if failed
+    """
+    model_config = {"populate_by_name": True}
+    
+    export_arn: str = Field(..., alias="ExportArn")
+    export_status: ExportStatus = Field(..., alias="ExportStatus")
+    export_type: ExportType = Field(default=ExportType.FULL_EXPORT, alias="ExportType")
+    export_format: ExportFormat = Field(default=ExportFormat.DYNAMODB_JSON, alias="ExportFormat")
+    table_arn: str = Field(..., alias="TableArn")
+    table_id: Optional[str] = Field(default=None, alias="TableId")
+    s3_bucket: str = Field(..., alias="S3Bucket")
+    s3_prefix: Optional[str] = Field(default=None, alias="S3Prefix")
+    s3_bucket_owner: Optional[str] = Field(default=None, alias="S3BucketOwner")
+    s3_sse_algorithm: Optional[str] = Field(default=None, alias="S3SseAlgorithm")
+    s3_sse_kms_key_id: Optional[str] = Field(default=None, alias="S3SseKmsKeyId")
+    export_time: Optional[int] = Field(default=None, alias="ExportTime")
+    start_time: int = Field(..., alias="StartTime")
+    end_time: Optional[int] = Field(default=None, alias="EndTime")
+    item_count: Optional[int] = Field(default=None, alias="ItemCount")
+    billed_size_bytes: Optional[int] = Field(default=None, alias="BilledSizeBytes")
+    processed_size_bytes: Optional[int] = Field(default=None, alias="ProcessedSizeBytes")
+    export_manifest: Optional[str] = Field(default=None, alias="ExportManifest")
+    failure_code: Optional[str] = Field(default=None, alias="FailureCode")
+    failure_message: Optional[str] = Field(default=None, alias="FailureMessage")
+
+
+class ExportTableToPointInTimeRequest(BaseModel):
+    """Request model for ExportTableToPointInTime operation.
+    
+    Attributes:
+        TableArn: ARN of the table to export (required)
+        S3Bucket: Destination S3 bucket (required)
+        ExportTime: Point-in-time to export (Unix timestamp)
+        ClientToken: Idempotency token
+        S3Prefix: Prefix for export files
+        S3BucketOwner: Account ID for cross-account exports
+        ExportFormat: Export format (DYNAMODB_JSON or ION)
+        ExportType: Export type (FULL_EXPORT or INCREMENTAL_EXPORT)
+        S3SseAlgorithm: Server-side encryption algorithm
+        S3SseKmsKeyId: KMS key ID for encryption
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_arn: str = Field(..., alias="TableArn")
+    s3_bucket: str = Field(..., alias="S3Bucket")
+    export_time: Optional[int] = Field(default=None, alias="ExportTime")
+    client_token: Optional[str] = Field(default=None, alias="ClientToken")
+    s3_prefix: Optional[str] = Field(default=None, alias="S3Prefix")
+    s3_bucket_owner: Optional[str] = Field(default=None, alias="S3BucketOwner")
+    export_format: ExportFormat = Field(default=ExportFormat.DYNAMODB_JSON, alias="ExportFormat")
+    export_type: ExportType = Field(default=ExportType.FULL_EXPORT, alias="ExportType")
+    s3_sse_algorithm: Optional[str] = Field(default=None, alias="S3SseAlgorithm")
+    s3_sse_kms_key_id: Optional[str] = Field(default=None, alias="S3SseKmsKeyId")
+
+
+class ExportTableToPointInTimeResponse(BaseModel):
+    """Response model for ExportTableToPointInTime operation.
+    
+    Attributes:
+        ExportDescription: Description of the created export task
+    """
+    model_config = {"populate_by_name": True}
+    
+    export_description: ExportDescription = Field(..., alias="ExportDescription")
+
+
+class DescribeExportRequest(BaseModel):
+    """Request model for DescribeExport operation.
+    
+    Attributes:
+        ExportArn: ARN of the export to describe (required)
+    """
+    model_config = {"populate_by_name": True}
+    
+    export_arn: str = Field(..., alias="ExportArn")
+
+
+class DescribeExportResponse(BaseModel):
+    """Response model for DescribeExport operation.
+    
+    Attributes:
+        ExportDescription: Description of the export
+    """
+    model_config = {"populate_by_name": True}
+    
+    export_description: ExportDescription = Field(..., alias="ExportDescription")
+
+
+class ExportSummary(BaseModel):
+    """Summary of an export task for list operations.
+    
+    Attributes:
+        ExportArn: ARN of the export
+        ExportStatus: Current status
+        ExportType: Type of export
+    """
+    model_config = {"populate_by_name": True}
+    
+    export_arn: str = Field(..., alias="ExportArn")
+    export_status: ExportStatus = Field(..., alias="ExportStatus")
+    export_type: ExportType = Field(..., alias="ExportType")
+
+
+class ListExportsRequest(BaseModel):
+    """Request model for ListExports operation.
+    
+    Attributes:
+        TableArn: Filter by table ARN
+        MaxResults: Maximum number of results to return
+        NextToken: Pagination token
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_arn: Optional[str] = Field(default=None, alias="TableArn")
+    max_results: Optional[int] = Field(default=None, alias="MaxResults")
+    next_token: Optional[str] = Field(default=None, alias="NextToken")
+
+
+class ListExportsResponse(BaseModel):
+    """Response model for ListExports operation.
+    
+    Attributes:
+        ExportSummaries: List of export summaries
+        NextToken: Pagination token for next page
+    """
+    model_config = {"populate_by_name": True}
+    
+    export_summaries: List[ExportSummary] = Field(default_factory=list, alias="ExportSummaries")
+    next_token: Optional[str] = Field(default=None, alias="NextToken")
+
+
+# =============================================================================
+# Import Operations
+# =============================================================================
+
+class InputFormat(str, Enum):
+    """Input format for import operations."""
+    DYNAMODB_JSON = "DYNAMODB_JSON"
+    ION = "ION"
+    CSV = "CSV"
+
+
+class InputCompressionType(str, Enum):
+    """Input compression type."""
+    GZIP = "GZIP"
+    ZSTD = "ZSTD"
+    NONE = "NONE"
+
+
+class CsvOptions(BaseModel):
+    """CSV import options.
+    
+    Attributes:
+        Delimiter: Field delimiter (default: comma)
+        HeaderList: List of header names
+    """
+    model_config = {"populate_by_name": True}
+    
+    delimiter: Optional[str] = Field(default=None, alias="Delimiter")
+    header_list: Optional[List[str]] = Field(default=None, alias="HeaderList")
+
+
+class InputFormatOptions(BaseModel):
+    """Input format options.
+    
+    Attributes:
+        Csv: CSV-specific options
+    """
+    model_config = {"populate_by_name": True}
+    
+    csv: Optional[CsvOptions] = Field(default=None, alias="Csv")
+
+
+class ImportStatus(str, Enum):
+    """Import task status."""
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLING = "CANCELLING"
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+
+
+class TableCreationParameters(BaseModel):
+    """Parameters for creating a table during import.
+    
+    Attributes:
+        TableName: Name of the table to create (required)
+        AttributeDefinitions: Attribute definitions (required)
+        KeySchema: Key schema (required)
+        BillingMode: Billing mode (PROVISIONED or PAY_PER_REQUEST)
+        ProvisionedThroughput: Provisioned throughput settings
+        OnDemandThroughput: On-demand throughput settings
+        GlobalSecondaryIndexes: GSI definitions
+        SSESpecification: Server-side encryption settings
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_name: str = Field(..., alias="TableName")
+    attribute_definitions: List[AttributeDefinition] = Field(..., alias="AttributeDefinitions")
+    key_schema: List[KeySchemaElement] = Field(..., alias="KeySchema")
+    billing_mode: BillingMode = Field(default=BillingMode.PROVISIONED, alias="BillingMode")
+    provisioned_throughput: Optional[ProvisionedThroughput] = Field(default=None, alias="ProvisionedThroughput")
+    on_demand_throughput: Optional[Dict[str, Any]] = Field(default=None, alias="OnDemandThroughput")
+    global_secondary_indexes: Optional[List[GlobalSecondaryIndex]] = Field(default=None, alias="GlobalSecondaryIndexes")
+    sse_specification: Optional[Dict[str, Any]] = Field(default=None, alias="SSESpecification")
+
+
+class ImportTableDescription(BaseModel):
+    """Description of an import task.
+    
+    Attributes:
+        ImportArn: ARN of the import
+        ImportStatus: Current status
+        TableName: Name of the table being created
+        TableArn: ARN of the table
+        TableId: ID of the table
+        S3BucketSource: Source S3 bucket information
+        InputFormat: Input format
+        InputCompressionType: Compression type
+        StartTime: When the import started
+        EndTime: When the import completed
+        ImportedItemCount: Number of items imported
+        ProcessedItemCount: Number of items processed
+        ErrorCount: Number of errors
+        ProcessedSizeBytes: Size of data processed
+        FailureCode: Error code if failed
+        FailureMessage: Error message if failed
+        CloudWatchLogGroupArn: CloudWatch log group ARN
+    """
+    model_config = {"populate_by_name": True}
+    
+    import_arn: str = Field(..., alias="ImportArn")
+    import_status: ImportStatus = Field(..., alias="ImportStatus")
+    table_name: str = Field(..., alias="TableName")
+    table_arn: Optional[str] = Field(default=None, alias="TableArn")
+    table_id: Optional[str] = Field(default=None, alias="TableId")
+    s3_bucket_source: Optional[S3BucketSource] = Field(default=None, alias="S3BucketSource")
+    input_format: InputFormat = Field(..., alias="InputFormat")
+    input_compression_type: InputCompressionType = Field(default=InputCompressionType.NONE, alias="InputCompressionType")
+    start_time: int = Field(..., alias="StartTime")
+    end_time: Optional[int] = Field(default=None, alias="EndTime")
+    imported_item_count: Optional[int] = Field(default=None, alias="ImportedItemCount")
+    processed_item_count: Optional[int] = Field(default=None, alias="ProcessedItemCount")
+    error_count: Optional[int] = Field(default=None, alias="ErrorCount")
+    processed_size_bytes: Optional[int] = Field(default=None, alias="ProcessedSizeBytes")
+    failure_code: Optional[str] = Field(default=None, alias="FailureCode")
+    failure_message: Optional[str] = Field(default=None, alias="FailureMessage")
+    cloud_watch_log_group_arn: Optional[str] = Field(default=None, alias="CloudWatchLogGroupArn")
+
+
+class ImportTableRequest(BaseModel):
+    """Request model for ImportTable operation.
+    
+    Attributes:
+        InputFormat: Format of the input data (required)
+        S3BucketSource: Source S3 bucket information (required)
+        TableCreationParameters: Parameters for creating the table (required)
+        ClientToken: Idempotency token
+        InputCompressionType: Compression type
+        InputFormatOptions: Format-specific options
+    """
+    model_config = {"populate_by_name": True}
+    
+    input_format: InputFormat = Field(..., alias="InputFormat")
+    s3_bucket_source: S3BucketSource = Field(..., alias="S3BucketSource")
+    table_creation_parameters: TableCreationParameters = Field(..., alias="TableCreationParameters")
+    client_token: Optional[str] = Field(default=None, alias="ClientToken")
+    input_compression_type: InputCompressionType = Field(default=InputCompressionType.NONE, alias="InputCompressionType")
+    input_format_options: Optional[InputFormatOptions] = Field(default=None, alias="InputFormatOptions")
+
+
+class ImportTableResponse(BaseModel):
+    """Response model for ImportTable operation.
+    
+    Attributes:
+        ImportTableDescription: Description of the created import task
+    """
+    model_config = {"populate_by_name": True}
+    
+    import_table_description: ImportTableDescription = Field(..., alias="ImportTableDescription")
+
+
+class DescribeImportRequest(BaseModel):
+    """Request model for DescribeImport operation.
+    
+    Attributes:
+        ImportArn: ARN of the import to describe (required)
+    """
+    model_config = {"populate_by_name": True}
+    
+    import_arn: str = Field(..., alias="ImportArn")
+
+
+class DescribeImportResponse(BaseModel):
+    """Response model for DescribeImport operation.
+    
+    Attributes:
+        ImportTableDescription: Description of the import
+    """
+    model_config = {"populate_by_name": True}
+    
+    import_table_description: ImportTableDescription = Field(..., alias="ImportTableDescription")
+
+
+class ImportSummary(BaseModel):
+    """Summary of an import task for list operations.
+    
+    Attributes:
+        ImportArn: ARN of the import
+        ImportStatus: Current status
+        TableArn: ARN of the table
+        S3BucketSource: Source S3 information
+    """
+    model_config = {"populate_by_name": True}
+    
+    import_arn: str = Field(..., alias="ImportArn")
+    import_status: ImportStatus = Field(..., alias="ImportStatus")
+    table_arn: Optional[str] = Field(default=None, alias="TableArn")
+    s3_bucket_source: Optional[S3BucketSource] = Field(default=None, alias="S3BucketSource")
+
+
+class ListImportsRequest(BaseModel):
+    """Request model for ListImports operation.
+    
+    Attributes:
+        TableArn: Filter by table ARN
+        PageSize: Number of results per page
+        NextToken: Pagination token
+    """
+    model_config = {"populate_by_name": True}
+    
+    table_arn: Optional[str] = Field(default=None, alias="TableArn")
+    page_size: Optional[int] = Field(default=None, alias="PageSize")
+    next_token: Optional[str] = Field(default=None, alias="NextToken")
+
+
+class ListImportsResponse(BaseModel):
+    """Response model for ListImports operation.
+    
+    Attributes:
+        ImportSummaryList: List of import summaries
+        NextToken: Pagination token
+    """
+    model_config = {"populate_by_name": True}
+    
+    import_summary_list: List[ImportSummary] = Field(default_factory=list, alias="ImportSummaryList")
+    next_token: Optional[str] = Field(default=None, alias="NextToken")

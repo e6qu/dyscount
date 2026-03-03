@@ -7,58 +7,32 @@ Last Updated: 2026-03-03
 | Milestone | Status | Progress |
 |-----------|--------|----------|
 | M1: Foundation & Core Operations | ✅ Complete | 100% |
-| M2: Advanced Operations | ⚪ Pending | 0% |
+| M2: Advanced Operations | ✅ Complete | 100% |
 | M3: Streams & Events | ⚪ Pending | 0% |
-| M4: Production Readiness | ⚪ Pending | 0% |
+| M4 Phase 1: Import/Export | ✅ Complete | 100% |
+| M4 Phase 2: Polish | ⚪ Planned | 0% |
 
 ## Current Phase
 
-**M1 Phase 9: Zig Implementation - COMPLETE ✅**
+**M4 Phase 1: Import/Export Operations - COMPLETE ✅**
 
-Status: ✅ **COMPLETE** - Foundation implemented with 5 control plane operations
+Status: ✅ **COMPLETE** - All 6 import/export operations implemented with 11 tests
 
-### Previous Phases
+### Completed Tasks
 
-#### M1 Phase 5 ✅
+| Task ID | Task | Status | Completed | Tests |
+|---------|------|--------|-----------|-------|
+| M4P1-T1 | ExportTableToPointInTime | ✅ Complete | 2026-03-03 | 5 |
+| M4P1-T2 | DescribeExport | ✅ Complete | 2026-03-03 | - |
+| M4P1-T3 | ListExports | ✅ Complete | 2026-03-03 | - |
+| M4P1-T4 | ImportTable | ✅ Complete | 2026-03-03 | 4 |
+| M4P1-T5 | DescribeImport | ✅ Complete | 2026-03-03 | - |
+| M4P1-T6 | ListImports | ✅ Complete | 2026-03-03 | - |
+| M4P1-T7 | Round-trip test | ✅ Complete | 2026-03-03 | 1 |
 
-| Task ID | Task | Status | Completed | PR |
-|---------|------|--------|-----------|-----|
-| M1P5-T1 | BatchGetItem | ✅ Complete | 2026-03-02 | #11 |
-| M1P5-T2 | BatchWriteItem | ✅ Complete | 2026-03-02 | #11 |
-| M1P5-T3 | TransactGetItems | ✅ Complete | 2026-03-02 | #12 |
-| M1P5-T4 | TransactWriteItems | ✅ Complete | 2026-03-02 | #12 |
-| M1P5-T5 | GSI CreateTable support | ✅ Complete | 2026-03-02 | #13 |
-| M1P5-T6 | UpdateTable for GSI | ✅ Complete | 2026-03-02 | #14 |
+**Progress**: 11/11 tests passing (100%)
 
-**Progress**: 6/6 tasks complete (100%)
-
-#### M1 Phase 6 ✅
-
-| Task ID | Task | Status | Completed | PR |
-|---------|------|--------|-----------|-----|
-| M1P6-T1 | Prometheus Metrics | ✅ Complete | 2026-03-03 | #15 |
-| M1P6-T2 | Tagging Operations | ✅ Complete | 2026-03-03 | #15 |
-| M1P6-T3 | AWS SigV4 Auth | 🟡 Deferred | - | - |
-
-**Progress**: 2/2 tasks complete (100% - Auth deferred to later phase)
-
-#### M1 Phase 7 ✅
-
-| Task ID | Task | Status | Completed | PR |
-|---------|------|--------|-----------|-----|
-| M1P7-T1 | Go Control Plane | ✅ Complete | 2026-03-03 | #16 |
-| M1P7-T2 | Go Data Plane | ✅ Complete | 2026-03-03 | #16 |
-
-**Progress**: 2/2 tasks complete (100%)
-
-#### M1 Phase 8 ✅
-
-| Task ID | Task | Status | Completed | PR |
-|---------|------|--------|-----------|-----|
-| M1P8-T1 | Rust Control Plane | ✅ Complete | 2026-03-03 | #17 |
-| M1P8-T2 | Rust Data Plane | ✅ Complete | 2026-03-03 | #17 |
-
-**Progress**: 2/2 tasks complete (100%)
+### Previous Phases (Complete)
 
 #### M1 Phase 9 ✅
 
@@ -66,7 +40,14 @@ Status: ✅ **COMPLETE** - Foundation implemented with 5 control plane operation
 |---------|------|--------|-----------|-----|
 | M1P9-T1 | Zig Control Plane | ✅ Complete | 2026-03-03 | #18 |
 
-**Progress**: 1/1 tasks complete (100%)
+#### M2 Phase 4 ✅
+
+| Task ID | Task | Status | Completed | PR |
+|---------|------|--------|-----------|-----|
+| M2P4-T1 | ExecuteStatement | ✅ Complete | 2026-03-03 | #20 |
+| M2P4-T2 | BatchExecuteStatement | ✅ Complete | 2026-03-03 | #20 |
+
+**Progress**: 2/2 tasks complete (100%)
 
 ## CI/CD Status
 
@@ -84,11 +65,11 @@ Status: ✅ **COMPLETE** - Foundation implemented with 5 control plane operation
 
 | Language | Status | Current Phase | Stack | Tests |
 |----------|--------|---------------|-------|-------|
-| Python | ✅ Complete | M1 Complete | FastAPI, uvicorn, async | 309 |
+| Python | ✅ Complete | M4P1 Complete | FastAPI, uvicorn, async | 372 |
 | Go | ✅ Complete | M1 Complete | Gin, gin-swagger | 50 |
 | Rust | ✅ Complete | M1 Complete | Axum, serde | 21 |
 | Zig | ✅ Complete | M1 Complete | Raw TCP, SQLite C | 9 |
-| **Total** | | | | **389** |
+| **Total** | | | | **452** |
 
 ## Test Summary
 
@@ -118,8 +99,13 @@ Status: ✅ **COMPLETE** - Foundation implemented with 5 control plane operation
 | test_create_table_gsi.py | 14 | ✅ All passing |
 | test_update_table_gsi.py | 12 | ✅ All passing |
 | test_tagging.py | 15 | ✅ All passing |
+| test_ttl.py | 12 | ✅ All passing |
+| test_backup.py | 13 | ✅ All passing |
+| test_pitr.py | 14 | ✅ All passing |
+| test_partiql.py | 16 | ✅ All passing |
+| test_import_export.py | 11 | ✅ All passing |
 | test_data_operations.py (E2E) | 25 | 🟡 Requires running server |
-| **Python Total** | **309** | **✅ 309 tests passing** |
+| **Python Total** | **372** | **✅ 372 tests passing** |
 
 ### Go Tests
 
@@ -159,11 +145,6 @@ Status: ✅ **COMPLETE** - Foundation implemented with 5 control plane operation
 - ✅ DescribeEndpoints (Python + Go + Rust + Zig)
 - ✅ UpdateTable (Python)
 
-### Tagging Operations (Python ✅)
-- ✅ TagResource
-- ✅ UntagResource
-- ✅ ListTagsOfResource
-
 ### Data Plane (Python + Go + Rust ✅)
 - ✅ GetItem - Primary key retrieval
 - ✅ PutItem - Create/replace items with ReturnValues
@@ -177,28 +158,47 @@ Status: ✅ **COMPLETE** - Foundation implemented with 5 control plane operation
 - ✅ TransactGetItems - Atomic read (up to 100 items)
 - ✅ TransactWriteItems - Atomic write (up to 100 items)
 
-## Files Created in Recent Phases
+### TTL Operations (Python ✅)
+- ✅ UpdateTimeToLive
+- ✅ DescribeTimeToLive
 
-### Go Implementation (M1P7)
-- `go/` - Go module with full implementation
-- `internal/config/config.go` - Configuration
-- `internal/models/*.go` - Data models
-- `internal/storage/*.go` - SQLite storage
-- `internal/handlers/*.go` - HTTP handlers
+### Backup/Restore Operations (Python ✅)
+- ✅ CreateBackup
+- ✅ RestoreTableFromBackup
+- ✅ ListBackups
+- ✅ DeleteBackup
 
-### Rust Implementation (M1P8)
-- `rust/` - Cargo project with full implementation
-- `src/models.rs` - Data models
-- `src/storage.rs` - Table management
-- `src/items.rs` - Item operations
-- `src/handlers.rs` - HTTP handlers
-- `src/main.rs` - Application entry
+### PITR Operations (Python ✅)
+- ✅ UpdateContinuousBackups
+- ✅ DescribeContinuousBackups
+- ✅ RestoreTableToPointInTime
 
-### Zig Implementation (M1P9)
-- `zig/` - Zig project with control plane
-- `src/models.zig` - Data structures
-- `src/storage.zig` - SQLite storage
-- `src/main.zig` - HTTP server
+### PartiQL Operations (Python ✅)
+- ✅ ExecuteStatement
+- ✅ BatchExecuteStatement
+
+### Import/Export Operations (Python ✅)
+- ✅ ExportTableToPointInTime
+- ✅ DescribeExport
+- ✅ ListExports
+- ✅ ImportTable
+- ✅ DescribeImport
+- ✅ ListImports
+
+### Tagging Operations (Python ✅)
+- ✅ TagResource
+- ✅ UntagResource
+- ✅ ListTagsOfResource
+
+## Files Created in M4 Phase 1
+
+### Import/Export Implementation
+- `packages/dyscount-core/src/dyscount_core/services/import_export_service.py` - Import/Export service
+- `tests/test_import_export.py` - 11 comprehensive tests
+
+### Updated Files
+- `packages/dyscount-core/src/dyscount_core/models/operations.py` - Added import/export models
+- `packages/dyscount-api/src/dyscount_api/routes/tables.py` - Added import/export routes
 
 ## Specifications Available
 
@@ -221,11 +221,9 @@ None.
 
 ## Next Actions
 
-1. ✅ **M1 COMPLETE** - All 9 phases of Milestone 1 completed
-2. ✅ **M2 Phase 1** - TTL Implementation (Complete)
-3. ✅ **M2 Phase 2** - Backup & Restore (Complete)
-4. ✅ **M2 Phase 3** - Point-in-Time Recovery (PITR) (Complete)
-5. 🔜 **M2 Phase 4** - PartiQL Support
-3. 🔜 **M1P10** - E2E Testing & Validation across all languages
+1. ✅ **M4 Phase 1 COMPLETE** - All import/export operations implemented
+2. 🔜 **M4 Phase 2** - Polish & Production Readiness
+3. 🔜 **Documentation** - Complete API documentation
+4. 🔜 **Performance** - Benchmark and optimize
 
 See `DO_NEXT.md` for details.

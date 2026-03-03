@@ -116,6 +116,18 @@ async def dynamodb_endpoint(
         return await handle_execute_statement(body, config)
     elif operation == "BatchExecuteStatement":
         return await handle_batch_execute_statement(body, config)
+    elif operation == "ExportTableToPointInTime":
+        return await handle_export_table_to_point_in_time(body, config)
+    elif operation == "DescribeExport":
+        return await handle_describe_export(body, config)
+    elif operation == "ListExports":
+        return await handle_list_exports(body, config)
+    elif operation == "ImportTable":
+        return await handle_import_table(body, config)
+    elif operation == "DescribeImport":
+        return await handle_describe_import(body, config)
+    elif operation == "ListImports":
+        return await handle_list_imports(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -1634,3 +1646,376 @@ async def handle_batch_execute_statement(body: dict, config: Config) -> JSONResp
     finally:
         if service:
             await service.close()
+
+
+# =============================================================================
+# Import/Export Operations (M4 Phase 1)
+# =============================================================================
+
+async def handle_export_table_to_point_in_time(body: dict, config: Config) -> JSONResponse:
+    """Handle ExportTableToPointInTime operation"""
+    from dyscount_core.services.import_export_service import ImportExportService
+    from dyscount_core.services.table_service import TableService
+    from dyscount_core.services.item_service import ItemService
+    from dyscount_core.models.operations import (
+        ExportTableToPointInTimeRequest,
+        ExportTableToPointInTimeResponse,
+    )
+    
+    export_service = None
+    table_service = None
+    item_service = None
+    
+    try:
+        # Parse request
+        request = ExportTableToPointInTimeRequest.model_validate(body)
+        
+        # Create services
+        export_service = ImportExportService(
+            data_directory=config.storage.data_directory,
+            namespace=config.storage.default_namespace,
+        )
+        table_service = TableService(config)
+        item_service = ItemService(config)
+        
+        # Execute export
+        response = await export_service.export_table_to_point_in_time(
+            request=request,
+            table_manager=table_service.table_manager,
+            item_service=item_service,
+        )
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if table_service:
+            await table_service.close()
+        if item_service:
+            await item_service.close()
+
+
+async def handle_describe_export(body: dict, config: Config) -> JSONResponse:
+    """Handle DescribeExport operation"""
+    from dyscount_core.services.import_export_service import ImportExportService
+    from dyscount_core.models.operations import (
+        DescribeExportRequest,
+        DescribeExportResponse,
+    )
+    
+    export_service = None
+    
+    try:
+        # Parse request
+        request = DescribeExportRequest.model_validate(body)
+        
+        # Create service
+        export_service = ImportExportService(
+            data_directory=config.storage.data_directory,
+            namespace=config.storage.default_namespace,
+        )
+        
+        # Execute describe
+        response = await export_service.describe_export(request.export_arn)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+
+
+async def handle_list_exports(body: dict, config: Config) -> JSONResponse:
+    """Handle ListExports operation"""
+    from dyscount_core.services.import_export_service import ImportExportService
+    from dyscount_core.models.operations import (
+        ListExportsRequest,
+        ListExportsResponse,
+    )
+    
+    export_service = None
+    
+    try:
+        # Parse request
+        request = ListExportsRequest.model_validate(body)
+        
+        # Create service
+        export_service = ImportExportService(
+            data_directory=config.storage.data_directory,
+            namespace=config.storage.default_namespace,
+        )
+        
+        # Execute list
+        response = await export_service.list_exports(
+            table_arn=request.table_arn,
+            max_results=request.max_results,
+            next_token=request.next_token,
+        )
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+
+
+async def handle_import_table(body: dict, config: Config) -> JSONResponse:
+    """Handle ImportTable operation"""
+    from dyscount_core.services.import_export_service import ImportExportService
+    from dyscount_core.services.table_service import TableService
+    from dyscount_core.services.item_service import ItemService
+    from dyscount_core.models.operations import (
+        ImportTableRequest,
+        ImportTableResponse,
+    )
+    
+    import_service = None
+    table_service = None
+    item_service = None
+    
+    try:
+        # Parse request
+        request = ImportTableRequest.model_validate(body)
+        
+        # Create services
+        import_service = ImportExportService(
+            data_directory=config.storage.data_directory,
+            namespace=config.storage.default_namespace,
+        )
+        table_service = TableService(config)
+        item_service = ItemService(config)
+        
+        # Execute import
+        response = await import_service.import_table(
+            request=request,
+            table_manager=table_service.table_manager,
+            item_service=item_service,
+        )
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if table_service:
+            await table_service.close()
+        if item_service:
+            await item_service.close()
+
+
+async def handle_describe_import(body: dict, config: Config) -> JSONResponse:
+    """Handle DescribeImport operation"""
+    from dyscount_core.services.import_export_service import ImportExportService
+    from dyscount_core.models.operations import (
+        DescribeImportRequest,
+        DescribeImportResponse,
+    )
+    
+    import_service = None
+    
+    try:
+        # Parse request
+        request = DescribeImportRequest.model_validate(body)
+        
+        # Create service
+        import_service = ImportExportService(
+            data_directory=config.storage.data_directory,
+            namespace=config.storage.default_namespace,
+        )
+        
+        # Execute describe
+        response = await import_service.describe_import(request.import_arn)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+
+
+async def handle_list_imports(body: dict, config: Config) -> JSONResponse:
+    """Handle ListImports operation"""
+    from dyscount_core.services.import_export_service import ImportExportService
+    from dyscount_core.models.operations import (
+        ListImportsRequest,
+        ListImportsResponse,
+    )
+    
+    import_service = None
+    
+    try:
+        # Parse request
+        request = ListImportsRequest.model_validate(body)
+        
+        # Create service
+        import_service = ImportExportService(
+            data_directory=config.storage.data_directory,
+            namespace=config.storage.default_namespace,
+        )
+        
+        # Execute list
+        response = await import_service.list_imports(
+            table_arn=request.table_arn,
+            page_size=request.page_size,
+            next_token=request.next_token,
+        )
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
