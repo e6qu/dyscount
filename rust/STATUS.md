@@ -8,10 +8,13 @@ Rust implementation using Axum framework with SQLite backend.
 
 ## Summary
 
-- **Operations**: 18/61 (30%)
-- **Tests**: 50 passing
+- **Operations**: 28/61 (46%)
+- **Tests**: 69 passing
 - **M1 Foundation**: ✅ Complete
 - **M2 Phase 1**: ✅ Complete (UpdateTable, Batch, TTL, ConditionExpressions)
+- **M2 Phase 2**: ✅ Complete (Transactions)
+- **M3 Phase 1**: ✅ Complete (Backup/Restore)
+- **M3 Phase 2**: ✅ Complete (PITR)
 
 ## Implemented Operations (18/61)
 
@@ -59,32 +62,52 @@ Rust implementation using Axum framework with SQLite backend.
 | BETWEEN | ✅ |
 | IN | ✅ |
 
-### Transactions (2/2) ⚠️
+### Transactions (2/2) ✅
 | Operation | Status | Notes |
 |-----------|--------|-------|
-| TransactGetItems | ⚠️ | Stub only |
-| TransactWriteItems | ⚠️ | Stub only |
+| TransactGetItems | ✅ | Up to 100 items |
+| TransactWriteItems | ✅ | Put, Update, Delete, ConditionCheck |
+
+### Backup/Restore (5/5) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| CreateBackup | ✅ | On-demand backups |
+| DescribeBackup | ✅ | Get backup details |
+| ListBackups | ✅ | List all backups |
+| DeleteBackup | ✅ | Delete backup |
+| RestoreTableFromBackup | ✅ | Restore from backup |
+
+### PITR (3/3) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| UpdateContinuousBackups | ✅ | Enable/disable PITR |
+| DescribeContinuousBackups | ✅ | Get PITR status |
+| RestoreTableToPointInTime | ✅ | Point-in-time restore |
 
 ## Test Summary
 
 | Category | Tests |
 |----------|-------|
 | Models | 5 |
-| Storage | 15 |
+| Storage | 34 |
 | Items | 20 |
-| Handlers | 2 |
+| Handlers | 6 |
 | Integration | 3 |
 | Expression | 5 |
-| **Total** | **50** |
+| **Total** | **69** |
 
-## Recent Additions (Batch 1)
+## Recent Additions (Batch 2)
 
-1. **UpdateTable** - Full GSI management (Create/Update/Delete)
-2. **BatchGetItem** - Multi-table batch reads (up to 100 items)
-3. **BatchWriteItem** - Multi-table batch writes (up to 25 items)
-4. **UpdateTimeToLive** - Enable/disable TTL
-5. **DescribeTimeToLive** - Get TTL configuration
-6. **ConditionExpression** - Full support for conditional operations
+1. **TransactGetItems** - Atomic reads (up to 100 items)
+2. **TransactWriteItems** - Atomic writes (up to 25 items)
+3. **CreateBackup** - On-demand table backups
+4. **DescribeBackup** - Get backup details
+5. **ListBackups** - List all backups
+6. **DeleteBackup** - Delete backups
+7. **RestoreTableFromBackup** - Restore from backup
+8. **UpdateContinuousBackups** - Enable/disable PITR
+9. **DescribeContinuousBackups** - Get PITR configuration
+10. **RestoreTableToPointInTime** - Point-in-time recovery
 
 ## Remaining Work
 

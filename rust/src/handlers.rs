@@ -48,6 +48,104 @@ pub async fn dynamodb_handler(
 
     // Parse body based on operation type
     match operation {
+        // PITR operations
+        "UpdateContinuousBackups" => {
+            let request: UpdateContinuousBackupsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_update_continuous_backups(state, request).await
+        }
+        "DescribeContinuousBackups" => {
+            let request: DescribeContinuousBackupsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_continuous_backups(state, request).await
+        }
+        "RestoreTableToPointInTime" => {
+            let request: RestoreTableToPointInTimeRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_restore_table_to_point_in_time(state, request).await
+        }
+        // Backup/Restore operations
+        "CreateBackup" => {
+            let request: CreateBackupRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_create_backup(state, request).await
+        }
+        "DescribeBackup" => {
+            let request: DescribeBackupRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_backup(state, request).await
+        }
+        "ListBackups" => {
+            let request: ListBackupsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_list_backups(state, request).await
+        }
+        "DeleteBackup" => {
+            let request: DeleteBackupRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_delete_backup(state, request).await
+        }
+        "RestoreTableFromBackup" => {
+            let request: RestoreTableFromBackupRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_restore_table_from_backup(state, request).await
+        }
         // TTL operations
         "UpdateTimeToLive" => {
             let request: UpdateTimeToLiveRequest = serde_json::from_slice(&body).map_err(|e| {
@@ -1037,22 +1135,406 @@ async fn handle_batch_write_item(
 
 /// Handle TransactGetItems operation
 async fn handle_transact_get_items(
-    _state: AppState,
-    _request: TransactGetItemsRequest,
+    state: AppState,
+    request: TransactGetItemsRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Stub implementation - returning empty responses
-    // Full implementation would parse and process request
-    Ok(Json(DynamoDBResponse::default()))
+    let transact_items = request.transact_items;
+
+    // Validate that at least one item is specified
+    if transact_items.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "TransactItems must contain at least one item",
+            )),
+        ));
+    }
+
+    // Validate the 100 item limit
+    if transact_items.len() > 100 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "TransactGetItems can retrieve up to 100 items per operation",
+            )),
+        ));
+    }
+
+    match state.item_manager.transact_get_items(&transact_items) {
+        Ok(responses) => {
+            Ok(Json(DynamoDBResponse {
+                item_responses: Some(responses),
+                ..Default::default()
+            }))
+        }
+        Err(ItemError::InvalidKey(msg)) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(msg)),
+        )),
+        Err(ItemError::Storage(StorageError::TableNotFound(table))) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::resource_not_found(format!(
+                "Table not found: {}",
+                table
+            ))),
+        )),
+        Err(e) => {
+            error!("Failed to transact get items: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 /// Handle TransactWriteItems operation
 async fn handle_transact_write_items(
-    _state: AppState,
-    _request: TransactWriteItemsRequest,
+    state: AppState,
+    request: TransactWriteItemsRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Stub implementation - returning success
-    // Full implementation would parse and process request
-    Ok(Json(DynamoDBResponse::default()))
+    let transact_items = request.transact_items;
+
+    // Validate that at least one item is specified
+    if transact_items.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "TransactItems must contain at least one item",
+            )),
+        ));
+    }
+
+    // Validate the 25 item limit
+    if transact_items.len() > 25 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "TransactWriteItems can write up to 25 items per operation",
+            )),
+        ));
+    }
+
+    match state.item_manager.transact_write_items(&transact_items) {
+        Ok(()) => {
+            // TransactWriteItems returns empty response on success
+            Ok(Json(DynamoDBResponse::default()))
+        }
+        Err(ItemError::InvalidKey(msg)) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(msg)),
+        )),
+        Err(ItemError::ConditionCheckFailed(msg)) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::conditional_check_failed(msg)),
+        )),
+        Err(ItemError::Storage(StorageError::TableNotFound(table))) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::resource_not_found(format!(
+                "Table not found: {}",
+                table
+            ))),
+        )),
+        Err(e) => {
+            error!("Failed to transact write items: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+// ==================== Backup/Restore Handlers ====================
+
+/// Handle CreateBackup operation
+async fn handle_create_backup(
+    state: AppState,
+    request: CreateBackupRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.create_backup(&request.table_name, request.backup_name) {
+        Ok(backup_description) => {
+            info!(
+                "Created backup {} for table {}",
+                backup_description.backup_name, backup_description.table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                backup_description: Some(backup_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(table)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to create backup: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeBackup operation
+async fn handle_describe_backup(
+    state: AppState,
+    request: DescribeBackupRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.describe_backup(&request.backup_arn) {
+        Ok(backup_description) => {
+            info!("Described backup: {}", backup_description.backup_arn);
+            Ok(Json(DynamoDBResponse {
+                backup_description: Some(backup_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Backup not found: {}",
+                    request.backup_arn
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe backup: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle ListBackups operation
+async fn handle_list_backups(
+    state: AppState,
+    request: ListBackupsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state
+        .table_manager
+        .list_backups(request.table_name.as_deref(), request.limit)
+    {
+        Ok(backup_summaries) => {
+            info!("Listed {} backups", backup_summaries.len());
+            Ok(Json(DynamoDBResponse {
+                backup_summaries: Some(backup_summaries),
+                ..Default::default()
+            }))
+        }
+        Err(e) => {
+            error!("Failed to list backups: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DeleteBackup operation
+async fn handle_delete_backup(
+    state: AppState,
+    request: DeleteBackupRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.delete_backup(&request.backup_arn) {
+        Ok(backup_description) => {
+            info!("Deleted backup: {}", backup_description.backup_arn);
+            Ok(Json(DynamoDBResponse {
+                backup_description: Some(backup_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Backup not found: {}",
+                    request.backup_arn
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to delete backup: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle RestoreTableFromBackup operation
+async fn handle_restore_table_from_backup(
+    state: AppState,
+    request: RestoreTableFromBackupRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state
+        .table_manager
+        .restore_table_from_backup(&request.target_table_name, &request.backup_arn)
+    {
+        Ok(table_metadata) => {
+            info!(
+                "Restored table {} from backup {}",
+                request.target_table_name, request.backup_arn
+            );
+            Ok(Json(DynamoDBResponse {
+                table_description: Some(table_metadata),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableAlreadyExists(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_in_use(format!(
+                    "Table already exists: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(StorageError::TableNotFound(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(msg)),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to restore table from backup: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+// ==================== PITR Handlers ====================
+
+/// Handle UpdateContinuousBackups operation
+async fn handle_update_continuous_backups(
+    state: AppState,
+    request: UpdateContinuousBackupsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let table_name = request.table_name;
+    let enabled = request.point_in_time_recovery_specification.point_in_time_recovery_enabled;
+
+    match state.table_manager.update_continuous_backups(&table_name, enabled) {
+        Ok(description) => {
+            info!(
+                "Updated continuous backups for table {}: PITR enabled={}",
+                table_name, enabled
+            );
+            Ok(Json(DynamoDBResponse {
+                continuous_backups_description: Some(description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to update continuous backups for table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeContinuousBackups operation
+async fn handle_describe_continuous_backups(
+    state: AppState,
+    request: DescribeContinuousBackupsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let table_name = request.table_name;
+
+    match state.table_manager.describe_continuous_backups(&table_name) {
+        Ok(description) => {
+            info!("Described continuous backups for table {}", table_name);
+            Ok(Json(DynamoDBResponse {
+                continuous_backups_description: Some(description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe continuous backups for table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle RestoreTableToPointInTime operation
+async fn handle_restore_table_to_point_in_time(
+    state: AppState,
+    request: RestoreTableToPointInTimeRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.restore_table_to_point_in_time(&request) {
+        Ok(table_metadata) => {
+            info!(
+                "Restored table {} to point in time from source table {}",
+                request.target_table_name, request.source_table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                table_description: Some(table_metadata),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableAlreadyExists(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_in_use(format!(
+                    "Table already exists: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(StorageError::TableNotFound(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(msg)),
+            ))
+        }
+        Err(StorageError::InvalidKey(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(msg)),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to restore table to point in time: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 //! SQLite-backed storage for DynamoDB tables
 
 use crate::models::*;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Result as SqliteResult};
 use std::collections::HashMap;
 use std::fs;
@@ -540,6 +540,571 @@ impl TableManager {
 
         Ok(description)
     }
+
+    /// Get the path for backup storage directory
+    fn get_backups_dir(&self) -> PathBuf {
+        self.data_directory.join(&self.namespace).join("__backups")
+    }
+
+    /// Get the path for a specific backup database
+    fn get_backup_db_path(&self, backup_id: &str) -> PathBuf {
+        self.get_backups_dir().join(format!("{}.db", backup_id))
+    }
+
+    /// Initialize the backup storage
+    fn init_backup_storage(&self) -> Result<Connection, StorageError> {
+        let backups_dir = self.get_backups_dir();
+        fs::create_dir_all(&backups_dir)?;
+
+        let metadata_db_path = backups_dir.join("metadata.db");
+        let conn = Connection::open(&metadata_db_path)?;
+
+        // Create backup metadata table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS backups (
+                backup_id TEXT PRIMARY KEY,
+                backup_name TEXT NOT NULL,
+                table_name TEXT NOT NULL,
+                table_arn TEXT,
+                backup_status TEXT NOT NULL,
+                backup_size_bytes INTEGER NOT NULL DEFAULT 0,
+                backup_creation_date_time TEXT NOT NULL,
+                source_table_metadata BLOB
+            )",
+            [],
+        )?;
+
+        Ok(conn)
+    }
+
+    /// Create a backup of a table
+    pub fn create_backup(
+        &self,
+        table_name: &str,
+        backup_name: Option<String>,
+    ) -> Result<BackupDescription, StorageError> {
+        // Check if table exists
+        let table_metadata = self.describe_table(table_name)?;
+
+        // Initialize backup storage
+        let conn = self.init_backup_storage()?;
+
+        // Generate backup ID and name
+        let backup_id = Uuid::new_v4().to_string();
+        let backup_name = backup_name.unwrap_or_else(|| {
+            format!("{}-backup-{}", table_name, chrono::Local::now().format("%Y%m%d-%H%M%S"))
+        });
+
+        let now = Utc::now();
+        let backup_arn = format!(
+            "arn:aws:dynamodb:local:{}:table/{}/backup/{}:{}",
+            self.namespace, table_name, self.namespace, backup_id
+        );
+
+        // Serialize source table metadata
+        let source_metadata_json = serde_json::to_vec(&table_metadata)?;
+
+        // Insert backup metadata
+        conn.execute(
+            "INSERT INTO backups (
+                backup_id, backup_name, table_name, table_arn, 
+                backup_status, backup_size_bytes, backup_creation_date_time, source_table_metadata
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                backup_id,
+                backup_name,
+                table_name,
+                table_metadata.table_arn,
+                "AVAILABLE",
+                table_metadata.table_size_bytes,
+                now.to_rfc3339(),
+                source_metadata_json
+            ],
+        )?;
+
+        // Copy table data to backup database
+        let source_db_path = self.get_db_path(table_name);
+        let backup_db_path = self.get_backup_db_path(&backup_id);
+
+        // Use SQLite backup API to copy the entire database
+        let source_conn = Connection::open(&source_db_path)?;
+        let mut backup_conn = Connection::open(&backup_db_path)?;
+
+        let backup = rusqlite::backup::Backup::new(&source_conn, &mut backup_conn)?;
+        backup.run_to_completion(5, std::time::Duration::from_millis(250), None)?;
+
+        Ok(BackupDescription {
+            backup_arn,
+            backup_name,
+            table_name: table_name.to_string(),
+            table_arn: table_metadata.table_arn,
+            backup_status: "AVAILABLE".to_string(),
+            backup_size_bytes: table_metadata.table_size_bytes,
+            backup_creation_date_time: now,
+            backup_expiry_date_time: None,
+        })
+    }
+
+    /// Describe a backup by ARN
+    pub fn describe_backup(&self, backup_arn: &str) -> Result<BackupDescription, StorageError> {
+        // Extract backup ID from ARN
+        let backup_id = self.extract_backup_id_from_arn(backup_arn)
+            .ok_or_else(|| StorageError::InvalidKey("Invalid backup ARN".to_string()))?;
+
+        // Initialize backup storage
+        let conn = self.init_backup_storage()?;
+
+        // Query backup metadata
+        let mut stmt = conn.prepare(
+            "SELECT backup_name, table_name, table_arn, backup_status, 
+                    backup_size_bytes, backup_creation_date_time
+             FROM backups WHERE backup_id = ?"
+        )?;
+
+        let result: Result<BackupDescription, rusqlite::Error> = stmt.query_row(
+            [&backup_id],
+            |row| {
+                let creation_time_str: String = row.get(5)?;
+                let creation_time = DateTime::parse_from_rfc3339(&creation_time_str)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?
+                    .with_timezone(&Utc);
+
+                Ok(BackupDescription {
+                    backup_arn: backup_arn.to_string(),
+                    backup_name: row.get(0)?,
+                    table_name: row.get(1)?,
+                    table_arn: row.get(2)?,
+                    backup_status: row.get(3)?,
+                    backup_size_bytes: row.get(4)?,
+                    backup_creation_date_time: creation_time,
+                    backup_expiry_date_time: None,
+                })
+            },
+        );
+
+        match result {
+            Ok(desc) => Ok(desc),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(StorageError::TableNotFound(format!("Backup not found: {}", backup_arn)))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// List all backups
+    pub fn list_backups(
+        &self,
+        table_name: Option<&str>,
+        _limit: Option<i32>,
+    ) -> Result<Vec<BackupSummary>, StorageError> {
+        let conn = self.init_backup_storage()?;
+
+        let mut summaries = Vec::new();
+
+        if let Some(table) = table_name {
+            let mut stmt = conn.prepare(
+                "SELECT backup_id, backup_name, table_name, backup_status, 
+                        backup_creation_date_time, backup_size_bytes
+                 FROM backups WHERE table_name = ? AND backup_status != 'DELETED'
+                 ORDER BY backup_creation_date_time DESC"
+            )?;
+
+            let rows = stmt.query_map([table], |row| {
+                let creation_time_str: String = row.get(4)?;
+                let creation_time = DateTime::parse_from_rfc3339(&creation_time_str)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?
+                    .with_timezone(&Utc);
+
+                let backup_id: String = row.get(0)?;
+                let table_name: String = row.get(2)?;
+                let backup_arn = format!(
+                    "arn:aws:dynamodb:local:{}:table/{}/backup/{}:{}",
+                    self.namespace, table_name, self.namespace, backup_id
+                );
+
+                Ok(BackupSummary {
+                    backup_arn,
+                    backup_name: row.get(1)?,
+                    table_name,
+                    backup_status: row.get(3)?,
+                    backup_creation_date_time: creation_time,
+                    backup_size_bytes: Some(row.get(5)?),
+                })
+            })?;
+
+            for row in rows {
+                summaries.push(row?);
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT backup_id, backup_name, table_name, backup_status, 
+                        backup_creation_date_time, backup_size_bytes
+                 FROM backups WHERE backup_status != 'DELETED'
+                 ORDER BY backup_creation_date_time DESC"
+            )?;
+
+            let rows = stmt.query_map([], |row| {
+                let creation_time_str: String = row.get(4)?;
+                let creation_time = DateTime::parse_from_rfc3339(&creation_time_str)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?
+                    .with_timezone(&Utc);
+
+                let backup_id: String = row.get(0)?;
+                let table_name: String = row.get(2)?;
+                let backup_arn = format!(
+                    "arn:aws:dynamodb:local:{}:table/{}/backup/{}:{}",
+                    self.namespace, table_name, self.namespace, backup_id
+                );
+
+                Ok(BackupSummary {
+                    backup_arn,
+                    backup_name: row.get(1)?,
+                    table_name,
+                    backup_status: row.get(3)?,
+                    backup_creation_date_time: creation_time,
+                    backup_size_bytes: Some(row.get(5)?),
+                })
+            })?;
+
+            for row in rows {
+                summaries.push(row?);
+            }
+        }
+
+        Ok(summaries)
+    }
+
+    /// Delete a backup
+    pub fn delete_backup(&self, backup_arn: &str) -> Result<BackupDescription, StorageError> {
+        // Extract backup ID from ARN
+        let backup_id = self.extract_backup_id_from_arn(backup_arn)
+            .ok_or_else(|| StorageError::InvalidKey("Invalid backup ARN".to_string()))?;
+
+        let conn = self.init_backup_storage()?;
+
+        // Get backup info before deleting
+        let description = self.describe_backup(backup_arn)?;
+
+        // Update status to DELETED
+        conn.execute(
+            "UPDATE backups SET backup_status = 'DELETED' WHERE backup_id = ?",
+            [&backup_id],
+        )?;
+
+        // Delete backup database file
+        let backup_db_path = self.get_backup_db_path(&backup_id);
+        if backup_db_path.exists() {
+            fs::remove_file(&backup_db_path)?;
+        }
+
+        Ok(description)
+    }
+
+    /// Restore a table from a backup
+    pub fn restore_table_from_backup(
+        &self,
+        target_table_name: &str,
+        backup_arn: &str,
+    ) -> Result<TableMetadata, StorageError> {
+        // Check if target table already exists
+        let target_db_path = self.get_db_path(target_table_name);
+        if target_db_path.exists() {
+            return Err(StorageError::TableAlreadyExists(target_table_name.to_string()));
+        }
+
+        // Extract backup ID from ARN
+        let backup_id = self.extract_backup_id_from_arn(backup_arn)
+            .ok_or_else(|| StorageError::InvalidKey("Invalid backup ARN".to_string()))?;
+
+        // Get source backup metadata
+        let conn = self.init_backup_storage()?;
+
+        let source_metadata_json: Option<Vec<u8>> = conn.query_row(
+            "SELECT source_table_metadata FROM backups WHERE backup_id = ? AND backup_status != 'DELETED'",
+            [&backup_id],
+            |row| row.get(0),
+        ).ok();
+
+        let source_metadata: Option<TableMetadata> = match source_metadata_json {
+            Some(json) => serde_json::from_slice(&json).ok(),
+            None => None,
+        };
+
+        // Check backup database exists
+        let backup_db_path = self.get_backup_db_path(&backup_id);
+        if !backup_db_path.exists() {
+            return Err(StorageError::TableNotFound(format!("Backup not found: {}", backup_arn)));
+        }
+
+        // Copy backup database to new table location
+        let target_dir = self.data_directory.join(&self.namespace);
+        fs::create_dir_all(&target_dir)?;
+
+        fs::copy(&backup_db_path, &target_db_path)?;
+
+        // Update the metadata in the restored table
+        let now = Utc::now();
+        let table_id = Uuid::new_v4().to_string();
+        let table_arn = format!("arn:aws:dynamodb:local:{}:table/{}", self.namespace, target_table_name);
+
+        let new_metadata = TableMetadata {
+            table_name: target_table_name.to_string(),
+            table_arn: Some(table_arn),
+            table_id: Some(table_id),
+            table_status: "ACTIVE".to_string(),
+            key_schema: source_metadata.as_ref().map(|m| m.key_schema.clone()).unwrap_or_default(),
+            attribute_definitions: source_metadata.as_ref().map(|m| m.attribute_definitions.clone()).unwrap_or_default(),
+            item_count: source_metadata.as_ref().map(|m| m.item_count).unwrap_or(0),
+            table_size_bytes: source_metadata.as_ref().map(|m| m.table_size_bytes).unwrap_or(0),
+            creation_date_time: now,
+            billing_mode_summary: source_metadata.as_ref().and_then(|m| m.billing_mode_summary.clone()),
+            provisioned_throughput: source_metadata.as_ref().and_then(|m| m.provisioned_throughput.clone()),
+            global_secondary_indexes: source_metadata.as_ref().and_then(|m| m.global_secondary_indexes.clone()),
+            local_secondary_indexes: source_metadata.as_ref().and_then(|m| m.local_secondary_indexes.clone()),
+            tags: source_metadata.as_ref().and_then(|m| m.tags.clone()),
+        };
+
+        // Update metadata in the restored database
+        let target_conn = Connection::open(&target_db_path)?;
+        self.store_metadata(&target_conn, &new_metadata)?;
+
+        // Add connection to cache
+        self.connections.lock().unwrap().insert(target_table_name.to_string(), target_conn);
+
+        Ok(new_metadata)
+    }
+
+    /// Extract backup ID from ARN
+    fn extract_backup_id_from_arn(&self, arn: &str) -> Option<String> {
+        // ARN format: arn:aws:dynamodb:local:{namespace}:table/{table_name}/backup/{namespace}:{backup_id}
+        arn.split(':').last().map(|s| s.to_string())
+    }
+
+    // ============== Point-in-Time Recovery (PITR) Operations ==============
+
+    /// Update continuous backups (enable/disable PITR)
+    pub fn update_continuous_backups(
+        &self,
+        table_name: &str,
+        enabled: bool,
+    ) -> Result<ContinuousBackupsDescription, StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Store PITR configuration in metadata table
+        let pitr_config = PitrConfiguration {
+            enabled,
+            enabled_at: if enabled { Some(Utc::now()) } else { None },
+        };
+
+        let config_json = serde_json::to_vec(&pitr_config).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+        })?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?1, ?2)",
+            params!["pitr_config", config_json],
+        )?;
+
+        // Build response
+        let pitr_description = if enabled {
+            let now = Utc::now();
+            Some(PointInTimeRecoveryDescription {
+                point_in_time_recovery_status: PointInTimeRecoveryStatus::Enabled,
+                earliest_restorable_date_time: Some(now),
+                latest_restorable_date_time: Some(now),
+            })
+        } else {
+            Some(PointInTimeRecoveryDescription {
+                point_in_time_recovery_status: PointInTimeRecoveryStatus::Disabled,
+                earliest_restorable_date_time: None,
+                latest_restorable_date_time: None,
+            })
+        };
+
+        let description = ContinuousBackupsDescription {
+            continuous_backups_status: ContinuousBackupsStatus::Enabled,
+            point_in_time_recovery_description: pitr_description,
+        };
+
+        drop(connections);
+
+        Ok(description)
+    }
+
+    /// Describe continuous backups (get PITR status)
+    pub fn describe_continuous_backups(
+        &self,
+        table_name: &str,
+    ) -> Result<ContinuousBackupsDescription, StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Load PITR configuration from metadata table
+        let pitr_config: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT value FROM __table_metadata WHERE key = ?",
+                ["pitr_config"],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let pitr_description = if let Some(config_json) = pitr_config {
+            let config: PitrConfiguration = serde_json::from_slice(&config_json)?;
+            if config.enabled {
+                let now = Utc::now();
+                Some(PointInTimeRecoveryDescription {
+                    point_in_time_recovery_status: PointInTimeRecoveryStatus::Enabled,
+                    earliest_restorable_date_time: config.enabled_at,
+                    latest_restorable_date_time: Some(now),
+                })
+            } else {
+                Some(PointInTimeRecoveryDescription {
+                    point_in_time_recovery_status: PointInTimeRecoveryStatus::Disabled,
+                    earliest_restorable_date_time: None,
+                    latest_restorable_date_time: None,
+                })
+            }
+        } else {
+            // No PITR configuration found - return disabled status
+            Some(PointInTimeRecoveryDescription {
+                point_in_time_recovery_status: PointInTimeRecoveryStatus::Disabled,
+                earliest_restorable_date_time: None,
+                latest_restorable_date_time: None,
+            })
+        };
+
+        let description = ContinuousBackupsDescription {
+            continuous_backups_status: ContinuousBackupsStatus::Enabled,
+            point_in_time_recovery_description: pitr_description,
+        };
+
+        drop(connections);
+
+        Ok(description)
+    }
+
+    /// Restore a table to a specific point in time
+    pub fn restore_table_to_point_in_time(
+        &self,
+        req: &RestoreTableToPointInTimeRequest,
+    ) -> Result<TableMetadata, StorageError> {
+        let source_table_name = &req.source_table_name;
+        let target_table_name = &req.target_table_name;
+
+        // Check if source table exists
+        let source_db_path = self.get_db_path(source_table_name);
+        if !source_db_path.exists() {
+            return Err(StorageError::TableNotFound(format!(
+                "Source table not found: {}",
+                source_table_name
+            )));
+        }
+
+        // Check if target table already exists
+        let target_db_path = self.get_db_path(target_table_name);
+        if target_db_path.exists() {
+            return Err(StorageError::TableAlreadyExists(target_table_name.clone()));
+        }
+
+        // Get source table metadata
+        let source_metadata = self.describe_table(source_table_name)?;
+
+        // Check if PITR is enabled on source table
+        let pitr_config = self.describe_continuous_backups(source_table_name)?;
+        let pitr_enabled = pitr_config
+            .point_in_time_recovery_description
+            .map(|d| d.point_in_time_recovery_status == PointInTimeRecoveryStatus::Enabled)
+            .unwrap_or(false);
+
+        if !pitr_enabled {
+            return Err(StorageError::InvalidKey(format!(
+                "Point in time recovery is not enabled for table: {}",
+                source_table_name
+            )));
+        }
+
+        // Copy source database to target location (simplified PITR implementation)
+        let target_dir = self.data_directory.join(&self.namespace);
+        fs::create_dir_all(&target_dir)?;
+        fs::copy(&source_db_path, &target_db_path)?;
+
+        // Create new metadata for restored table
+        let now = Utc::now();
+        let table_id = Uuid::new_v4().to_string();
+        let table_arn = format!(
+            "arn:aws:dynamodb:local:{}:table/{}",
+            self.namespace, target_table_name
+        );
+
+        let new_metadata = TableMetadata {
+            table_name: target_table_name.clone(),
+            table_arn: Some(table_arn),
+            table_id: Some(table_id),
+            table_status: "ACTIVE".to_string(),
+            key_schema: source_metadata.key_schema.clone(),
+            attribute_definitions: source_metadata.attribute_definitions.clone(),
+            item_count: source_metadata.item_count,
+            table_size_bytes: source_metadata.table_size_bytes,
+            creation_date_time: now,
+            billing_mode_summary: source_metadata.billing_mode_summary.clone(),
+            provisioned_throughput: source_metadata.provisioned_throughput.clone(),
+            global_secondary_indexes: source_metadata.global_secondary_indexes.clone(),
+            local_secondary_indexes: source_metadata.local_secondary_indexes.clone(),
+            tags: source_metadata.tags.clone(),
+        };
+
+        // Update metadata in the restored database
+        let target_conn = Connection::open(&target_db_path)?;
+        self.store_metadata(&target_conn, &new_metadata)?;
+
+        // Clear PITR config from restored table (it needs to be explicitly enabled)
+        let pitr_config = PitrConfiguration {
+            enabled: false,
+            enabled_at: None,
+        };
+        let config_json = serde_json::to_vec(&pitr_config).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+        })?;
+        target_conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?1, ?2)",
+            params!["pitr_config", config_json],
+        )?;
+
+        // Add connection to cache
+        self.connections
+            .lock()
+            .unwrap()
+            .insert(target_table_name.clone(), target_conn);
+
+        Ok(new_metadata)
+    }
 }
 
 #[cfg(test)]
@@ -964,6 +1529,308 @@ mod tests {
         
         let result = manager.describe_time_to_live("NonExistent");
         assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_create_backup() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        let backup = manager.create_backup("TestTable", Some("MyBackup".to_string())).unwrap();
+        
+        assert_eq!(backup.table_name, "TestTable");
+        assert_eq!(backup.backup_name, "MyBackup");
+        assert_eq!(backup.backup_status, "AVAILABLE");
+        assert!(backup.backup_arn.contains("backup"));
+    }
+
+    #[test]
+    fn test_create_backup_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.create_backup("NonExistent", Some("MyBackup".to_string()));
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_describe_backup() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        let backup = manager.create_backup("TestTable", Some("MyBackup".to_string())).unwrap();
+        
+        let described = manager.describe_backup(&backup.backup_arn).unwrap();
+        
+        assert_eq!(described.backup_name, backup.backup_name);
+        assert_eq!(described.table_name, backup.table_name);
+        assert_eq!(described.backup_status, "AVAILABLE");
+    }
+
+    #[test]
+    fn test_describe_backup_not_found() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.describe_backup("arn:aws:dynamodb:local:default:table/Test/backup/default:nonexistent");
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_list_backups() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        manager.create_backup("TestTable", Some("Backup1".to_string())).unwrap();
+        manager.create_backup("TestTable", Some("Backup2".to_string())).unwrap();
+        
+        let backups = manager.list_backups(None, None).unwrap();
+        
+        assert_eq!(backups.len(), 2);
+    }
+
+    #[test]
+    fn test_list_backups_filtered_by_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let req1 = create_test_request("Table1");
+        let req2 = create_test_request("Table2");
+        
+        manager.create_table(&req1).unwrap();
+        manager.create_table(&req2).unwrap();
+        
+        manager.create_backup("Table1", Some("Backup1".to_string())).unwrap();
+        manager.create_backup("Table2", Some("Backup2".to_string())).unwrap();
+        
+        let backups = manager.list_backups(Some("Table1"), None).unwrap();
+        
+        assert_eq!(backups.len(), 1);
+        assert_eq!(backups[0].table_name, "Table1");
+    }
+
+    #[test]
+    fn test_delete_backup() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        let backup = manager.create_backup("TestTable", Some("MyBackup".to_string())).unwrap();
+        
+        let deleted = manager.delete_backup(&backup.backup_arn).unwrap();
+        
+        assert_eq!(deleted.backup_arn, backup.backup_arn);
+        
+        // Backup should no longer be in list
+        let backups = manager.list_backups(None, None).unwrap();
+        assert!(backups.is_empty());
+    }
+
+    #[test]
+    fn test_restore_table_from_backup() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("SourceTable");
+        
+        manager.create_table(&req).unwrap();
+        let backup = manager.create_backup("SourceTable", Some("MyBackup".to_string())).unwrap();
+        
+        let restored = manager.restore_table_from_backup("RestoredTable", &backup.backup_arn).unwrap();
+        
+        assert_eq!(restored.table_name, "RestoredTable");
+        assert_eq!(restored.table_status, "ACTIVE");
+        
+        // Verify the restored table is listed
+        let tables = manager.list_tables().unwrap();
+        assert!(tables.contains(&"RestoredTable".to_string()));
+    }
+
+    #[test]
+    fn test_restore_table_already_exists() {
+        let (manager, _temp) = setup_test_manager();
+        let req1 = create_test_request("SourceTable");
+        let req2 = create_test_request("ExistingTable");
+        
+        manager.create_table(&req1).unwrap();
+        manager.create_table(&req2).unwrap();
+        
+        let backup = manager.create_backup("SourceTable", Some("MyBackup".to_string())).unwrap();
+        
+        let result = manager.restore_table_from_backup("ExistingTable", &backup.backup_arn);
+        assert!(matches!(result, Err(StorageError::TableAlreadyExists(_))));
+    }
+
+    // ============== PITR Tests ==============
+
+    #[test]
+    fn test_update_continuous_backups_enable_pitr() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Enable PITR
+        let description = manager.update_continuous_backups("TestTable", true).unwrap();
+        
+        assert_eq!(description.continuous_backups_status.to_string(), "ENABLED");
+        let pitr = description.point_in_time_recovery_description.unwrap();
+        assert_eq!(pitr.point_in_time_recovery_status.to_string(), "ENABLED");
+        assert!(pitr.earliest_restorable_date_time.is_some());
+        assert!(pitr.latest_restorable_date_time.is_some());
+    }
+
+    #[test]
+    fn test_update_continuous_backups_disable_pitr() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // First enable PITR
+        manager.update_continuous_backups("TestTable", true).unwrap();
+        
+        // Then disable it
+        let description = manager.update_continuous_backups("TestTable", false).unwrap();
+        
+        assert_eq!(description.continuous_backups_status.to_string(), "ENABLED");
+        let pitr = description.point_in_time_recovery_description.unwrap();
+        assert_eq!(pitr.point_in_time_recovery_status.to_string(), "DISABLED");
+        assert!(pitr.earliest_restorable_date_time.is_none());
+        assert!(pitr.latest_restorable_date_time.is_none());
+    }
+
+    #[test]
+    fn test_describe_continuous_backups_default_disabled() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Before enabling PITR - should return DISABLED
+        let description = manager.describe_continuous_backups("TestTable").unwrap();
+        
+        assert_eq!(description.continuous_backups_status.to_string(), "ENABLED");
+        let pitr = description.point_in_time_recovery_description.unwrap();
+        assert_eq!(pitr.point_in_time_recovery_status.to_string(), "DISABLED");
+    }
+
+    #[test]
+    fn test_describe_continuous_backups_enabled() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Enable PITR
+        manager.update_continuous_backups("TestTable", true).unwrap();
+        
+        // Describe should show enabled
+        let description = manager.describe_continuous_backups("TestTable").unwrap();
+        
+        assert_eq!(description.continuous_backups_status.to_string(), "ENABLED");
+        let pitr = description.point_in_time_recovery_description.unwrap();
+        assert_eq!(pitr.point_in_time_recovery_status.to_string(), "ENABLED");
+    }
+
+    #[test]
+    fn test_update_continuous_backups_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.update_continuous_backups("NonExistent", true);
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_describe_continuous_backups_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.describe_continuous_backups("NonExistent");
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_restore_table_to_point_in_time() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("SourceTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Enable PITR on source table
+        manager.update_continuous_backups("SourceTable", true).unwrap();
+        
+        // Restore to point in time
+        let restore_req = RestoreTableToPointInTimeRequest {
+            source_table_name: "SourceTable".to_string(),
+            target_table_name: "RestoredTable".to_string(),
+            use_latest_restorable_time: Some(true),
+            restore_date_time: None,
+        };
+        
+        let restored = manager.restore_table_to_point_in_time(&restore_req).unwrap();
+        
+        assert_eq!(restored.table_name, "RestoredTable");
+        assert_eq!(restored.table_status, "ACTIVE");
+        
+        // Verify the restored table is listed
+        let tables = manager.list_tables().unwrap();
+        assert!(tables.contains(&"RestoredTable".to_string()));
+    }
+
+    #[test]
+    fn test_restore_table_to_point_in_time_source_not_found() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let restore_req = RestoreTableToPointInTimeRequest {
+            source_table_name: "NonExistent".to_string(),
+            target_table_name: "RestoredTable".to_string(),
+            use_latest_restorable_time: Some(true),
+            restore_date_time: None,
+        };
+        
+        let result = manager.restore_table_to_point_in_time(&restore_req);
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_restore_table_to_point_in_time_target_exists() {
+        let (manager, _temp) = setup_test_manager();
+        let req1 = create_test_request("SourceTable");
+        let req2 = create_test_request("ExistingTable");
+        
+        manager.create_table(&req1).unwrap();
+        manager.create_table(&req2).unwrap();
+        
+        // Enable PITR on source table
+        manager.update_continuous_backups("SourceTable", true).unwrap();
+        
+        let restore_req = RestoreTableToPointInTimeRequest {
+            source_table_name: "SourceTable".to_string(),
+            target_table_name: "ExistingTable".to_string(),
+            use_latest_restorable_time: Some(true),
+            restore_date_time: None,
+        };
+        
+        let result = manager.restore_table_to_point_in_time(&restore_req);
+        assert!(matches!(result, Err(StorageError::TableAlreadyExists(_))));
+    }
+
+    #[test]
+    fn test_restore_table_to_point_in_time_pitr_not_enabled() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("SourceTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Don't enable PITR - try to restore directly
+        let restore_req = RestoreTableToPointInTimeRequest {
+            source_table_name: "SourceTable".to_string(),
+            target_table_name: "RestoredTable".to_string(),
+            use_latest_restorable_time: Some(true),
+            restore_date_time: None,
+        };
+        
+        let result = manager.restore_table_to_point_in_time(&restore_req);
+        assert!(matches!(result, Err(StorageError::InvalidKey(_))));
     }
 }
 

@@ -376,6 +376,12 @@ pub struct DynamoDBResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoints: Option<Vec<Endpoint>>,
 
+    // Backup fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "BackupDescription")]
+    pub backup_description: Option<BackupDescription>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "BackupSummaries")]
+    pub backup_summaries: Option<Vec<BackupSummary>>,
+
     // Item operation fields
     #[serde(skip_serializing_if = "Option::is_none", rename = "Item")]
     pub item: Option<Item>,
@@ -398,9 +404,17 @@ pub struct DynamoDBResponse {
     #[serde(skip_serializing_if = "Option::is_none", rename = "UnprocessedItems")]
     pub unprocessed_items: Option<HashMap<String, Vec<WriteRequest>>>,
 
+    // Transaction operation fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "Responses")]
+    pub item_responses: Option<Vec<ItemResponse>>,
+
     // Time to live fields
     #[serde(skip_serializing_if = "Option::is_none", rename = "TimeToLiveDescription")]
     pub time_to_live_description: Option<TimeToLiveDescription>,
+
+    // PITR fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ContinuousBackupsDescription")]
+    pub continuous_backups_description: Option<ContinuousBackupsDescription>,
 }
 
 /// Endpoint information
@@ -703,6 +717,288 @@ pub struct DescribeTimeToLiveRequest {
 pub struct DescribeTimeToLiveResponse {
     #[serde(rename = "TimeToLiveDescription")]
     pub time_to_live_description: TimeToLiveDescription,
+}
+
+// ============== Backup/Restore Operations ==============
+
+/// Backup status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum BackupStatus {
+    #[serde(rename = "CREATING")]
+    Creating,
+    #[serde(rename = "AVAILABLE")]
+    Available,
+    #[serde(rename = "DELETED")]
+    Deleted,
+}
+
+impl std::fmt::Display for BackupStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BackupStatus::Creating => write!(f, "CREATING"),
+            BackupStatus::Available => write!(f, "AVAILABLE"),
+            BackupStatus::Deleted => write!(f, "DELETED"),
+        }
+    }
+}
+
+/// Backup description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BackupDescription {
+    #[serde(rename = "BackupArn")]
+    pub backup_arn: String,
+    #[serde(rename = "BackupName")]
+    pub backup_name: String,
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "TableArn")]
+    pub table_arn: Option<String>,
+    #[serde(rename = "BackupStatus")]
+    pub backup_status: String,
+    #[serde(rename = "BackupSizeBytes")]
+    pub backup_size_bytes: i64,
+    #[serde(rename = "BackupCreationDateTime")]
+    pub backup_creation_date_time: DateTime<Utc>,
+    #[serde(rename = "BackupExpiryDateTime", skip_serializing_if = "Option::is_none")]
+    pub backup_expiry_date_time: Option<DateTime<Utc>>,
+}
+
+/// Backup summary for ListBackups
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BackupSummary {
+    #[serde(rename = "BackupArn")]
+    pub backup_arn: String,
+    #[serde(rename = "BackupName")]
+    pub backup_name: String,
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "BackupStatus")]
+    pub backup_status: String,
+    #[serde(rename = "BackupCreationDateTime")]
+    pub backup_creation_date_time: DateTime<Utc>,
+    #[serde(rename = "BackupSizeBytes", skip_serializing_if = "Option::is_none")]
+    pub backup_size_bytes: Option<i64>,
+}
+
+/// CreateBackup request
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateBackupRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "BackupName")]
+    pub backup_name: Option<String>,
+}
+
+/// CreateBackup response
+#[derive(Debug, Serialize)]
+pub struct CreateBackupResponse {
+    #[serde(rename = "BackupDescription")]
+    pub backup_description: BackupDescription,
+}
+
+/// DescribeBackup request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeBackupRequest {
+    #[serde(rename = "BackupArn")]
+    pub backup_arn: String,
+}
+
+/// DescribeBackup response
+#[derive(Debug, Serialize)]
+pub struct DescribeBackupResponse {
+    #[serde(rename = "BackupDescription")]
+    pub backup_description: BackupDescription,
+}
+
+/// ListBackups request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListBackupsRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: Option<String>,
+    #[serde(rename = "Limit")]
+    pub limit: Option<i32>,
+    #[serde(rename = "ExclusiveStartBackupArn")]
+    pub exclusive_start_backup_arn: Option<String>,
+}
+
+/// ListBackups response
+#[derive(Debug, Serialize)]
+pub struct ListBackupsResponse {
+    #[serde(rename = "BackupSummaries")]
+    pub backup_summaries: Vec<BackupSummary>,
+    #[serde(rename = "LastEvaluatedBackupArn", skip_serializing_if = "Option::is_none")]
+    pub last_evaluated_backup_arn: Option<String>,
+}
+
+/// DeleteBackup request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeleteBackupRequest {
+    #[serde(rename = "BackupArn")]
+    pub backup_arn: String,
+}
+
+/// DeleteBackup response
+#[derive(Debug, Serialize)]
+pub struct DeleteBackupResponse {
+    #[serde(rename = "BackupDescription")]
+    pub backup_description: BackupDescription,
+}
+
+/// RestoreTableFromBackup request
+#[derive(Debug, Clone, Deserialize)]
+pub struct RestoreTableFromBackupRequest {
+    #[serde(rename = "TargetTableName")]
+    pub target_table_name: String,
+    #[serde(rename = "BackupArn")]
+    pub backup_arn: String,
+}
+
+/// RestoreTableFromBackup response
+#[derive(Debug, Serialize)]
+pub struct RestoreTableFromBackupResponse {
+    #[serde(rename = "TableDescription")]
+    pub table_description: TableMetadata,
+}
+
+/// Internal backup metadata stored in backups database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupMetadata {
+    pub backup_id: String,
+    pub backup_name: String,
+    pub table_name: String,
+    pub table_arn: Option<String>,
+    pub backup_status: String,
+    pub backup_size_bytes: i64,
+    pub backup_creation_date_time: DateTime<Utc>,
+    pub source_table_metadata: Option<TableMetadata>,
+}
+
+// ============== Point-in-Time Recovery (PITR) Operations ==============
+
+/// Point-in-time recovery status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PointInTimeRecoveryStatus {
+    #[serde(rename = "ENABLING")]
+    Enabling,
+    #[serde(rename = "ENABLED")]
+    Enabled,
+    #[serde(rename = "DISABLING")]
+    Disabling,
+    #[serde(rename = "DISABLED")]
+    Disabled,
+}
+
+impl std::fmt::Display for PointInTimeRecoveryStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PointInTimeRecoveryStatus::Enabling => write!(f, "ENABLING"),
+            PointInTimeRecoveryStatus::Enabled => write!(f, "ENABLED"),
+            PointInTimeRecoveryStatus::Disabling => write!(f, "DISABLING"),
+            PointInTimeRecoveryStatus::Disabled => write!(f, "DISABLED"),
+        }
+    }
+}
+
+/// Point-in-time recovery description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PointInTimeRecoveryDescription {
+    #[serde(rename = "PointInTimeRecoveryStatus")]
+    pub point_in_time_recovery_status: PointInTimeRecoveryStatus,
+    #[serde(rename = "EarliestRestorableDateTime", skip_serializing_if = "Option::is_none")]
+    pub earliest_restorable_date_time: Option<DateTime<Utc>>,
+    #[serde(rename = "LatestRestorableDateTime", skip_serializing_if = "Option::is_none")]
+    pub latest_restorable_date_time: Option<DateTime<Utc>>,
+}
+
+/// Continuous backups status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ContinuousBackupsStatus {
+    #[serde(rename = "ENABLED")]
+    Enabled,
+    #[serde(rename = "DISABLED")]
+    Disabled,
+}
+
+impl std::fmt::Display for ContinuousBackupsStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContinuousBackupsStatus::Enabled => write!(f, "ENABLED"),
+            ContinuousBackupsStatus::Disabled => write!(f, "DISABLED"),
+        }
+    }
+}
+
+/// Continuous backups description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ContinuousBackupsDescription {
+    #[serde(rename = "ContinuousBackupsStatus")]
+    pub continuous_backups_status: ContinuousBackupsStatus,
+    #[serde(rename = "PointInTimeRecoveryDescription", skip_serializing_if = "Option::is_none")]
+    pub point_in_time_recovery_description: Option<PointInTimeRecoveryDescription>,
+}
+
+/// Point-in-time recovery specification
+#[derive(Debug, Clone, Deserialize)]
+pub struct PointInTimeRecoverySpecification {
+    #[serde(rename = "PointInTimeRecoveryEnabled")]
+    pub point_in_time_recovery_enabled: bool,
+}
+
+/// UpdateContinuousBackups request
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateContinuousBackupsRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "PointInTimeRecoverySpecification")]
+    pub point_in_time_recovery_specification: PointInTimeRecoverySpecification,
+}
+
+/// UpdateContinuousBackups response
+#[derive(Debug, Serialize)]
+pub struct UpdateContinuousBackupsResponse {
+    #[serde(rename = "ContinuousBackupsDescription")]
+    pub continuous_backups_description: ContinuousBackupsDescription,
+}
+
+/// DescribeContinuousBackups request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeContinuousBackupsRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+}
+
+/// DescribeContinuousBackups response
+#[derive(Debug, Serialize)]
+pub struct DescribeContinuousBackupsResponse {
+    #[serde(rename = "ContinuousBackupsDescription")]
+    pub continuous_backups_description: ContinuousBackupsDescription,
+}
+
+/// RestoreTableToPointInTime request
+#[derive(Debug, Clone, Deserialize)]
+pub struct RestoreTableToPointInTimeRequest {
+    #[serde(rename = "SourceTableName")]
+    pub source_table_name: String,
+    #[serde(rename = "TargetTableName")]
+    pub target_table_name: String,
+    #[serde(rename = "UseLatestRestorableTime", skip_serializing_if = "Option::is_none")]
+    pub use_latest_restorable_time: Option<bool>,
+    #[serde(rename = "RestoreDateTime", skip_serializing_if = "Option::is_none")]
+    pub restore_date_time: Option<DateTime<Utc>>,
+}
+
+/// RestoreTableToPointInTime response
+#[derive(Debug, Serialize)]
+pub struct RestoreTableToPointInTimeResponse {
+    #[serde(rename = "TableDescription")]
+    pub table_description: TableMetadata,
+}
+
+/// Internal PITR configuration stored in table metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PitrConfiguration {
+    pub enabled: bool,
+    pub enabled_at: Option<DateTime<Utc>>,
 }
 
 #[cfg(test)]

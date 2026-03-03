@@ -772,10 +772,10 @@ impl ItemManager {
         &self,
         items: &[TransactGetItem],
     ) -> Result<Vec<ItemResponse>, ItemError> {
-        // DynamoDB limit: up to 25 items
-        if items.len() > 25 {
+        // DynamoDB limit: up to 100 items for TransactGetItems
+        if items.len() > 100 {
             return Err(ItemError::InvalidKey(
-                "TransactGetItems can retrieve up to 25 items".to_string(),
+                "TransactGetItems can retrieve up to 100 items".to_string(),
             ));
         }
 
@@ -886,11 +886,74 @@ impl ItemManager {
     /// Execute a transact write operation
     fn execute_transact_write(&self, item: &TransactWriteItem) -> Result<(), ItemError> {
         if let Some(ref put) = item.put {
-            self.put_item(&put.table_name, &put.item, false, None, None, None)?;
+            // Handle conditional put
+            let condition_expression = put.condition_expression.as_deref();
+            self.put_item(
+                &put.table_name,
+                &put.item,
+                false,
+                condition_expression,
+                None,
+                None,
+            )?;
+        } else if let Some(ref update) = item.update {
+            // Execute update with optional update expression
+            let update_expression = update.update_expression.as_deref();
+            self.update_item(
+                &update.table_name,
+                &update.key,
+                update_expression,
+                None,
+                "NONE",
+                None,
+                None,
+            )?;
         } else if let Some(ref delete) = item.delete {
-            self.delete_item(&delete.table_name, &delete.key, false, None, None, None)?;
+            // Handle conditional delete
+            let condition_expression = delete.condition_expression.as_deref();
+            self.delete_item(
+                &delete.table_name,
+                &delete.key,
+                false,
+                condition_expression,
+                None,
+                None,
+            )?;
+        } else if let Some(ref condition_check) = item.condition_check {
+            // ConditionCheck - verify the condition without modifying
+            let existing_item = self.get_item(
+                &condition_check.table_name,
+                &condition_check.key,
+                true,
+            )?;
+
+            // If item doesn't exist, condition check fails
+            let item_to_check = match existing_item {
+                Some(item) => item,
+                None => {
+                    return Err(ItemError::ConditionCheckFailed(
+                        "The conditional request failed".to_string(),
+                    ));
+                }
+            };
+
+            // Evaluate condition expression
+            let empty_names: HashMap<String, String> = HashMap::new();
+            let empty_values: HashMap<String, AttributeValue> = HashMap::new();
+            let evaluator = ExpressionEvaluator::new(&empty_names, &empty_values);
+            let condition = parse_condition_expression(&condition_check.condition_expression)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            let result = evaluator
+                .evaluate_condition(&condition, &item_to_check)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            if !result {
+                return Err(ItemError::ConditionCheckFailed(
+                    "The conditional request failed".to_string(),
+                ));
+            }
         }
-        // Update and ConditionCheck are simplified for now
         Ok(())
     }
 }
