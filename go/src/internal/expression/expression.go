@@ -38,8 +38,189 @@ func (e *Evaluator) EvaluateCondition(item models.Item, conditionExpr string) (b
 	return e.evaluateCondition(item, condition)
 }
 
-// parseCondition parses a simple condition expression.
+// parseCondition parses a condition expression with support for logical operators.
 func (e *Evaluator) parseCondition(expr string) (*Condition, error) {
+	expr = strings.TrimSpace(expr)
+	
+	// Parse logical expression tree
+	node, err := e.parseLogicalExpr(expr)
+	if err != nil {
+		return nil, err
+	}
+	
+	return node, nil
+}
+
+// parseLogicalExpr parses logical expressions (AND, OR, NOT).
+func (e *Evaluator) parseLogicalExpr(expr string) (*Condition, error) {
+	expr = strings.TrimSpace(expr)
+	
+	// Strip outer parentheses
+	expr = e.stripOuterParens(expr)
+	upperExpr := strings.ToUpper(expr)
+	
+	// Handle NOT operator (highest precedence among logical operators)
+	if strings.HasPrefix(upperExpr, "NOT ") {
+		operand, err := e.parseLogicalExpr(expr[4:])
+		if err != nil {
+			return nil, err
+		}
+		return &Condition{
+			Operator: "NOT",
+			Operands: []*Condition{operand},
+		}, nil
+	}
+	
+	// Handle AND operator (lower precedence than NOT)
+	if andIdx := e.findLogicalOperator(expr, "AND"); andIdx != -1 {
+		left, err := e.parseLogicalExpr(expr[:andIdx])
+		if err != nil {
+			return nil, err
+		}
+		right, err := e.parseLogicalExpr(expr[andIdx+4:])
+		if err != nil {
+			return nil, err
+		}
+		return &Condition{
+			Operator: "AND",
+			Operands: []*Condition{left, right},
+		}, nil
+	}
+	
+	// Handle OR operator (lowest precedence)
+	if orIdx := e.findLogicalOperator(expr, "OR"); orIdx != -1 {
+		left, err := e.parseLogicalExpr(expr[:orIdx])
+		if err != nil {
+			return nil, err
+		}
+		right, err := e.parseLogicalExpr(expr[orIdx+3:])
+		if err != nil {
+			return nil, err
+		}
+		return &Condition{
+			Operator: "OR",
+			Operands: []*Condition{left, right},
+		}, nil
+	}
+	
+	// No logical operators - parse simple condition
+	return e.parseSimpleCondition(expr)
+}
+
+// stripOuterParens removes matching outer parentheses from an expression.
+func (e *Evaluator) stripOuterParens(expr string) string {
+	expr = strings.TrimSpace(expr)
+	for len(expr) >= 2 && expr[0] == '(' && expr[len(expr)-1] == ')' {
+		// Make sure the parentheses are matching (not something like "(a) AND (b)")
+		if e.isMatchingParen(expr, 0, len(expr)-1) {
+			expr = strings.TrimSpace(expr[1 : len(expr)-1])
+		} else {
+			break
+		}
+	}
+	return expr
+}
+
+// isMatchingParen checks if the parentheses at start and end are matching.
+func (e *Evaluator) isMatchingParen(expr string, start, end int) bool {
+	depth := 0
+	for i := start; i <= end; i++ {
+		if expr[i] == '(' {
+			depth++
+		} else if expr[i] == ')' {
+			depth--
+			if depth == 0 && i < end {
+				// Found closing paren before end, so start paren doesn't match end
+				return false
+			}
+		}
+	}
+	return depth == 0
+}
+
+// findLogicalOperator finds the top-level logical operator (not inside parentheses).
+// It also avoids matching AND when it's part of a BETWEEN expression.
+func (e *Evaluator) findLogicalOperator(expr, op string) int {
+	upperExpr := strings.ToUpper(expr)
+	opLen := len(op)
+	depth := 0
+	
+	for i := 0; i <= len(upperExpr)-opLen; i++ {
+		ch := upperExpr[i]
+		
+		switch ch {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		default:
+			if depth == 0 && strings.HasPrefix(upperExpr[i:], op) {
+				// Make sure it's a whole word (preceded by space or start, followed by space or end)
+				if i == 0 || upperExpr[i-1] == ' ' {
+					afterIdx := i + opLen
+					if afterIdx >= len(upperExpr) || upperExpr[afterIdx] == ' ' {
+						// For AND, make sure it's not part of a BETWEEN expression
+						if op == "AND" {
+							// Check if there's a BETWEEN before this AND
+							if e.isBetweenAnd(upperExpr, i) != -1 {
+								continue // Skip this AND, it's part of BETWEEN
+							}
+							// Also check for "BETWEEN ... AND ..." pattern
+							if e.isPartOfBetweenExpression(upperExpr, i) {
+								continue // Skip this AND
+							}
+						}
+						return i
+					}
+				}
+			}
+		}
+	}
+	
+	return -1
+}
+
+// isBetweenAnd checks if this AND is part of a "BETWEEN ... AND" pattern
+func (e *Evaluator) isBetweenAnd(upperExpr string, andIdx int) int {
+	// Look backwards for BETWEEN
+	beforeAnd := upperExpr[:andIdx]
+	// Check if there's a BETWEEN (not inside parens) before this AND
+	if strings.Contains(beforeAnd, " BETWEEN ") {
+		// Find the last BETWEEN
+		betweenIdx := strings.LastIndex(beforeAnd, " BETWEEN ")
+		if betweenIdx != -1 {
+			// Check if the BETWEEN is at the same paren depth as the AND
+			// and there's no other logical operator between them
+			return betweenIdx
+		}
+	}
+	return -1
+}
+
+// isPartOfBetweenExpression checks if this AND is part of a BETWEEN expression
+func (e *Evaluator) isPartOfBetweenExpression(upperExpr string, andIdx int) bool {
+	// Simple heuristic: if there's a BETWEEN somewhere before this AND
+	// and no other logical operator (AND/OR) between the BETWEEN and this AND
+	beforeAnd := upperExpr[:andIdx]
+	
+	// Find the last BETWEEN before this AND
+	betweenIdx := strings.LastIndex(beforeAnd, " BETWEEN ")
+	if betweenIdx == -1 {
+		return false
+	}
+	
+	// Check if there's another logical operator between BETWEEN and AND
+	betweenSection := beforeAnd[betweenIdx:]
+	if strings.Contains(betweenSection, " AND ") || strings.Contains(betweenSection, " OR ") {
+		// There's another logical operator, so this AND might be a logical operator
+		return false
+	}
+	
+	return true
+}
+
+// parseSimpleCondition parses a simple condition without logical operators.
+func (e *Evaluator) parseSimpleCondition(expr string) (*Condition, error) {
 	expr = strings.TrimSpace(expr)
 	upperExpr := strings.ToUpper(expr)
 
@@ -57,6 +238,16 @@ func (e *Evaluator) parseCondition(expr string) (*Condition, error) {
 		path = e.resolveAttributeName(path)
 		exists := false
 		return &Condition{Exists: &exists, Path: path}, nil
+	}
+	
+	// Handle begins_with function
+	if strings.HasPrefix(upperExpr, "BEGINS_WITH(") {
+		return e.parseBeginsWith(expr)
+	}
+	
+	// Handle contains function
+	if strings.HasPrefix(upperExpr, "CONTAINS(") {
+		return e.parseContains(expr)
 	}
 
 	// Handle BETWEEN operator
@@ -92,21 +283,96 @@ func (e *Evaluator) extractFunctionArg(expr, funcName string) string {
 	return strings.TrimSpace(expr[start:end])
 }
 
+// parseBeginsWith parses a begins_with function call.
+func (e *Evaluator) parseBeginsWith(expr string) (*Condition, error) {
+	// Extract arguments: begins_with(path, prefix)
+	args, err := e.extractFunctionArgs(expr, "begins_with")
+	if err != nil {
+		return nil, err
+	}
+	if len(args) != 2 {
+		return nil, fmt.Errorf("begins_with requires 2 arguments")
+	}
+	
+	path := e.resolveAttributeName(strings.TrimSpace(args[0]))
+	prefix, err := e.resolveValue(strings.TrimSpace(args[1]))
+	if err != nil {
+		return nil, err
+	}
+	
+	return &Condition{
+		Operator: "BEGINS_WITH",
+		Path:     path,
+		Value:    prefix,
+	}, nil
+}
+
+// parseContains parses a contains function call.
+func (e *Evaluator) parseContains(expr string) (*Condition, error) {
+	// Extract arguments: contains(path, operand)
+	args, err := e.extractFunctionArgs(expr, "contains")
+	if err != nil {
+		return nil, err
+	}
+	if len(args) != 2 {
+		return nil, fmt.Errorf("contains requires 2 arguments")
+	}
+	
+	path := e.resolveAttributeName(strings.TrimSpace(args[0]))
+	operand, err := e.resolveValue(strings.TrimSpace(args[1]))
+	if err != nil {
+		return nil, err
+	}
+	
+	return &Condition{
+		Operator: "CONTAINS",
+		Path:     path,
+		Value:    operand,
+	}, nil
+}
+
+// extractFunctionArgs extracts all arguments from a function call.
+func (e *Evaluator) extractFunctionArgs(expr, funcName string) ([]string, error) {
+	prefix := funcName + "("
+	start := strings.Index(strings.ToLower(expr), strings.ToLower(prefix))
+	if start == -1 {
+		return nil, fmt.Errorf("invalid %s expression", funcName)
+	}
+	
+	start += len(prefix)
+	end := strings.LastIndex(expr, ")")
+	if end == -1 || end <= start {
+		return nil, fmt.Errorf("invalid %s expression: missing closing paren", funcName)
+	}
+	
+	// Split by comma, respecting parentheses
+	argsStr := expr[start:end]
+	return e.splitValues(argsStr), nil
+}
+
 // parseBetween parses a BETWEEN condition.
 func (e *Evaluator) parseBetween(expr string) (*Condition, error) {
 	upperExpr := strings.ToUpper(expr)
 	betweenIdx := strings.Index(upperExpr, " BETWEEN ")
-	andIdx := strings.Index(upperExpr[betweenIdx+9:], " AND ")
 	
-	if betweenIdx == -1 || andIdx == -1 {
+	if betweenIdx == -1 {
 		return nil, fmt.Errorf("invalid BETWEEN expression: %s", expr)
 	}
 
 	path := strings.TrimSpace(expr[:betweenIdx])
 	path = e.resolveAttributeName(path)
 
-	lowerBound := strings.TrimSpace(expr[betweenIdx+9 : betweenIdx+9+andIdx])
-	upperBound := strings.TrimSpace(expr[betweenIdx+9+andIdx+5:])
+	// Find the AND that comes after BETWEEN - it must be at the top level (not inside parens)
+	afterBetween := expr[betweenIdx+9:]
+	
+	// Find the AND that separates lower and upper bounds
+	andIdx := e.findAndForBetween(afterBetween)
+	if andIdx == -1 {
+		return nil, fmt.Errorf("invalid BETWEEN expression, missing AND: %s", expr)
+	}
+
+	lowerBound := strings.TrimSpace(afterBetween[:andIdx])
+	upperBound := strings.TrimSpace(afterBetween[andIdx+4:]) // +4 for "AND "
 
 	lowerVal, err := e.resolveValue(lowerBound)
 	if err != nil {
@@ -123,6 +389,35 @@ func (e *Evaluator) parseBetween(expr string) (*Condition, error) {
 		Path:     path,
 		Values:   []models.AttributeValue{lowerVal, upperVal},
 	}, nil
+}
+
+// findAndForBetween finds the AND that separates lower and upper bounds in a BETWEEN expression.
+// It finds the first AND at depth 0.
+func (e *Evaluator) findAndForBetween(expr string) int {
+	upperExpr := strings.ToUpper(expr)
+	depth := 0
+	
+	for i := 0; i < len(upperExpr)-3; i++ {
+		ch := upperExpr[i]
+		
+		switch ch {
+		case '(':
+			depth++
+		case ')':
+			depth--
+		default:
+			if depth == 0 && upperExpr[i:i+4] == "AND " {
+				return i
+			}
+		}
+	}
+	
+	// Also check for AND at the end (without trailing space)
+	if depth == 0 && len(upperExpr) >= 3 && upperExpr[len(upperExpr)-3:] == "AND" {
+		return len(upperExpr) - 3
+	}
+	
+	return -1
 }
 
 // parseIn parses an IN condition.
@@ -293,6 +588,41 @@ func (e *Evaluator) splitValues(s string) []string {
 
 // evaluateCondition evaluates a parsed condition against an item.
 func (e *Evaluator) evaluateCondition(item models.Item, condition *Condition) (bool, error) {
+	// Handle logical operators
+	switch condition.Operator {
+	case "AND":
+		for _, operand := range condition.Operands {
+			result, err := e.evaluateCondition(item, operand)
+			if err != nil {
+				return false, err
+			}
+			if !result {
+				return false, nil
+			}
+		}
+		return true, nil
+	case "OR":
+		for _, operand := range condition.Operands {
+			result, err := e.evaluateCondition(item, operand)
+			if err != nil {
+				return false, err
+			}
+			if result {
+				return true, nil
+			}
+		}
+		return false, nil
+	case "NOT":
+		if len(condition.Operands) != 1 {
+			return false, fmt.Errorf("NOT requires exactly 1 operand")
+		}
+		result, err := e.evaluateCondition(item, condition.Operands[0])
+		if err != nil {
+			return false, err
+		}
+		return !result, nil
+	}
+
 	// Handle exists checks
 	if condition.Exists != nil {
 		_, exists := item[condition.Path]
@@ -330,9 +660,72 @@ func (e *Evaluator) evaluateCondition(item models.Item, condition *Condition) (b
 			}
 		}
 		return false, nil
+	case "BEGINS_WITH":
+		return e.evaluateBeginsWith(attrValue, condition.Value), nil
+	case "CONTAINS":
+		return e.evaluateContains(attrValue, condition.Value), nil
 	default:
 		return false, fmt.Errorf("unsupported operator: %s", condition.Operator)
 	}
+}
+
+// evaluateBeginsWith checks if a string attribute begins with a prefix.
+func (e *Evaluator) evaluateBeginsWith(attrValue, prefix models.AttributeValue) bool {
+	attrStr, ok := attrValue.GetString()
+	if !ok {
+		return false
+	}
+	prefixStr, ok := prefix.GetString()
+	if !ok {
+		return false
+	}
+	return strings.HasPrefix(attrStr, prefixStr)
+}
+
+// evaluateContains checks if a string or set contains a value.
+func (e *Evaluator) evaluateContains(attrValue, operand models.AttributeValue) bool {
+	// Check string contains
+	if attrStr, ok := attrValue.GetString(); ok {
+		if opStr, ok := operand.GetString(); ok {
+			return strings.Contains(attrStr, opStr)
+		}
+		return false
+	}
+	
+	// Check set contains
+	// String set
+	if attrSS, ok := attrValue["SS"].([]interface{}); ok {
+		if opStr, ok := operand.GetString(); ok {
+			for _, v := range attrSS {
+				if vs, ok := v.(string); ok && vs == opStr {
+					return true
+				}
+			}
+		}
+	}
+	// Number set
+	if attrNS, ok := attrValue["NS"].([]interface{}); ok {
+		if opNum, ok := operand.GetNumber(); ok {
+			for _, v := range attrNS {
+				if vs, ok := v.(string); ok && vs == opNum {
+					return true
+				}
+			}
+		}
+	}
+	
+	// Check list contains
+	if attrList, ok := attrValue["L"].([]interface{}); ok {
+		for _, item := range attrList {
+			if itemAV, ok := item.(map[string]interface{}); ok {
+				if e.compareValues(models.AttributeValue(itemAV), operand) == 0 {
+					return true
+				}
+			}
+		}
+	}
+	
+	return false
 }
 
 // compareValues compares two attribute values.
@@ -433,4 +826,5 @@ type Condition struct {
 	Value    models.AttributeValue
 	Values   []models.AttributeValue
 	Exists   *bool
+	Operands []*Condition // For logical operators (AND, OR, NOT)
 }
