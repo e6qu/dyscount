@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -195,6 +196,54 @@ func (tm *TableManager) ListTables() ([]string, error) {
 	}
 
 	return tables, nil
+}
+
+// ListTablesWithPagination lists tables with pagination support.
+func (tm *TableManager) ListTablesWithPagination(limit int, exclusiveStartTableName string) ([]string, string, error) {
+	nsPath := filepath.Join(tm.dataDirectory, tm.namespace)
+	entries, err := os.ReadDir(nsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{}, "", nil
+		}
+		return nil, "", fmt.Errorf("failed to read namespace directory: %w", err)
+	}
+
+	var tables []string
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".db" {
+			tableName := entry.Name()[:len(entry.Name())-3] // Remove .db
+			tables = append(tables, tableName)
+		}
+	}
+
+	// Sort tables for consistent pagination
+	sort.Strings(tables)
+
+	// Handle exclusive start
+	if exclusiveStartTableName != "" {
+		startIdx := -1
+		for i, name := range tables {
+			if name == exclusiveStartTableName {
+				startIdx = i
+				break
+			}
+		}
+		if startIdx != -1 && startIdx < len(tables)-1 {
+			tables = tables[startIdx+1:]
+		} else {
+			tables = []string{}
+		}
+	}
+
+	// Apply limit
+	var lastEvaluatedTableName string
+	if limit > 0 && len(tables) > limit {
+		tables = tables[:limit]
+		lastEvaluatedTableName = tables[len(tables)-1]
+	}
+
+	return tables, lastEvaluatedTableName, nil
 }
 
 // DescribeTable returns table metadata.

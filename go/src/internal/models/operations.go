@@ -235,6 +235,9 @@ type DynamoDBRequest struct {
 	AttributeUpdates                map[string]AttributeUpdate   `json:"AttributeUpdates,omitempty"`
 	TotalSegments                   int                          `json:"TotalSegments,omitempty"`
 	Segment                         int                          `json:"Segment,omitempty"`
+	
+	// ListTables specific fields
+	ExclusiveStartTableName         string                       `json:"ExclusiveStartTableName,omitempty"`
 }
 
 // DynamoDBResponse represents a generic DynamoDB response.
@@ -254,6 +257,9 @@ type DynamoDBResponse struct {
 	LastEvaluatedKey    Item              `json:"LastEvaluatedKey,omitempty"`
 	ConsumedCapacity    *ConsumedCapacity `json:"ConsumedCapacity,omitempty"`
 	ItemCollectionMetrics *ItemCollectionMetrics `json:"ItemCollectionMetrics,omitempty"`
+	
+	// ListTables specific fields
+	LastEvaluatedTableName string          `json:"LastEvaluatedTableName,omitempty"`
 }
 
 // Endpoint represents a DynamoDB endpoint.
