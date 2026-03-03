@@ -415,6 +415,16 @@ pub struct DynamoDBResponse {
     // PITR fields
     #[serde(skip_serializing_if = "Option::is_none", rename = "ContinuousBackupsDescription")]
     pub continuous_backups_description: Option<ContinuousBackupsDescription>,
+
+    // Import/Export fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ExportDescription")]
+    pub export_description: Option<ExportDescription>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ExportSummaries")]
+    pub export_summaries: Option<Vec<ExportSummary>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ImportDescription")]
+    pub import_description: Option<ImportDescription>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ImportSummaries")]
+    pub import_summaries: Option<Vec<ImportSummary>>,
 }
 
 /// Endpoint information
@@ -999,6 +1009,391 @@ pub struct RestoreTableToPointInTimeResponse {
 pub struct PitrConfiguration {
     pub enabled: bool,
     pub enabled_at: Option<DateTime<Utc>>,
+}
+
+// ============== PartiQL Operations ==============
+
+/// A single PartiQL statement for batch execution
+#[derive(Debug, Clone, Deserialize)]
+pub struct PartiQLStatement {
+    /// The PartiQL statement (e.g., "SELECT * FROM table WHERE pk = ?")
+    #[serde(rename = "Statement")]
+    pub statement: String,
+    /// Optional parameters to substitute for ? placeholders
+    #[serde(rename = "Parameters", skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<Vec<AttributeValue>>,
+    /// Optional consistent read setting
+    #[serde(rename = "ConsistentRead", skip_serializing_if = "Option::is_none")]
+    pub consistent_read: Option<bool>,
+}
+
+/// Response for a single PartiQL statement in a batch
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct PartiQLResponse {
+    /// The item returned by INSERT or UPDATE (if ReturnValues was specified)
+    #[serde(rename = "Item", skip_serializing_if = "Option::is_none")]
+    pub item: Option<Item>,
+    /// Items returned by SELECT
+    #[serde(rename = "Items", skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<Item>>,
+    /// Error if the statement failed
+    #[serde(rename = "Error", skip_serializing_if = "Option::is_none")]
+    pub error: Option<PartiQLError>,
+}
+
+/// PartiQL error details
+#[derive(Debug, Clone, Serialize)]
+pub struct PartiQLError {
+    /// Error code
+    #[serde(rename = "Code")]
+    pub code: String,
+    /// Error message
+    #[serde(rename = "Message")]
+    pub message: String,
+}
+
+/// ExecuteStatement request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExecuteStatementRequest {
+    /// The PartiQL statement to execute
+    #[serde(rename = "Statement")]
+    pub statement: String,
+    /// Optional parameters for ? placeholders
+    #[serde(rename = "Parameters", skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<Vec<AttributeValue>>,
+    /// Optional consistent read setting
+    #[serde(rename = "ConsistentRead", skip_serializing_if = "Option::is_none")]
+    pub consistent_read: Option<bool>,
+    /// Optional next token for pagination
+    #[serde(rename = "NextToken", skip_serializing_if = "Option::is_none")]
+    pub next_token: Option<String>,
+}
+
+/// ExecuteStatement response
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ExecuteStatementResponse {
+    /// Items returned by SELECT
+    #[serde(rename = "Items", skip_serializing_if = "Option::is_none")]
+    pub items: Option<Vec<Item>>,
+    /// The item returned by INSERT or UPDATE
+    #[serde(rename = "Item", skip_serializing_if = "Option::is_none")]
+    pub item: Option<Item>,
+    /// Next token for pagination
+    #[serde(rename = "NextToken", skip_serializing_if = "Option::is_none")]
+    pub next_token: Option<String>,
+}
+
+/// BatchExecuteStatement request
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchExecuteStatementRequest {
+    /// List of PartiQL statements to execute
+    #[serde(rename = "Statements")]
+    pub statements: Vec<PartiQLStatement>,
+}
+
+/// BatchExecuteStatement response
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct BatchExecuteStatementResponse {
+    /// Responses for each statement
+    #[serde(rename = "Responses")]
+    pub responses: Vec<PartiQLResponse>,
+}
+
+// ============== Import/Export Operations ==============
+
+/// Export format
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ExportFormat {
+    #[serde(rename = "DYNAMODB_JSON")]
+    DynamoDbJson,
+}
+
+impl Default for ExportFormat {
+    fn default() -> Self {
+        ExportFormat::DynamoDbJson
+    }
+}
+
+/// Export status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ExportStatus {
+    #[serde(rename = "IN_PROGRESS")]
+    InProgress,
+    #[serde(rename = "COMPLETED")]
+    Completed,
+    #[serde(rename = "FAILED")]
+    Failed,
+}
+
+impl std::fmt::Display for ExportStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExportStatus::InProgress => write!(f, "IN_PROGRESS"),
+            ExportStatus::Completed => write!(f, "COMPLETED"),
+            ExportStatus::Failed => write!(f, "FAILED"),
+        }
+    }
+}
+
+/// Import status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ImportStatus {
+    #[serde(rename = "IN_PROGRESS")]
+    InProgress,
+    #[serde(rename = "COMPLETED")]
+    Completed,
+    #[serde(rename = "FAILED")]
+    Failed,
+    #[serde(rename = "CANCELLED")]
+    Cancelled,
+}
+
+impl std::fmt::Display for ImportStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ImportStatus::InProgress => write!(f, "IN_PROGRESS"),
+            ImportStatus::Completed => write!(f, "COMPLETED"),
+            ImportStatus::Failed => write!(f, "FAILED"),
+            ImportStatus::Cancelled => write!(f, "CANCELLED"),
+        }
+    }
+}
+
+/// Export description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExportDescription {
+    #[serde(rename = "ExportArn")]
+    pub export_arn: String,
+    #[serde(rename = "ExportStatus")]
+    pub export_status: String,
+    #[serde(rename = "TableArn", skip_serializing_if = "Option::is_none")]
+    pub table_arn: Option<String>,
+    #[serde(rename = "S3Bucket")]
+    pub s3_bucket: String,
+    #[serde(rename = "S3Prefix", skip_serializing_if = "Option::is_none")]
+    pub s3_prefix: Option<String>,
+    #[serde(rename = "ExportFormat")]
+    pub export_format: String,
+    #[serde(rename = "ItemCount", skip_serializing_if = "Option::is_none")]
+    pub item_count: Option<i64>,
+    #[serde(rename = "ExportTime", skip_serializing_if = "Option::is_none")]
+    pub export_time: Option<DateTime<Utc>>,
+    #[serde(rename = "StartTime", skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<DateTime<Utc>>,
+    #[serde(rename = "EndTime", skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<DateTime<Utc>>,
+    #[serde(rename = "FailureCode", skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
+    #[serde(rename = "FailureMessage", skip_serializing_if = "Option::is_none")]
+    pub failure_message: Option<String>,
+}
+
+/// Import description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ImportDescription {
+    #[serde(rename = "ImportArn")]
+    pub import_arn: String,
+    #[serde(rename = "ImportStatus")]
+    pub import_status: String,
+    #[serde(rename = "TableArn", skip_serializing_if = "Option::is_none")]
+    pub table_arn: Option<String>,
+    #[serde(rename = "S3BucketSource")]
+    pub s3_bucket_source: S3BucketSource,
+    #[serde(rename = "InputFormat")]
+    pub input_format: String,
+    #[serde(rename = "ProcessedItemCount", skip_serializing_if = "Option::is_none")]
+    pub processed_item_count: Option<i64>,
+    #[serde(rename = "ImportedItemCount", skip_serializing_if = "Option::is_none")]
+    pub imported_item_count: Option<i64>,
+    #[serde(rename = "ErrorCount", skip_serializing_if = "Option::is_none")]
+    pub error_count: Option<i64>,
+    #[serde(rename = "StartTime", skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<DateTime<Utc>>,
+    #[serde(rename = "EndTime", skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<DateTime<Utc>>,
+    #[serde(rename = "FailureCode", skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
+    #[serde(rename = "FailureMessage", skip_serializing_if = "Option::is_none")]
+    pub failure_message: Option<String>,
+}
+
+/// S3 bucket source for import
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct S3BucketSource {
+    #[serde(rename = "S3Bucket")]
+    pub s3_bucket: String,
+    #[serde(rename = "S3KeyPrefix", skip_serializing_if = "Option::is_none")]
+    pub s3_key_prefix: Option<String>,
+}
+
+/// Export summary for ListExports
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExportSummary {
+    #[serde(rename = "ExportArn")]
+    pub export_arn: String,
+    #[serde(rename = "ExportStatus")]
+    pub export_status: String,
+    #[serde(rename = "TableArn", skip_serializing_if = "Option::is_none")]
+    pub table_arn: Option<String>,
+}
+
+/// Import summary for ListImports
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ImportSummary {
+    #[serde(rename = "ImportArn")]
+    pub import_arn: String,
+    #[serde(rename = "ImportStatus")]
+    pub import_status: String,
+    #[serde(rename = "TableArn", skip_serializing_if = "Option::is_none")]
+    pub table_arn: Option<String>,
+}
+
+/// ExportTableToPointInTime request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportTableToPointInTimeRequest {
+    #[serde(rename = "TableArn")]
+    pub table_arn: String,
+    #[serde(rename = "S3Bucket")]
+    pub s3_bucket: String,
+    #[serde(rename = "S3Prefix", skip_serializing_if = "Option::is_none")]
+    pub s3_prefix: Option<String>,
+    #[serde(rename = "ExportFormat", skip_serializing_if = "Option::is_none")]
+    pub export_format: Option<String>,
+}
+
+/// ExportTableToPointInTime response
+#[derive(Debug, Serialize)]
+pub struct ExportTableToPointInTimeResponse {
+    #[serde(rename = "ExportDescription")]
+    pub export_description: ExportDescription,
+}
+
+/// DescribeExport request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeExportRequest {
+    #[serde(rename = "ExportArn")]
+    pub export_arn: String,
+}
+
+/// DescribeExport response
+#[derive(Debug, Serialize)]
+pub struct DescribeExportResponse {
+    #[serde(rename = "ExportDescription")]
+    pub export_description: ExportDescription,
+}
+
+/// ListExports request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListExportsRequest {
+    #[serde(rename = "MaxResults", skip_serializing_if = "Option::is_none")]
+    pub max_results: Option<i32>,
+    #[serde(rename = "NextToken", skip_serializing_if = "Option::is_none")]
+    pub next_token: Option<String>,
+    #[serde(rename = "TableArn", skip_serializing_if = "Option::is_none")]
+    pub table_arn: Option<String>,
+}
+
+/// ListExports response
+#[derive(Debug, Serialize)]
+pub struct ListExportsResponse {
+    #[serde(rename = "ExportSummaries")]
+    pub export_summaries: Vec<ExportSummary>,
+    #[serde(rename = "NextToken", skip_serializing_if = "Option::is_none")]
+    pub next_token: Option<String>,
+}
+
+/// ImportTable request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImportTableRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "S3BucketSource")]
+    pub s3_bucket_source: S3BucketSource,
+    #[serde(rename = "InputFormat", skip_serializing_if = "Option::is_none")]
+    pub input_format: Option<String>,
+    #[serde(rename = "KeySchema", skip_serializing_if = "Option::is_none")]
+    pub key_schema: Option<Vec<KeySchemaElement>>,
+    #[serde(rename = "AttributeDefinitions", skip_serializing_if = "Option::is_none")]
+    pub attribute_definitions: Option<Vec<AttributeDefinition>>,
+}
+
+/// ImportTable response
+#[derive(Debug, Serialize)]
+pub struct ImportTableResponse {
+    #[serde(rename = "ImportDescription")]
+    pub import_description: ImportDescription,
+}
+
+/// DescribeImport request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeImportRequest {
+    #[serde(rename = "ImportArn")]
+    pub import_arn: String,
+}
+
+/// DescribeImport response
+#[derive(Debug, Serialize)]
+pub struct DescribeImportResponse {
+    #[serde(rename = "ImportDescription")]
+    pub import_description: ImportDescription,
+}
+
+/// ListImports request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListImportsRequest {
+    #[serde(rename = "MaxResults", skip_serializing_if = "Option::is_none")]
+    pub max_results: Option<i32>,
+    #[serde(rename = "NextToken", skip_serializing_if = "Option::is_none")]
+    pub next_token: Option<String>,
+    #[serde(rename = "TableArn", skip_serializing_if = "Option::is_none")]
+    pub table_arn: Option<String>,
+}
+
+/// ListImports response
+#[derive(Debug, Serialize)]
+pub struct ListImportsResponse {
+    #[serde(rename = "ImportSummaries")]
+    pub import_summaries: Vec<ImportSummary>,
+    #[serde(rename = "NextToken", skip_serializing_if = "Option::is_none")]
+    pub next_token: Option<String>,
+}
+
+/// Internal export metadata stored in database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportMetadata {
+    pub export_id: String,
+    pub export_arn: String,
+    pub export_status: String,
+    pub table_arn: Option<String>,
+    pub table_name: String,
+    pub s3_bucket: String,
+    pub s3_prefix: Option<String>,
+    pub export_format: String,
+    pub item_count: i64,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub failure_code: Option<String>,
+    pub failure_message: Option<String>,
+}
+
+/// Internal import metadata stored in database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportMetadata {
+    pub import_id: String,
+    pub import_arn: String,
+    pub import_status: String,
+    pub table_arn: Option<String>,
+    pub table_name: String,
+    pub s3_bucket: String,
+    pub s3_key_prefix: Option<String>,
+    pub input_format: String,
+    pub processed_item_count: i64,
+    pub imported_item_count: i64,
+    pub error_count: i64,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub failure_code: Option<String>,
+    pub failure_message: Option<String>,
 }
 
 #[cfg(test)]

@@ -1105,6 +1105,559 @@ impl TableManager {
 
         Ok(new_metadata)
     }
+
+    // ============== Import/Export Operations ==============
+
+    /// Get the path for import/export storage directory
+    fn get_import_export_dir(&self) -> PathBuf {
+        self.data_directory.join(&self.namespace).join("__import_export")
+    }
+
+    /// Initialize the import/export metadata storage
+    fn init_import_export_storage(&self) -> Result<Connection, StorageError> {
+        let import_export_dir = self.get_import_export_dir();
+        fs::create_dir_all(&import_export_dir)?;
+
+        let metadata_db_path = import_export_dir.join("metadata.db");
+        let conn = Connection::open(&metadata_db_path)?;
+
+        // Create export metadata table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS exports (
+                export_id TEXT PRIMARY KEY,
+                export_arn TEXT NOT NULL UNIQUE,
+                export_status TEXT NOT NULL,
+                table_arn TEXT,
+                table_name TEXT NOT NULL,
+                s3_bucket TEXT NOT NULL,
+                s3_prefix TEXT,
+                export_format TEXT NOT NULL,
+                item_count INTEGER NOT NULL DEFAULT 0,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                failure_code TEXT,
+                failure_message TEXT
+            )",
+            [],
+        )?;
+
+        // Create import metadata table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS imports (
+                import_id TEXT PRIMARY KEY,
+                import_arn TEXT NOT NULL UNIQUE,
+                import_status TEXT NOT NULL,
+                table_arn TEXT,
+                table_name TEXT NOT NULL,
+                s3_bucket TEXT NOT NULL,
+                s3_key_prefix TEXT,
+                input_format TEXT NOT NULL,
+                processed_item_count INTEGER NOT NULL DEFAULT 0,
+                imported_item_count INTEGER NOT NULL DEFAULT 0,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                failure_code TEXT,
+                failure_message TEXT
+            )",
+            [],
+        )?;
+
+        Ok(conn)
+    }
+
+    /// Export table to point in time
+    pub fn export_table_to_point_in_time(
+        &self,
+        table_arn: &str,
+        s3_bucket: &str,
+        s3_prefix: Option<String>,
+        export_format: Option<String>,
+    ) -> Result<ExportDescription, StorageError> {
+        let table_name = self.extract_table_name_from_arn(table_arn)
+            .ok_or_else(|| StorageError::InvalidKey("Invalid table ARN".to_string()))?;
+
+        let table_metadata = self.describe_table(&table_name)?;
+        let conn = self.init_import_export_storage()?;
+
+        let export_id = Uuid::new_v4().to_string();
+        let export_arn = format!(
+            "arn:aws:dynamodb:local:{}:table/{}/export/{}:{}",
+            self.namespace, table_name, self.namespace, export_id
+        );
+
+        let export_format = export_format.unwrap_or_else(|| "DYNAMODB_JSON".to_string());
+        let s3_prefix = s3_prefix.or_else(|| Some(format!("exports/{}/", s3_bucket)));
+        let now = Utc::now();
+
+        // Use s3_bucket as directory name for easier import lookup
+        let export_dir = self.get_import_export_dir()
+            .join("exports")
+            .join(s3_bucket);
+        fs::create_dir_all(&export_dir)?;
+
+        let item_count = self.export_table_items(&table_name, &export_dir, &export_format)?;
+
+        conn.execute(
+            "INSERT INTO exports (
+                export_id, export_arn, export_status, table_arn, table_name,
+                s3_bucket, s3_prefix, export_format, item_count, start_time, end_time
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                export_id, &export_arn, "COMPLETED", table_metadata.table_arn, &table_name,
+                s3_bucket, &s3_prefix, &export_format, item_count,
+                now.to_rfc3339(), now.to_rfc3339()
+            ],
+        )?;
+
+        Ok(ExportDescription {
+            export_arn,
+            export_status: "COMPLETED".to_string(),
+            table_arn: table_metadata.table_arn,
+            s3_bucket: s3_bucket.to_string(),
+            s3_prefix,
+            export_format,
+            item_count: Some(item_count),
+            export_time: Some(now),
+            start_time: Some(now),
+            end_time: Some(now),
+            failure_code: None,
+            failure_message: None,
+        })
+    }
+
+    /// Export table items to files
+    fn export_table_items(
+        &self,
+        table_name: &str,
+        export_dir: &PathBuf,
+        _export_format: &str,
+    ) -> Result<i64, StorageError> {
+        let conn = self.get_connection(table_name)?;
+        let mut stmt = conn.prepare("SELECT data FROM items")?;
+        
+        let mut item_count: i64 = 0;
+        let mut rows = stmt.query([])?;
+
+        while let Some(row) = rows.next()? {
+            let data: Vec<u8> = row.get(0)?;
+            let item: Item = serde_json::from_slice(&data)?;
+            
+            let filename = format!("item_{}.json", item_count);
+            let file_path = export_dir.join(&filename);
+            let file = std::fs::File::create(&file_path)?;
+            serde_json::to_writer(file, &item)?;
+            
+            item_count += 1;
+        }
+
+        let metadata_path = export_dir.join("export_metadata.json");
+        let metadata = serde_json::json!({
+            "table_name": table_name,
+            "item_count": item_count,
+            "export_time": Utc::now().to_rfc3339(),
+            "format": "DYNAMODB_JSON"
+        });
+        let file = std::fs::File::create(&metadata_path)?;
+        serde_json::to_writer(file, &metadata)?;
+
+        Ok(item_count)
+    }
+
+    /// Describe an export by ARN
+    pub fn describe_export(&self, export_arn: &str) -> Result<ExportDescription, StorageError> {
+        let export_id = self.extract_export_id_from_arn(export_arn)
+            .ok_or_else(|| StorageError::InvalidKey("Invalid export ARN".to_string()))?;
+
+        let conn = self.init_import_export_storage()?;
+
+        let mut stmt = conn.prepare(
+            "SELECT export_status, table_arn, s3_bucket, s3_prefix, export_format,
+                    item_count, start_time, end_time, failure_code, failure_message
+             FROM exports WHERE export_id = ?"
+        )?;
+
+        let result: Result<ExportDescription, rusqlite::Error> = stmt.query_row(
+            [&export_id],
+            |row| {
+                let start_time_str: String = row.get(6)?;
+                let end_time_str: Option<String> = row.get(7)?;
+
+                Ok(ExportDescription {
+                    export_arn: export_arn.to_string(),
+                    export_status: row.get(0)?,
+                    table_arn: row.get(1)?,
+                    s3_bucket: row.get(2)?,
+                    s3_prefix: row.get(3)?,
+                    export_format: row.get(4)?,
+                    item_count: row.get(5)?,
+                    export_time: DateTime::parse_from_rfc3339(&start_time_str).ok().map(|d| d.with_timezone(&Utc)),
+                    start_time: DateTime::parse_from_rfc3339(&start_time_str).ok().map(|d| d.with_timezone(&Utc)),
+                    end_time: end_time_str.and_then(|s| DateTime::parse_from_rfc3339(&s).ok()).map(|d| d.with_timezone(&Utc)),
+                    failure_code: row.get(8)?,
+                    failure_message: row.get(9)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(desc) => Ok(desc),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(StorageError::TableNotFound(format!("Export not found: {}", export_arn)))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// List all exports
+    pub fn list_exports(&self, table_arn: Option<&str>) -> Result<Vec<ExportSummary>, StorageError> {
+        let conn = self.init_import_export_storage()?;
+        let mut summaries = Vec::new();
+
+        if let Some(table_arn) = table_arn {
+            let mut stmt = conn.prepare(
+                "SELECT export_arn, export_status, table_arn FROM exports WHERE table_arn = ? ORDER BY start_time DESC"
+            )?;
+
+            let rows = stmt.query_map([table_arn], |row| {
+                Ok(ExportSummary {
+                    export_arn: row.get(0)?,
+                    export_status: row.get(1)?,
+                    table_arn: row.get(2)?,
+                })
+            })?;
+
+            for row in rows {
+                summaries.push(row?);
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT export_arn, export_status, table_arn FROM exports ORDER BY start_time DESC"
+            )?;
+
+            let rows = stmt.query_map([], |row| {
+                Ok(ExportSummary {
+                    export_arn: row.get(0)?,
+                    export_status: row.get(1)?,
+                    table_arn: row.get(2)?,
+                })
+            })?;
+
+            for row in rows {
+                summaries.push(row?);
+            }
+        }
+
+        Ok(summaries)
+    }
+
+    /// Import table from export files
+    pub fn import_table(
+        &self,
+        table_name: &str,
+        s3_bucket_source: &S3BucketSource,
+        input_format: Option<String>,
+        key_schema: Option<Vec<KeySchemaElement>>,
+        attribute_definitions: Option<Vec<AttributeDefinition>>,
+    ) -> Result<ImportDescription, StorageError> {
+        let target_db_path = self.get_db_path(table_name);
+        let table_exists = target_db_path.exists();
+        let conn = self.init_import_export_storage()?;
+
+        let import_id = Uuid::new_v4().to_string();
+        let import_arn = format!(
+            "arn:aws:dynamodb:local:{}:import/{}:{}",
+            self.namespace, self.namespace, import_id
+        );
+
+        let input_format = input_format.unwrap_or_else(|| "DYNAMODB_JSON".to_string());
+        let now = Utc::now();
+
+        let export_dir = self.get_import_export_dir()
+            .join("exports")
+            .join(&s3_bucket_source.s3_bucket);
+
+        if !export_dir.exists() {
+            conn.execute(
+                "INSERT INTO imports (import_id, import_arn, import_status, table_arn, table_name,
+                    s3_bucket, s3_key_prefix, input_format, processed_item_count, imported_item_count,
+                    error_count, start_time, end_time, failure_code, failure_message)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    import_id, &import_arn, "FAILED", None::<String>, table_name,
+                    &s3_bucket_source.s3_bucket, s3_bucket_source.s3_key_prefix.as_ref(),
+                    &input_format, 0, 0, 1, now.to_rfc3339(), now.to_rfc3339(),
+                    "ExportNotFound", "Source export not found"
+                ],
+            )?;
+            return Err(StorageError::TableNotFound(format!("Source export not found: {}", s3_bucket_source.s3_bucket)));
+        }
+
+        if !table_exists {
+            let key_schema = key_schema.unwrap_or_else(|| vec![KeySchemaElement::hash("pk")]);
+            let attribute_definitions = attribute_definitions.unwrap_or_else(|| vec![AttributeDefinition::s("pk")]);
+
+            let create_req = DynamoDBRequest {
+                table_name: Some(table_name.to_string()),
+                key_schema: Some(key_schema),
+                attribute_definitions: Some(attribute_definitions),
+                billing_mode: Some("PAY_PER_REQUEST".to_string()),
+                ..Default::default()
+            };
+            self.create_table(&create_req)?;
+        }
+
+        let (processed_count, imported_count, error_count) = 
+            self.import_items_from_files(table_name, &export_dir, &input_format)?;
+
+        let table_arn = format!("arn:aws:dynamodb:local:{}:table/{}", self.namespace, table_name);
+
+        conn.execute(
+            "INSERT INTO imports (import_id, import_arn, import_status, table_arn, table_name,
+                s3_bucket, s3_key_prefix, input_format, processed_item_count, imported_item_count,
+                error_count, start_time, end_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                import_id, &import_arn, "COMPLETED", &table_arn, table_name,
+                &s3_bucket_source.s3_bucket, s3_bucket_source.s3_key_prefix.as_ref(),
+                &input_format, processed_count, imported_count, error_count,
+                now.to_rfc3339(), Utc::now().to_rfc3339()
+            ],
+        )?;
+
+        Ok(ImportDescription {
+            import_arn,
+            import_status: "COMPLETED".to_string(),
+            table_arn: Some(table_arn),
+            s3_bucket_source: s3_bucket_source.clone(),
+            input_format,
+            processed_item_count: Some(processed_count),
+            imported_item_count: Some(imported_count),
+            error_count: Some(error_count),
+            start_time: Some(now),
+            end_time: Some(Utc::now()),
+            failure_code: None,
+            failure_message: None,
+        })
+    }
+
+    /// Import items from export files
+    fn import_items_from_files(
+        &self,
+        table_name: &str,
+        export_dir: &PathBuf,
+        _input_format: &str,
+    ) -> Result<(i64, i64, i64), StorageError> {
+        let mut processed_count: i64 = 0;
+        let mut imported_count: i64 = 0;
+        let mut error_count: i64 = 0;
+
+        for entry in fs::read_dir(export_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() && path.extension() == Some(std::ffi::OsStr::new("json")) {
+                let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if filename == "export_metadata.json" {
+                    continue;
+                }
+
+                processed_count += 1;
+                let content = fs::read_to_string(&path)?;
+                match serde_json::from_str::<Item>(&content) {
+                    Ok(item) => {
+                        if self.insert_imported_item(table_name, &item).is_ok() {
+                            imported_count += 1;
+                        } else {
+                            error_count += 1;
+                        }
+                    }
+                    Err(_) => error_count += 1,
+                }
+            }
+        }
+
+        Ok((processed_count, imported_count, error_count))
+    }
+
+    /// Insert an imported item into a table
+    fn insert_imported_item(&self, table_name: &str, item: &Item) -> Result<(), StorageError> {
+        let metadata = self.describe_table(table_name)?;
+        let (pk, sk) = self.extract_keys_from_item(item, &metadata.key_schema, &metadata.attribute_definitions)?;
+
+        let conn = self.get_connection(table_name)?;
+        let now = Utc::now().timestamp();
+        let data = serde_json::to_vec(item)?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO items (pk, sk, data, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![pk, sk, data, now, now],
+        )?;
+
+        Ok(())
+    }
+
+    /// Extract keys from an item based on key schema
+    fn extract_keys_from_item(
+        &self,
+        item: &Item,
+        key_schema: &[KeySchemaElement],
+        attr_defs: &[AttributeDefinition],
+    ) -> Result<(String, Option<String>), StorageError> {
+        let mut pk_name = None;
+        let mut pk_type = None;
+        let mut sk_name = None;
+        let mut sk_type = None;
+
+        for ks in key_schema {
+            if ks.key_type == "HASH" {
+                pk_name = Some(ks.attribute_name.clone());
+                for ad in attr_defs {
+                    if ad.attribute_name == ks.attribute_name {
+                        pk_type = Some(ad.attribute_type.clone());
+                        break;
+                    }
+                }
+            } else if ks.key_type == "RANGE" {
+                sk_name = Some(ks.attribute_name.clone());
+                for ad in attr_defs {
+                    if ad.attribute_name == ks.attribute_name {
+                        sk_type = Some(ad.attribute_type.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        let pk_name = pk_name.ok_or_else(|| StorageError::InvalidKey("No HASH key in schema".to_string()))?;
+        let pk_type = pk_type.ok_or_else(|| StorageError::InvalidKey(format!("No type for partition key {}", pk_name)))?;
+
+        let pk_attr = item.get(&pk_name)
+            .ok_or_else(|| StorageError::InvalidKey(format!("Missing partition key: {}", pk_name)))?;
+        let pk_value = self.attr_value_to_string(pk_attr, &pk_type)?;
+
+        let sk_value = if let (Some(sk_name), Some(sk_type)) = (sk_name, sk_type) {
+            let sk_attr = item.get(&sk_name)
+                .ok_or_else(|| StorageError::InvalidKey(format!("Missing sort key: {}", sk_name)))?;
+            Some(self.attr_value_to_string(sk_attr, &sk_type)?)
+        } else {
+            None
+        };
+
+        Ok((pk_value, sk_value))
+    }
+
+    /// Convert attribute value to string
+    fn attr_value_to_string(&self, attr: &AttributeValue, attr_type: &str) -> Result<String, StorageError> {
+        match (attr, attr_type) {
+            (AttributeValue::S { s }, "S") => Ok(s.clone()),
+            (AttributeValue::N { n }, "N") => Ok(n.clone()),
+            (AttributeValue::B { b }, "B") => Ok(b.clone()),
+            _ => Err(StorageError::InvalidKey(format!("Attribute {:?} doesn't match type {}", attr, attr_type))),
+        }
+    }
+
+    /// Describe an import by ARN
+    pub fn describe_import(&self, import_arn: &str) -> Result<ImportDescription, StorageError> {
+        let import_id = self.extract_import_id_from_arn(import_arn)
+            .ok_or_else(|| StorageError::InvalidKey("Invalid import ARN".to_string()))?;
+
+        let conn = self.init_import_export_storage()?;
+
+        let mut stmt = conn.prepare(
+            "SELECT import_status, table_arn, table_name, s3_bucket, s3_key_prefix, input_format,
+                    processed_item_count, imported_item_count, error_count, start_time, end_time,
+                    failure_code, failure_message FROM imports WHERE import_id = ?"
+        )?;
+
+        let result: Result<ImportDescription, rusqlite::Error> = stmt.query_row(
+            [&import_id],
+            |row| {
+                let start_time_str: String = row.get(9)?;
+                let end_time_str: Option<String> = row.get(10)?;
+
+                Ok(ImportDescription {
+                    import_arn: import_arn.to_string(),
+                    import_status: row.get(0)?,
+                    table_arn: row.get(1)?,
+                    s3_bucket_source: S3BucketSource {
+                        s3_bucket: row.get(3)?,
+                        s3_key_prefix: row.get(4)?,
+                    },
+                    input_format: row.get(5)?,
+                    processed_item_count: row.get(6)?,
+                    imported_item_count: row.get(7)?,
+                    error_count: row.get(8)?,
+                    start_time: DateTime::parse_from_rfc3339(&start_time_str).ok().map(|d| d.with_timezone(&Utc)),
+                    end_time: end_time_str.and_then(|s| DateTime::parse_from_rfc3339(&s).ok()).map(|d| d.with_timezone(&Utc)),
+                    failure_code: row.get(11)?,
+                    failure_message: row.get(12)?,
+                })
+            },
+        );
+
+        match result {
+            Ok(desc) => Ok(desc),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                Err(StorageError::TableNotFound(format!("Import not found: {}", import_arn)))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// List all imports
+    pub fn list_imports(&self, table_arn: Option<&str>) -> Result<Vec<ImportSummary>, StorageError> {
+        let conn = self.init_import_export_storage()?;
+        let mut summaries = Vec::new();
+
+        if let Some(table_arn) = table_arn {
+            let mut stmt = conn.prepare(
+                "SELECT import_arn, import_status, table_arn FROM imports WHERE table_arn = ? ORDER BY start_time DESC"
+            )?;
+
+            let rows = stmt.query_map([table_arn], |row| {
+                Ok(ImportSummary {
+                    import_arn: row.get(0)?,
+                    import_status: row.get(1)?,
+                    table_arn: row.get(2)?,
+                })
+            })?;
+
+            for row in rows {
+                summaries.push(row?);
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT import_arn, import_status, table_arn FROM imports ORDER BY start_time DESC"
+            )?;
+
+            let rows = stmt.query_map([], |row| {
+                Ok(ImportSummary {
+                    import_arn: row.get(0)?,
+                    import_status: row.get(1)?,
+                    table_arn: row.get(2)?,
+                })
+            })?;
+
+            for row in rows {
+                summaries.push(row?);
+            }
+        }
+
+        Ok(summaries)
+    }
+
+    fn extract_export_id_from_arn(&self, arn: &str) -> Option<String> {
+        arn.split(':').last().map(|s| s.to_string())
+    }
+
+    fn extract_import_id_from_arn(&self, arn: &str) -> Option<String> {
+        arn.split(':').last().map(|s| s.to_string())
+    }
+
+    fn extract_table_name_from_arn(&self, arn: &str) -> Option<String> {
+        arn.split('/').last().map(|s| s.to_string())
+    }
 }
 
 #[cfg(test)]
@@ -1832,9 +2385,162 @@ mod tests {
         let result = manager.restore_table_to_point_in_time(&restore_req);
         assert!(matches!(result, Err(StorageError::InvalidKey(_))));
     }
+
+    // ============== Import/Export Tests ==============
+
+    #[test]
+    fn test_export_table_to_point_in_time() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        let export = manager.export_table_to_point_in_time(
+            "arn:aws:dynamodb:local:default:table/TestTable",
+            "test-bucket",
+            Some("test-prefix/".to_string()),
+            Some("DYNAMODB_JSON".to_string()),
+        ).unwrap();
+        
+        assert_eq!(export.export_status, "COMPLETED");
+        assert_eq!(export.s3_bucket, "test-bucket");
+        assert_eq!(export.export_format, "DYNAMODB_JSON");
+        assert!(export.export_arn.contains("export"));
+    }
+
+    #[test]
+    fn test_describe_export() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        let export = manager.export_table_to_point_in_time(
+            "arn:aws:dynamodb:local:default:table/TestTable",
+            "test-bucket",
+            None,
+            None,
+        ).unwrap();
+        
+        let described = manager.describe_export(&export.export_arn).unwrap();
+        assert_eq!(described.export_arn, export.export_arn);
+        assert_eq!(described.export_status, "COMPLETED");
+    }
+
+    #[test]
+    fn test_list_exports() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        manager.export_table_to_point_in_time(
+            "arn:aws:dynamodb:local:default:table/TestTable",
+            "test-bucket",
+            None,
+            None,
+        ).unwrap();
+        
+        let exports = manager.list_exports(None).unwrap();
+        assert_eq!(exports.len(), 1);
+    }
+
+    #[test]
+    fn test_import_table() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("SourceTable");
+        
+        // Create source table and export it first
+        manager.create_table(&req).unwrap();
+        
+        let export = manager.export_table_to_point_in_time(
+            "arn:aws:dynamodb:local:default:table/SourceTable",
+            "test-bucket",
+            None,
+            None,
+        ).unwrap();
+        
+        // Now import to a new table
+        let import = manager.import_table(
+            "ImportedTable",
+            &S3BucketSource {
+                s3_bucket: export.s3_bucket.clone(),
+                s3_key_prefix: export.s3_prefix.clone(),
+            },
+            Some("DYNAMODB_JSON".to_string()),
+            None,
+            None,
+        ).unwrap();
+        
+        assert_eq!(import.import_status, "COMPLETED");
+        assert_eq!(import.table_arn, Some("arn:aws:dynamodb:local:test:table/ImportedTable".to_string()));
+        
+        // Verify the imported table exists
+        let tables = manager.list_tables().unwrap();
+        assert!(tables.contains(&"ImportedTable".to_string()));
+    }
+
+    #[test]
+    fn test_describe_import() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("SourceTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        let export = manager.export_table_to_point_in_time(
+            "arn:aws:dynamodb:local:default:table/SourceTable",
+            "test-bucket",
+            None,
+            None,
+        ).unwrap();
+        
+        let import = manager.import_table(
+            "ImportedTable",
+            &S3BucketSource {
+                s3_bucket: export.s3_bucket,
+                s3_key_prefix: export.s3_prefix,
+            },
+            Some("DYNAMODB_JSON".to_string()),
+            None,
+            None,
+        ).unwrap();
+        
+        let described = manager.describe_import(&import.import_arn).unwrap();
+        assert_eq!(described.import_arn, import.import_arn);
+        assert_eq!(described.import_status, "COMPLETED");
+    }
+
+    #[test]
+    fn test_list_imports() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("SourceTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        let export = manager.export_table_to_point_in_time(
+            "arn:aws:dynamodb:local:default:table/SourceTable",
+            "test-bucket",
+            None,
+            None,
+        ).unwrap();
+        
+        manager.import_table(
+            "ImportedTable",
+            &S3BucketSource {
+                s3_bucket: export.s3_bucket,
+                s3_key_prefix: export.s3_prefix,
+            },
+            Some("DYNAMODB_JSON".to_string()),
+            None,
+            None,
+        ).unwrap();
+        
+        let imports = manager.list_imports(None).unwrap();
+        assert_eq!(imports.len(), 1);
+    }
 }
 
-// Implement Default for DynamoDBRequest for testing
+
 impl Default for DynamoDBRequest {
     fn default() -> Self {
         Self {

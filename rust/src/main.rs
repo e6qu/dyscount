@@ -6,6 +6,7 @@ mod expression;
 mod handlers;
 mod items;
 mod models;
+mod partiql;
 mod storage;
 
 use axum::{
@@ -179,6 +180,29 @@ mod integration_tests {
                 .uri("/")
                 .header("Content-Type", "application/json")
                 .body(Body::from("{}"))
+                .unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_execute_statement_invalid_partiql() {
+        let app = create_test_app();
+
+        // Try to execute invalid PartiQL
+        let invalid_body = serde_json::json!({
+            "Statement": "INVALID STATEMENT"
+        });
+
+        let response = app
+            .oneshot(Request::builder()
+                .method("POST")
+                .uri("/")
+                .header("X-Amz-Target", "DynamoDB_20120810.ExecuteStatement")
+                .header("Content-Type", "application/json")
+                .body(Body::from(invalid_body.to_string()))
                 .unwrap())
             .await
             .unwrap();
