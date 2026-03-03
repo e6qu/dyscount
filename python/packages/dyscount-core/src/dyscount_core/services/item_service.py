@@ -178,6 +178,64 @@ class ItemService:
                     f"Item attribute '{attr_name}' must have exactly one type descriptor, "
                     f"got: {type_keys}"
                 )
+        
+        # Validate item size (400KB limit per DynamoDB)
+        item_size = self._calculate_item_size(item)
+        max_size = self.config.limits.max_item_size  # 409600 bytes = 400KB
+        if item_size > max_size:
+            raise ValidationException(
+                f"Item size has exceeded the maximum allowed size ("
+                f"{item_size} bytes > {max_size} bytes)"
+            )
+    
+    def _calculate_item_size(self, item: dict[str, Any]) -> int:
+        """Calculate the size of an item in bytes."""
+        import json
+        try:
+            json_str = json.dumps(item, ensure_ascii=False)
+            return len(json_str.encode('utf-8'))
+        except (TypeError, ValueError):
+            return self._estimate_item_size(item)
+    
+    def _estimate_item_size(self, item: dict[str, Any]) -> int:
+        """Estimate item size by traversing the structure."""
+        total = 0
+        for attr_name, attr_value in item.items():
+            total += len(attr_name.encode('utf-8'))
+            total += self._estimate_attribute_value_size(attr_value)
+        return total
+    
+    def _estimate_attribute_value_size(self, attr_value: dict[str, Any]) -> int:
+        """Estimate the size of a single AttributeValue."""
+        import json
+        if not isinstance(attr_value, dict):
+            return len(str(attr_value).encode('utf-8'))
+        for type_key, value in attr_value.items():
+            if type_key == 'S':
+                return len(value.encode('utf-8')) if value else 0
+            elif type_key == 'N':
+                return len(str(value).encode('utf-8'))
+            elif type_key == 'B':
+                return len(str(value).encode('utf-8'))
+            elif type_key == 'BOOL':
+                return 1
+            elif type_key == 'NULL':
+                return 1
+            elif type_key == 'M':
+                return self._estimate_item_size(value) if value else 0
+            elif type_key == 'L':
+                total = 0
+                if value:
+                    for item in value:
+                        total += self._estimate_attribute_value_size(item)
+                return total
+            elif type_key in ('SS', 'NS', 'BS'):
+                total = 0
+                if value:
+                    for item in value:
+                        total += len(str(item).encode('utf-8'))
+                return total
+        return len(json.dumps(attr_value).encode('utf-8'))
     
     async def put_item(self, request: PutItemRequest) -> PutItemResponse:
         """Put an item into a table.
