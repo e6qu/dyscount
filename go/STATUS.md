@@ -43,18 +43,33 @@ Go implementation using Gin framework with SQLite backend.
 | TransactGetItems | ✅ | Complete |
 | TransactWriteItems | ✅ | Complete |
 
-### Condition Expressions ✅ (Phase 1 Complete)
-| Feature | Status | Priority |
-|---------|--------|----------|
-| ConditionExpression | ✅ | Complete |
-| FilterExpression | ✅ | Complete |
-| KeyConditionExpression | ✅ | Complete |
+### Condition Expressions ✅ (Complete)
+| Feature | Status |
+|---------|--------|
+| ConditionExpression | ✅ Complete |
+| FilterExpression | ✅ Complete |
+| KeyConditionExpression | ✅ Complete |
 
 **Supported Operators**:
 - Comparison: `=`, `<>`, `<`, `<=`, `>`, `>=`
 - Range: `BETWEEN`, `IN`
 - Logical: `AND`, `OR`, `NOT`
 - Functions: `attribute_exists()`, `attribute_not_exists()`, `begins_with()`, `contains()`
+
+### UpdateExpression ✅ (Complete)
+| Feature | Status |
+|---------|--------|
+| SET | ✅ Complete |
+| ADD | ✅ Complete |
+| REMOVE | ✅ Complete |
+| DELETE | ✅ Complete |
+
+**Supported Operations**:
+- SET: Simple value assignment
+- ADD: Number arithmetic, set addition
+- REMOVE: Attribute removal
+- DELETE: Set element removal
+- Multiple actions in single expression
 
 ### Advanced Features (0/20) ❌
 | Category | Operations | Status |
@@ -76,13 +91,14 @@ Go implementation using Gin framework with SQLite backend.
 
 ## Metrics
 
-- **Lines of Code**: ~3,800 (+100)
-- **Test Count**: 95 (+7 transaction tests)
-- **Test Coverage**: ~70%
+- **Lines of Code**: ~3,900 (+100)
+- **Test Count**: 103 (+8 UpdateExpression tests)
+- **Test Coverage**: ~72%
 - **Operations**: 20/61 (33%)
 - **Condition Expressions**: ✅ Complete
 - **Batch Operations**: ✅ Complete
 - **Transactions**: ✅ Complete
+- **UpdateExpression**: ✅ Complete
 
 ## Next Phase: M2 Feature Parity
 
