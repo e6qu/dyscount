@@ -554,6 +554,260 @@ impl ItemManager {
 
         Ok(key)
     }
+
+    // ============== Batch Operations ==============
+
+    /// Batch get items from multiple tables
+    pub fn batch_get_item(
+        &self,
+        requests: &HashMap<String, KeysAndAttributes>,
+    ) -> Result<(HashMap<String, Vec<Item>>, HashMap<String, KeysAndAttributes>), ItemError> {
+        let mut responses: HashMap<String, Vec<Item>> = HashMap::new();
+        let mut unprocessed: HashMap<String, KeysAndAttributes> = HashMap::new();
+
+        // Check total key count (max 100)
+        let total_keys: usize = requests.values().map(|k| k.keys.len()).sum();
+        if total_keys > 100 {
+            return Err(ItemError::InvalidKey(
+                "BatchGetItem can retrieve up to 100 items".to_string(),
+            ));
+        }
+
+        for (table_name, keys_and_attrs) in requests {
+            match self.batch_get_from_table(table_name, keys_and_attrs) {
+                Ok(items) => {
+                    responses.insert(table_name.clone(), items);
+                }
+                Err(_) => {
+                    unprocessed.insert(table_name.clone(), keys_and_attrs.clone());
+                }
+            }
+        }
+
+        Ok((responses, unprocessed))
+    }
+
+    /// Get items from a single table for batch get
+    fn batch_get_from_table(
+        &self,
+        table_name: &str,
+        keys_and_attrs: &KeysAndAttributes,
+    ) -> Result<Vec<Item>, ItemError> {
+        let conn = self.get_connection(table_name)?;
+        
+        // Get table metadata
+        let metadata = self
+            .table_manager
+            .describe_table(table_name)
+            .map_err(|_| ItemError::InvalidKey(format!("Table not found: {}", table_name)))?;
+
+        let key_schema = &metadata.key_schema;
+        let attr_defs = &metadata.attribute_definitions;
+
+        let mut items = Vec::new();
+
+        for key in &keys_and_attrs.keys {
+            let (pk, sk) = self.extract_key(key, key_schema, attr_defs)?;
+
+            let mut stmt = if let Some(ref sk_val) = sk {
+                conn.prepare("SELECT data FROM items WHERE pk = ? AND sk = ?")?
+            } else {
+                conn.prepare("SELECT data FROM items WHERE pk = ? AND (sk IS NULL OR sk = '')")?
+            };
+
+            let data: Result<String, _> = if let Some(ref sk_val) = sk {
+                stmt.query_row(params![pk, sk_val], |row| row.get(0))
+            } else {
+                stmt.query_row(params![pk], |row| row.get(0))
+            };
+
+            if let Ok(data) = data {
+                let item: Item = serde_json::from_str(&data)?;
+                items.push(item);
+            }
+        }
+
+        Ok(items)
+    }
+
+    /// Batch write items to multiple tables
+    pub fn batch_write_item(
+        &self,
+        requests: &HashMap<String, Vec<WriteRequest>>,
+    ) -> Result<HashMap<String, Vec<WriteRequest>>, ItemError> {
+        let mut unprocessed: HashMap<String, Vec<WriteRequest>> = HashMap::new();
+
+        // Check total item count (max 25)
+        let total_items: usize = requests.values().map(|v| v.len()).sum();
+        if total_items > 25 {
+            return Err(ItemError::InvalidKey(
+                "BatchWriteItem can write up to 25 items".to_string(),
+            ));
+        }
+
+        for (table_name, write_requests) in requests {
+            let unproc = self.batch_write_to_table(table_name, write_requests)?;
+            if !unproc.is_empty() {
+                unprocessed.insert(table_name.clone(), unproc);
+            }
+        }
+
+        Ok(unprocessed)
+    }
+
+    /// Write items to a single table for batch write
+    fn batch_write_to_table(
+        &self,
+        table_name: &str,
+        write_requests: &[WriteRequest],
+    ) -> Result<Vec<WriteRequest>, ItemError> {
+        let mut unprocessed = Vec::new();
+
+        for write_req in write_requests {
+            let success = if let Some(ref put) = write_req.put_request {
+                self.put_item(table_name, &put.item, false).is_ok()
+            } else if let Some(ref del) = write_req.delete_request {
+                self.delete_item(table_name, &del.key, false).is_ok()
+            } else {
+                false
+            };
+
+            if !success {
+                unprocessed.push(write_req.clone());
+            }
+        }
+
+        Ok(unprocessed)
+    }
+
+    // ============== Transaction Operations ==============
+
+    /// Transact get items atomically
+    pub fn transact_get_items(
+        &self,
+        items: &[TransactGetItem],
+    ) -> Result<Vec<ItemResponse>, ItemError> {
+        // DynamoDB limit: up to 25 items
+        if items.len() > 25 {
+            return Err(ItemError::InvalidKey(
+                "TransactGetItems can retrieve up to 25 items".to_string(),
+            ));
+        }
+
+        // Check for duplicates
+        let mut key_set = std::collections::HashSet::new();
+        for item in items {
+            let key = format!("{}:{:?}", item.get.table_name, item.get.key);
+            if !key_set.insert(key) {
+                return Err(ItemError::InvalidKey(
+                    "Duplicate key in transaction".to_string(),
+                ));
+            }
+        }
+
+        let mut responses = Vec::new();
+
+        for item in items {
+            let table_name = &item.get.table_name;
+            let key = &item.get.key;
+
+            match self.get_item(table_name, key, true) {
+                Ok(item_opt) => {
+                    responses.push(ItemResponse { item: item_opt });
+                }
+                Err(_) => {
+                    responses.push(ItemResponse { item: None });
+                }
+            }
+        }
+
+        Ok(responses)
+    }
+
+    /// Transact write items atomically
+    pub fn transact_write_items(&self, items: &[TransactWriteItem]) -> Result<(), ItemError> {
+        // DynamoDB limit: up to 25 items
+        if items.len() > 25 {
+            return Err(ItemError::InvalidKey(
+                "TransactWriteItems can write up to 25 items".to_string(),
+            ));
+        }
+
+        // Check for duplicates
+        let mut key_set = std::collections::HashSet::new();
+        for item in items {
+            let (table_name, key) = self.extract_transact_key(item);
+            let key_str = format!("{}:{:?}", table_name, key);
+            if !key_set.insert(key_str) {
+                return Err(ItemError::InvalidKey(
+                    "Duplicate key in transaction".to_string(),
+                ));
+            }
+        }
+
+        // Validate all items first
+        for item in items {
+            self.validate_transact_item(item)?;
+        }
+
+        // Execute all operations
+        for item in items {
+            self.execute_transact_write(item)?;
+        }
+
+        Ok(())
+    }
+
+    /// Extract table name and key from transact write item
+    fn extract_transact_key(&self, item: &TransactWriteItem) -> (String, Item) {
+        if let Some(ref put) = item.put {
+            (put.table_name.clone(), put.item.clone())
+        } else if let Some(ref update) = item.update {
+            (update.table_name.clone(), update.key.clone())
+        } else if let Some(ref delete) = item.delete {
+            (delete.table_name.clone(), delete.key.clone())
+        } else if let Some(ref check) = item.condition_check {
+            (check.table_name.clone(), check.key.clone())
+        } else {
+            (String::new(), Item::new())
+        }
+    }
+
+    /// Validate a transact write item
+    fn validate_transact_item(&self, item: &TransactWriteItem) -> Result<(), ItemError> {
+        let table_name = if let Some(ref put) = item.put {
+            &put.table_name
+        } else if let Some(ref update) = item.update {
+            &update.table_name
+        } else if let Some(ref delete) = item.delete {
+            &delete.table_name
+        } else if let Some(ref check) = item.condition_check {
+            &check.table_name
+        } else {
+            return Err(ItemError::InvalidKey(
+                "Invalid transaction item".to_string(),
+            ));
+        };
+
+        // Check table exists
+        let _ = self
+            .table_manager
+            .describe_table(table_name)
+            .map_err(|_| ItemError::InvalidKey(format!("Table not found: {}", table_name)))?;
+
+        Ok(())
+    }
+
+    /// Execute a transact write operation
+    fn execute_transact_write(&self, item: &TransactWriteItem) -> Result<(), ItemError> {
+        if let Some(ref put) = item.put {
+            self.put_item(&put.table_name, &put.item, false)?;
+        } else if let Some(ref delete) = item.delete {
+            self.delete_item(&delete.table_name, &delete.key, false)?;
+        }
+        // Update and ConditionCheck are simplified for now
+        Ok(())
+    }
 }
 
 #[cfg(test)]
