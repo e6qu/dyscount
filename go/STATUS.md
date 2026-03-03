@@ -16,9 +16,9 @@ Go implementation using Gin framework with SQLite backend.
 | ListTables | ✅ | |
 | DescribeTable | ✅ | |
 | DescribeEndpoints | ✅ | |
-| TagResource | ⚠️ | Stub only |
-| UntagResource | ⚠️ | Stub only |
-| ListTagsOfResource | ⚠️ | Stub only |
+| TagResource | ✅ | Full implementation |
+| UntagResource | ✅ | Full implementation |
+| ListTagsOfResource | ✅ | Full implementation |
 | UpdateTable | ❌ | Not implemented |
 
 ### Data Plane (6 operations) ✅
@@ -92,7 +92,7 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 135 (+9 pagination tests, bugfix)
+- **Test Count**: 143 (+8 tagging tests)
 - **Test Coverage**: ~76%
 - **Operations**: 22/61 (36%)
 - **M2 Feature Parity**: ✅ COMPLETE
@@ -105,6 +105,7 @@ Go implementation using Gin framework with SQLite backend.
   - TTL: ✅ Complete
   - Backup/Restore: ✅ Complete
   - Pagination: ✅ Complete (Query/Scan with LastEvaluatedKey)
+  - Tagging: ✅ Complete (TagResource, UntagResource, ListTagsOfResource)
 
 ## Next Phase: M3 Advanced Features
 
