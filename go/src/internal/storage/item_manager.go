@@ -859,6 +859,13 @@ func (im *ItemManager) Scan(tableName string, indexName string, limit int,
 		return nil, nil, err
 	}
 
+	// Get table metadata for attribute definitions
+	metadata, err := im.tableManager.DescribeTable(tableName)
+	if err != nil {
+		return nil, nil, err
+	}
+	attrDefs := metadata.AttributeDefinitions
+
 	// Build query based on whether we're scanning a GSI
 	var rows *sql.Rows
 	if indexName != "" {
@@ -901,7 +908,7 @@ func (im *ItemManager) Scan(tableName string, indexName string, limit int,
 
 	// Apply pagination (exclusive start key)
 	if len(exclusiveStartKey) > 0 {
-		items = im.filterExclusiveStartKey(items, exclusiveStartKey, nil, nil)
+		items = im.filterExclusiveStartKey(items, exclusiveStartKey, keySchema, attrDefs)
 	}
 
 	// Apply limit

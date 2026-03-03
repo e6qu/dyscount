@@ -414,3 +414,64 @@ Implemented Backup/Restore operations for Go - enabling point-in-time backups of
 - Or: Implement DescribeContinuousBackups
 
 ---
+
+## 2026-03-03: Go M3 Phase 2.5 - Pagination Implementation
+
+**Branch**: `feature/GO-pagination`
+
+### Summary
+
+Fixed and enhanced pagination support for Query and Scan operations - critical for handling large datasets.
+
+### Bug Fixed
+
+**Issue**: Scan pagination with `ExclusiveStartKey` was not working correctly.
+**Root Cause**: `filterExclusiveStartKey` was being called with `nil` for `attrDefs`, causing key extraction to fail.
+**Fix**: Updated Scan to properly fetch and pass attribute definitions to `filterExclusiveStartKey`.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/pagination_test.go`**
+   - Tests for Query with Limit returning LastEvaluatedKey
+   - Tests for Query with ExclusiveStartKey pagination
+   - Tests for Query full pagination loop (all items)
+   - Tests for Scan with Limit returning LastEvaluatedKey
+   - Tests for Scan with ExclusiveStartKey pagination
+   - Tests for Scan full pagination loop (all items)
+   - Tests for pagination on hash-only tables
+   - Tests for pagination with filters
+
+#### Modified Files
+
+1. **`go/src/internal/storage/item_manager.go`**
+   - Fixed Scan to get table metadata for attribute definitions
+   - Fixed Scan to pass attribute definitions to `filterExclusiveStartKey`
+   - Pagination now works correctly for both Query and Scan
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Query Limit | ✅ | Limit number of items returned |
+| Query ExclusiveStartKey | ✅ | Resume from previous position |
+| Query LastEvaluatedKey | ✅ | Key for next page |
+| Scan Limit | ✅ | Limit number of items returned |
+| Scan ExclusiveStartKey | ✅ | Resume from previous position |
+| Scan LastEvaluatedKey | ✅ | Key for next page |
+| Hash-only tables | ✅ | Pagination works with hash-only keys |
+| Composite keys | ✅ | Pagination works with hash+range keys |
+
+### Tests
+
+- 9 pagination tests added
+- Fixed Scan pagination bug
+- Total: 135 Go tests passing
+
+### Next Steps
+
+- Go M3 Phase 3: Point-in-Time Recovery (PITR) operations
+- Or: Implement proper tagging support
+
+---
