@@ -22,6 +22,10 @@ pub const Server = struct {
         self.table_manager.deinit();
     }
 
+    fn getItemManager(self: *Server) storage.ItemManager {
+        return storage.ItemManager.init(self.allocator, &self.table_manager);
+    }
+
     /// Handle incoming HTTP request
     pub fn handleRequest(self: *Server, request: []const u8, writer: anytype) !void {
         // Parse request to get X-Amz-Target header
@@ -43,6 +47,16 @@ pub const Server = struct {
             try self.handleDescribeTable(request, writer);
         } else if (std.mem.eql(u8, operation, "DescribeEndpoints")) {
             try self.handleDescribeEndpoints(writer);
+        } else if (std.mem.eql(u8, operation, "GetItem")) {
+            try self.handleGetItem(request, writer);
+        } else if (std.mem.eql(u8, operation, "PutItem")) {
+            try self.handlePutItem(request, writer);
+        } else if (std.mem.eql(u8, operation, "DeleteItem")) {
+            try self.handleDeleteItem(request, writer);
+        } else if (std.mem.eql(u8, operation, "Query")) {
+            try self.handleQuery(request, writer);
+        } else if (std.mem.eql(u8, operation, "Scan")) {
+            try self.handleScan(request, writer);
         } else {
             try self.writeErrorResponse(writer, 400, "Unknown operation");
         }
@@ -217,6 +231,284 @@ pub const Server = struct {
         try writer.writeAll("{\"Endpoints\":[{\"Address\":\"localhost:8000\",\"CachePeriodInMinutes\":1440}]}\n");
     }
 
+    // Data Plane Handlers
+
+    fn handleGetItem(self: *Server, request: []const u8, writer: anytype) !void {
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n");
+        if (body_start == null) {
+            try self.writeErrorResponse(writer, 400, "Missing request body");
+            return;
+        }
+
+        const body = request[body_start.? + 4 ..];
+        const table_name = self.parseJsonString(body, "TableName");
+        
+        if (table_name == null) {
+            try self.writeErrorResponse(writer, 400, "Table name is required");
+            return;
+        }
+
+        // Parse key from request (simplified - expects pk and sk)
+        const pk = self.parseJsonString(body, "pk"); // This is simplified, real impl would parse nested JSON
+        if (pk == null) {
+            try self.writeErrorResponse(writer, 400, "Key is required");
+            return;
+        }
+
+        var im = self.getItemManager();
+        const item = im.getItem(table_name.?, pk.?, null) catch |err| {
+            switch (err) {
+                storage.StorageError.TableNotFound => {
+                    try self.writeErrorResponse(writer, 400, "Table not found");
+                    return;
+                },
+                else => {
+                    try self.writeErrorResponse(writer, 500, "Internal server error");
+                    return;
+                },
+            }
+        };
+        defer if (item) |data| self.allocator.free(data);
+
+        try writer.writeAll("HTTP/1.1 200 OK\r\n");
+        try writer.writeAll("Content-Type: application/json\r\n");
+        try writer.writeAll("\r\n");
+        
+        if (item) |data| {
+            try writer.print("{{\"Item\":{s}}}\n", .{data});
+        } else {
+            try writer.writeAll("{}\n");
+        }
+    }
+
+    fn handlePutItem(self: *Server, request: []const u8, writer: anytype) !void {
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n");
+        if (body_start == null) {
+            try self.writeErrorResponse(writer, 400, "Missing request body");
+            return;
+        }
+
+        const body = request[body_start.? + 4 ..];
+        const table_name = self.parseJsonString(body, "TableName");
+        
+        if (table_name == null) {
+            try self.writeErrorResponse(writer, 400, "Table name is required");
+            return;
+        }
+
+        // For simplicity, store the entire Item JSON as data
+        // Real impl would extract pk/sk from the item
+        const item_json = self.parseJsonObject(body, "Item");
+        if (item_json == null) {
+            try self.writeErrorResponse(writer, 400, "Item is required");
+            return;
+        }
+        defer self.allocator.free(item_json.?);
+
+        // Extract pk from item (simplified)
+        const pk = self.parseNestedJsonString(item_json.?, "pk") orelse "item";
+
+        var im = self.getItemManager();
+        im.putItem(table_name.?, pk, null, item_json.?) catch |err| {
+            switch (err) {
+                storage.StorageError.TableNotFound => {
+                    try self.writeErrorResponse(writer, 400, "Table not found");
+                    return;
+                },
+                else => {
+                    try self.writeErrorResponse(writer, 500, "Internal server error");
+                    return;
+                },
+            }
+        };
+
+        try writer.writeAll("HTTP/1.1 200 OK\r\n");
+        try writer.writeAll("Content-Type: application/json\r\n");
+        try writer.writeAll("\r\n");
+        try writer.writeAll("{}\n");
+    }
+
+    fn handleDeleteItem(self: *Server, request: []const u8, writer: anytype) !void {
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n");
+        if (body_start == null) {
+            try self.writeErrorResponse(writer, 400, "Missing request body");
+            return;
+        }
+
+        const body = request[body_start.? + 4 ..];
+        const table_name = self.parseJsonString(body, "TableName");
+        
+        if (table_name == null) {
+            try self.writeErrorResponse(writer, 400, "Table name is required");
+            return;
+        }
+
+        const pk = self.parseJsonString(body, "pk");
+        if (pk == null) {
+            try self.writeErrorResponse(writer, 400, "Key is required");
+            return;
+        }
+
+        var im = self.getItemManager();
+        _ = im.deleteItem(table_name.?, pk.?, null) catch |err| {
+            switch (err) {
+                storage.StorageError.TableNotFound => {
+                    try self.writeErrorResponse(writer, 400, "Table not found");
+                    return;
+                },
+                else => {
+                    try self.writeErrorResponse(writer, 500, "Internal server error");
+                    return;
+                },
+            }
+        };
+
+        try writer.writeAll("HTTP/1.1 200 OK\r\n");
+        try writer.writeAll("Content-Type: application/json\r\n");
+        try writer.writeAll("\r\n");
+        try writer.writeAll("{}\n");
+    }
+
+    fn handleQuery(self: *Server, request: []const u8, writer: anytype) !void {
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n");
+        if (body_start == null) {
+            try self.writeErrorResponse(writer, 400, "Missing request body");
+            return;
+        }
+
+        const body = request[body_start.? + 4 ..];
+        const table_name = self.parseJsonString(body, "TableName");
+        
+        if (table_name == null) {
+            try self.writeErrorResponse(writer, 400, "Table name is required");
+            return;
+        }
+
+        // Parse KeyConditionExpression (simplified)
+        const pk = self.parseJsonString(body, "pk"); // Simplified
+        if (pk == null) {
+            try self.writeErrorResponse(writer, 400, "Partition key is required");
+            return;
+        }
+
+        var im = self.getItemManager();
+        const items = im.query(table_name.?, pk.?, null) catch |err| {
+            switch (err) {
+                storage.StorageError.TableNotFound => {
+                    try self.writeErrorResponse(writer, 400, "Table not found");
+                    return;
+                },
+                else => {
+                    try self.writeErrorResponse(writer, 500, "Internal server error");
+                    return;
+                },
+            }
+        };
+        defer {
+            for (items) |item| {
+                self.allocator.free(item);
+            }
+            self.allocator.free(items);
+        }
+
+        try writer.writeAll("HTTP/1.1 200 OK\r\n");
+        try writer.writeAll("Content-Type: application/json\r\n");
+        try writer.writeAll("\r\n");
+        
+        try writer.writeAll("{\"Items\":[");
+        for (items, 0..) |item, i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll(item);
+        }
+        try writer.print("],\"Count\":{d}}}\n", .{items.len});
+    }
+
+    fn handleScan(self: *Server, request: []const u8, writer: anytype) !void {
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n");
+        if (body_start == null) {
+            try self.writeErrorResponse(writer, 400, "Missing request body");
+            return;
+        }
+
+        const body = request[body_start.? + 4 ..];
+        const table_name = self.parseJsonString(body, "TableName");
+        
+        if (table_name == null) {
+            try self.writeErrorResponse(writer, 400, "Table name is required");
+            return;
+        }
+
+        var im = self.getItemManager();
+        const items = im.scan(table_name.?, null) catch |err| {
+            switch (err) {
+                storage.StorageError.TableNotFound => {
+                    try self.writeErrorResponse(writer, 400, "Table not found");
+                    return;
+                },
+                else => {
+                    try self.writeErrorResponse(writer, 500, "Internal server error");
+                    return;
+                },
+            }
+        };
+        defer {
+            for (items) |item| {
+                self.allocator.free(item);
+            }
+            self.allocator.free(items);
+        }
+
+        try writer.writeAll("HTTP/1.1 200 OK\r\n");
+        try writer.writeAll("Content-Type: application/json\r\n");
+        try writer.writeAll("\r\n");
+        
+        try writer.writeAll("{\"Items\":[");
+        for (items, 0..) |item, i| {
+            if (i > 0) try writer.writeAll(",");
+            try writer.writeAll(item);
+        }
+        try writer.print("],\"Count\":{d},\"ScannedCount\":{d}}}\n", .{items.len, items.len});
+    }
+
+    fn parseJsonObject(self: Server, json: []const u8, key: []const u8) ?[]const u8 {
+        _ = self;
+        // Simple JSON object parser - look for "key": { ... }
+        const pattern = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": {{", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern);
+
+        if (std.mem.indexOf(u8, json, pattern)) |start| {
+            const value_start = start + pattern.len - 1; // Include the {
+            
+            // Find matching closing brace
+            var brace_count: i32 = 1;
+            var i = value_start + 1;
+            while (i < json.len and brace_count > 0) : (i += 1) {
+                if (json[i] == '{') brace_count += 1;
+                if (json[i] == '}') brace_count -= 1;
+            }
+            
+            if (brace_count == 0) {
+                return std.heap.page_allocator.dupe(u8, json[value_start..i]) catch return null;
+            }
+        }
+        return null;
+    }
+
+    fn parseNestedJsonString(self: Server, json: []const u8, key: []const u8) ?[]const u8 {
+        _ = self;
+        // Parse nested JSON like {"S": "value"}
+        const pattern = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": {{\"S\": \"", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern);
+
+        if (std.mem.indexOf(u8, json, pattern)) |start| {
+            const value_start = start + pattern.len;
+            if (std.mem.indexOf(u8, json[value_start..], "\"")) |end| {
+                return std.heap.page_allocator.dupe(u8, json[value_start..value_start + end]) catch return null;
+            }
+        }
+        return null;
+    }
+
     fn writeErrorResponse(self: Server, writer: anytype, status: u16, message: []const u8) !void {
         _ = self;
         try writer.print("HTTP/1.1 {d} \r\n", .{status});
@@ -227,8 +519,6 @@ pub const Server = struct {
 };
 
 pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
-
     // Get configuration from environment
     const port = server_port;
     const data_dir = "/tmp/dyscount_zig_data";
@@ -245,14 +535,14 @@ pub fn main() !void {
     var server = try Server.init(allocator, data_dir, namespace);
     defer server.deinit();
 
-    try stdout.print("Dyscount Zig server listening on port {d}\n", .{port});
+    // Server starting on port
 
     // Create TCP listener
     const listener = try std.net.Address.parseIp("127.0.0.1", port);
     var tcp_server = try std.net.Address.listen(listener, .{});
     defer tcp_server.deinit();
 
-    try stdout.print("Server ready!\n", .{});
+    // Server ready
 
     // Accept connections
     while (true) {
