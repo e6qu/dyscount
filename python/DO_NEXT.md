@@ -1,66 +1,56 @@
 # Python Implementation - Next Steps
 
-## Current Phase: M1 Phase 3 (Core Data Plane)
+## Current Phase: M4 Phase 2 Complete ✅
+
+DynamoDB Streams implementation is complete. All 4 stream operations are implemented and tested.
 
 ### Completed ✅
 
-**M1P3_T1: GetItem Operation** (PR #3 merged)
-- GetItem models (GetItemRequest, GetItemResponse, ConsumedCapacity)
-- storage.get_item() implementation
-- ItemService.get_item() service method
-- API route handler for GetItem
-- 10 comprehensive tests
+**M4 Phase 2: DynamoDB Streams** (Branch: `feature/PYTHON-M4P2-streams`)
+- StreamManager with stream metadata and records tables
+- CreateTable with StreamSpecification
+- UpdateTable stream enable/disable
+- PutItem, DeleteItem, UpdateItem write to streams
+- DescribeStream, GetRecords, GetShardIterator, ListStreams APIs
+- 4 comprehensive tests
 
-### Next Task 🟡
+### Next Priorities 🎯
 
-**M1P3_T2: PutItem Operation**
+#### Option 1: M4 Phase 3 - Polish & Performance
+- Pagination support (Query/Scan with LastEvaluatedKey)
+- Parallel Scan support
+- Connection pooling optimization
+- Performance benchmarks
 
-#### Implementation Checklist
-- [ ] Add PutItem models (PutItemRequest, PutItemResponse)
-- [ ] Implement storage.put_item() method in table_manager.py
-- [ ] Add ItemService.put_item() service method
-- [ ] Add API route handler for PutItem
-- [ ] Support ReturnValues (NONE, ALL_OLD)
-- [ ] Calculate ConsumedCapacity (1 WCU)
-- [ ] Write comprehensive tests (>80% coverage)
+#### Option 2: M5 Phase 1 - Cross-Region Replication (Future)
+- Multi-region support
+- Global tables
+- Replication streams
 
-#### Acceptance Criteria (from M1P3_T2_PUT_ITEM.md)
-- [ ] PutItem creates new item
-- [ ] PutItem replaces existing item with same key
-- [ ] ReturnValues=ALL_OLD returns previous attributes
-- [ ] ConsumedCapacity calculated correctly
-- [ ] All error cases handled per ERROR_CODES.md
+#### Option 3: Go/Rust/Zig Feature Parity
+- Help other languages catch up
+- Share test suites
+- Documentation alignment
 
-### Remaining Tasks
+### Technical Debt
 
-3. **M1P3_T3: DeleteItem Operation**
-   - DeleteItem models
-   - storage.delete_item()
-   - ReturnValues=ALL_OLD support
+1. **Stream Enhancement**:
+   - [ ] Add shard splitting (currently single shard)
+   - [ ] Implement stream record filtering
+   - [ ] Add Kinesis-compatible endpoints
 
-4. **M1P3_T5: Condition Expressions**
-   - Expression parser module
-   - Comparison operators
-   - Functions (attribute_exists, begins_with, etc.)
+2. **Testing**:
+   - [ ] E2E tests with boto3 streams client
+   - [ ] Performance tests for high-volume streams
+   - [ ] Stream expiration/cleanup tests
 
-5. **M1P3_T4: UpdateItem Operation**
-   - UpdateItem models
-   - UpdateExpression parser (SET, REMOVE, ADD, DELETE)
-   - list_append, if_not_exists support
-
-6. **M1P3_T6: E2E Tests**
-   - boto3-based E2E tests
-   - Test all data operations
-
-### Technical Decisions Needed
-
-1. **Expression Parser**: Hand-written recursive descent vs PEG parser
-2. **UpdateExpression**: Support all clauses initially or incrementally
-3. **ReturnValues**: Implementation strategy for returning old/new values
+3. **Documentation**:
+   - [ ] Stream usage examples
+   - [ ] Architecture diagrams
+   - [ ] Configuration guide
 
 ### Notes
 
-- CI/CD workflows are now in place (see .github/workflows/)
-- Test isolation is handled via temp directories
-- Follow existing patterns from control plane implementation
-- Task file: `python/tasks/todo/M1P3_T2_PUT_ITEM.md`
+- Python implementation is now feature-complete for MVP
+- Consider stabilization before adding new features
+- Focus on testing, documentation, and performance
