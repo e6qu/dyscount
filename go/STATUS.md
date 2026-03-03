@@ -13,13 +13,13 @@ Go implementation using Gin framework with SQLite backend.
 |-----------|--------|-------|
 | CreateTable | ✅ | Full GSI/LSI support |
 | DeleteTable | ✅ | |
-| ListTables | ✅ | |
+| ListTables | ✅ | With pagination (Limit, ExclusiveStartTableName)
 | DescribeTable | ✅ | |
 | DescribeEndpoints | ✅ | |
 | TagResource | ✅ | Full implementation |
 | UntagResource | ✅ | Full implementation |
 | ListTagsOfResource | ✅ | Full implementation |
-| UpdateTable | ❌ | Not implemented |
+| UpdateTable | ✅ | GSI create/update/delete supported |
 
 ### Data Plane (6 operations) ✅
 | Operation | Status | Notes |
@@ -87,14 +87,14 @@ Go implementation using Gin framework with SQLite backend.
 2. **No Batch Operations** - Critical for performance
 3. **No Transactions** - ACID support needed
 4. **No UpdateExpression Parser** - Limited UpdateItem functionality
-5. **No Pagination** - Query/Scan don't return LastEvaluatedKey
+5. **No Pagination** - Query/Scan pagination complete, ListTables pagination complete
 
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 143 (+8 tagging tests)
+- **Test Count**: 148 (+5 ListTables pagination tests)
 - **Test Coverage**: ~76%
-- **Operations**: 22/61 (36%)
+- **Operations**: 30/61 (49%)
 - **M2 Feature Parity**: ✅ COMPLETE
   - Condition Expressions: ✅
   - Batch Operations: ✅
@@ -104,8 +104,8 @@ Go implementation using Gin framework with SQLite backend.
 - **M3 In Progress**:
   - TTL: ✅ Complete
   - Backup/Restore: ✅ Complete
-  - Pagination: ✅ Complete (Query/Scan with LastEvaluatedKey)
-  - Tagging: ✅ Complete (TagResource, UntagResource, ListTagsOfResource)
+  - Pagination: ✅ Complete (Query/Scan/ListTables)
+  - Tagging: ✅ Complete
 
 ## Next Phase: M3 Advanced Features
 

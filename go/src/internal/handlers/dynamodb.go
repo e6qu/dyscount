@@ -572,7 +572,15 @@ func (h *DynamoDBHandler) handleDeleteTable(c *gin.Context, req *models.DynamoDB
 }
 
 func (h *DynamoDBHandler) handleListTables(c *gin.Context) {
-	tables, err := h.tableManager.ListTables()
+	// Parse request for pagination
+	var req models.DynamoDBRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// No request body or invalid, use defaults
+		req.Limit = 0
+		req.ExclusiveStartTableName = ""
+	}
+
+	tables, lastEvaluatedTableName, err := h.tableManager.ListTablesWithPagination(req.Limit, req.ExclusiveStartTableName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
@@ -582,7 +590,8 @@ func (h *DynamoDBHandler) handleListTables(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.DynamoDBResponse{
-		TableNames: tables,
+		TableNames:             tables,
+		LastEvaluatedTableName: lastEvaluatedTableName,
 	})
 }
 

@@ -530,3 +530,59 @@ Implemented proper tagging support for Go - replacing stubs with full storage-ba
 - Or: Implement PartiQL support
 
 ---
+
+## 2026-03-03: Go M3 Phase 2.7 - ListTables Pagination
+
+**Branch**: `feature/GO-listtables-pagination`
+
+### Summary
+
+Implemented pagination support for ListTables operation - essential for accounts with many tables.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/list_tables_test.go`**
+   - Tests for ListTables without pagination
+   - Tests for ListTables with Limit
+   - Tests for full pagination loop with ExclusiveStartTableName
+   - Tests for empty directory
+   - Tests for non-existent start table
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added `ExclusiveStartTableName` to `DynamoDBRequest`
+   - Added `LastEvaluatedTableName` to `DynamoDBResponse`
+
+2. **`go/src/internal/storage/table_manager.go`**
+   - Added `ListTablesWithPagination(limit, exclusiveStartTableName)` method
+   - Tables are sorted alphabetically for consistent pagination
+   - Returns `lastEvaluatedTableName` when there are more results
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Updated `handleListTables()` to use pagination
+   - Parses request body for Limit and ExclusiveStartTableName
+   - Returns LastEvaluatedTableName in response
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| ListTables Limit | ✅ | Limit number of tables returned |
+| ListTables ExclusiveStartTableName | ✅ | Resume from specific table |
+| ListTables LastEvaluatedTableName | ✅ | Table name for next page |
+| Sorted results | ✅ | Consistent alphabetical ordering |
+
+### Tests
+
+- 5 ListTables pagination tests added
+- Total: 148 Go tests passing
+
+### Next Steps
+
+- Go M3 Phase 3: Point-in-Time Recovery (PITR) operations
+- Or: Implement PartiQL support
+
+---
