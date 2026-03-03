@@ -475,3 +475,58 @@ Fixed and enhanced pagination support for Query and Scan operations - critical f
 - Or: Implement proper tagging support
 
 ---
+
+## 2026-03-03: Go M3 Phase 2.6 - Tagging Implementation
+
+**Branch**: `feature/GO-pitr`
+
+### Summary
+
+Implemented proper tagging support for Go - replacing stubs with full storage-backed implementation.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/tagging.go`**
+   - `TagResource()` - Store tags in `__tags` table
+   - `UntagResource()` - Remove tags by key
+   - `ListTagsOfResource()` - Retrieve all tags
+
+2. **`go/src/internal/storage/tagging_test.go`**
+   - Tests for tagging single and multiple tags
+   - Tests for updating existing tags
+   - Tests for untagging single and multiple tags
+   - Tests for untagging non-existent tags (no error)
+   - Tests for listing tags (empty and with tags)
+   - Tests for non-existent table error handling
+
+#### Modified Files
+
+1. **`go/src/internal/handlers/dynamodb.go`**
+   - Updated `handleTagResource()` to use `tm.TagResource()`
+   - Updated `handleUntagResource()` to use `tm.UntagResource()`
+   - Updated `handleListTagsOfResource()` to use `tm.ListTagsOfResource()`
+   - Added proper error handling for ResourceNotFoundException
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| TagResource | ✅ | Add/update tags on tables |
+| UntagResource | ✅ | Remove tags by key |
+| ListTagsOfResource | ✅ | List all tags on a table |
+| Tag storage | ✅ | Tags stored in `__tags` SQLite table |
+| ARN parsing | ✅ | Extract table name from ARN |
+
+### Tests
+
+- 8 tagging tests added
+- Total: 143 Go tests passing
+
+### Next Steps
+
+- Go M3 Phase 3: Point-in-Time Recovery (PITR) operations
+- Or: Implement PartiQL support
+
+---

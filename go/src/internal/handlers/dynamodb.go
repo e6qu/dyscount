@@ -627,7 +627,22 @@ func (h *DynamoDBHandler) handleTagResource(c *gin.Context, req *models.DynamoDB
 		return
 	}
 
-	// TODO: Implement tag storage
+	// Tag the resource
+	if err := h.tableManager.TagResource(tableName, req.Tags); err != nil {
+		if err.Error() == fmt.Sprintf("table not found: %s", tableName) {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, models.DynamoDBResponse{})
 }
 
@@ -642,7 +657,22 @@ func (h *DynamoDBHandler) handleUntagResource(c *gin.Context, req *models.Dynamo
 		return
 	}
 
-	// TODO: Implement tag removal
+	// Untag the resource
+	if err := h.tableManager.UntagResource(tableName, req.TagKeys); err != nil {
+		if err.Error() == fmt.Sprintf("table not found: %s", tableName) {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, models.DynamoDBResponse{})
 }
 
@@ -657,9 +687,25 @@ func (h *DynamoDBHandler) handleListTagsOfResource(c *gin.Context, req *models.D
 		return
 	}
 
-	// TODO: Implement tag listing
+	// List tags
+	tags, err := h.tableManager.ListTagsOfResource(tableName)
+	if err != nil {
+		if err.Error() == fmt.Sprintf("table not found: %s", tableName) {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, models.DynamoDBResponse{
-		Tags: []models.Tag{},
+		Tags: tags,
 	})
 }
 
