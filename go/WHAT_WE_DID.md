@@ -58,9 +58,38 @@ Implemented logical operators and additional functions for condition expressions
 - All existing tests continue to pass
 - Test coverage for expression package: >90%
 
+## 2026-03-03: M2 Phase 2 - Batch Operations
+
+**Branch**: `feature/GO-M2-batch-ops`
+
+### Summary
+
+Added comprehensive tests for BatchGetItem and BatchWriteItem operations.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/batch_test.go`**
+   - Tests for BatchGetItem (3 test cases)
+   - Tests for BatchWriteItem (5 test cases)
+   - Tests for batch size limits
+
+### Features Verified
+
+| Feature | Status | Tests |
+|---------|--------|-------|
+| BatchGetItem | ✅ | Get existing items, mix of existing/non-existing, non-existent table |
+| BatchWriteItem | ✅ | Put multiple, Delete, Mixed operations, Non-existent table |
+| Batch limits | ✅ | 25 item limit enforced |
+
+### Tests
+
+- 10 batch operation tests added
+- All 88 Go tests passing
+
 ### Next Steps
 
-- Phase 2: Batch operations (BatchGetItem, BatchWriteItem)
 - Phase 3: Transactions (TransactGetItems, TransactWriteItems)
 - Phase 4: UpdateExpression improvements
 - Phase 5: UpdateTable GSI support
