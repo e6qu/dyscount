@@ -729,6 +729,23 @@ func (tm *TableManager) ListBackups(req *models.ListBackupsRequest) ([]models.Ba
 	return filtered, nil
 }
 
+// DescribeBackup describes a backup.
+func (tm *TableManager) DescribeBackup(backupArn string) (*models.BackupDescription, error) {
+	backups, err := tm.loadBackupMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	// Find backup by ARN
+	for i := range backups {
+		if backups[i].BackupArn == backupArn {
+			return &backups[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("backup not found: %s", backupArn)
+}
+
 // DeleteBackup deletes a backup.
 func (tm *TableManager) DeleteBackup(backupArn string) (*models.BackupDescription, error) {
 	// Find backup metadata

@@ -75,7 +75,7 @@ Go implementation using Gin framework with SQLite backend.
 | Category | Operations | Status |
 |----------|------------|--------|
 | TTL | UpdateTimeToLive, DescribeTimeToLive | ❌ |
-| Backup | CreateBackup, RestoreTableFromBackup, ListBackups, DeleteBackup | ✅ |
+| Backup | CreateBackup, DescribeBackup, RestoreTableFromBackup, ListBackups, DeleteBackup | ✅ |
 | PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime | ❌ |
 | PartiQL | ExecuteStatement, BatchExecuteStatement | ❌ |
 | Import/Export | 6 operations | ❌ |
@@ -92,9 +92,9 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 148 (+5 ListTables pagination tests)
+- **Test Count**: 150 (+2 DescribeBackup tests)
 - **Test Coverage**: ~76%
-- **Operations**: 30/61 (49%)
+- **Operations**: 31/61 (51%)
 - **M2 Feature Parity**: ✅ COMPLETE
   - Condition Expressions: ✅
   - Batch Operations: ✅

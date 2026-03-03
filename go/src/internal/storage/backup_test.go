@@ -141,6 +141,87 @@ func TestTableManager_CreateBackup_NonExistentTable(t *testing.T) {
 	}
 }
 
+func TestTableManager_DescribeBackup(t *testing.T) {
+	// Create temporary directory for test databases
+	tempDir, err := os.MkdirTemp("", "dyscount-backup-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	tm, err := NewTableManager(tempDir, "default")
+	if err != nil {
+		t.Fatalf("Failed to create table manager: %v", err)
+	}
+
+	// Create test table
+	req := &models.DynamoDBRequest{
+		TableName: "TestTable",
+		KeySchema: []models.KeySchemaElement{
+			{AttributeName: "pk", KeyType: "HASH"},
+		},
+		AttributeDefinitions: []models.AttributeDefinition{
+			{AttributeName: "pk", AttributeType: "S"},
+		},
+	}
+
+	_, err = tm.CreateTable(req)
+	if err != nil {
+		t.Fatalf("Failed to create table: %v", err)
+	}
+
+	// Create backup
+	backupReq := &models.CreateBackupRequest{
+		TableName:  "TestTable",
+		BackupName: "TestBackup",
+	}
+
+	backup, err := tm.CreateBackup(backupReq)
+	if err != nil {
+		t.Fatalf("Failed to create backup: %v", err)
+	}
+
+	// Describe backup
+	described, err := tm.DescribeBackup(backup.BackupArn)
+	if err != nil {
+		t.Fatalf("Failed to describe backup: %v", err)
+	}
+
+	// Verify backup details
+	if described.BackupArn != backup.BackupArn {
+		t.Errorf("Expected BackupArn=%s, got %s", backup.BackupArn, described.BackupArn)
+	}
+	if described.BackupName != backup.BackupName {
+		t.Errorf("Expected BackupName=%s, got %s", backup.BackupName, described.BackupName)
+	}
+	if described.TableName != backup.TableName {
+		t.Errorf("Expected TableName=%s, got %s", backup.TableName, described.TableName)
+	}
+	if described.BackupStatus != backup.BackupStatus {
+		t.Errorf("Expected BackupStatus=%s, got %s", backup.BackupStatus, described.BackupStatus)
+	}
+}
+
+func TestTableManager_DescribeBackup_NonExistent(t *testing.T) {
+	// Create temporary directory for test databases
+	tempDir, err := os.MkdirTemp("", "dyscount-backup-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	tm, err := NewTableManager(tempDir, "default")
+	if err != nil {
+		t.Fatalf("Failed to create table manager: %v", err)
+	}
+
+	// Try to describe non-existent backup
+	_, err = tm.DescribeBackup("arn:aws:dynamodb:local:000000000000:table/TestTable/backup/NonExistent")
+	if err == nil {
+		t.Error("Expected error when describing non-existent backup")
+	}
+}
+
 func TestTableManager_ListBackups(t *testing.T) {
 	// Create temporary directory for test databases
 	tempDir, err := os.MkdirTemp("", "dyscount-backup-test-*")

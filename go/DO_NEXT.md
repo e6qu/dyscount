@@ -7,8 +7,8 @@ Go implementation:
 - **M2 (Feature Parity)**: ✅ Complete - All phases finished
 - **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅
 
-**Current Operations**: 30/61 (49%)
-**Tests**: 148 passing
+**Current Operations**: 31/61 (51%)
+**Tests**: 150 passing
 
 ## Completed Work
 
@@ -26,7 +26,7 @@ Go implementation:
 
 ### M3 Advanced Features 🚧
 - **Phase 1**: TTL (UpdateTimeToLive, DescribeTimeToLive) - 6 tests ✅
-- **Phase 2**: Backup/Restore (CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup) - 9 tests ✅
+- **Phase 2**: Backup/Restore (CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup) - 11 tests ✅
 - **Phase 2.5**: Pagination (Query/Scan with LastEvaluatedKey) - 9 tests ✅
 - **Phase 2.6**: Tagging (TagResource, UntagResource, ListTagsOfResource) - 8 tests ✅
 - **Phase 2.7**: ListTables Pagination (Limit, ExclusiveStartTableName) - 5 tests ✅
