@@ -1186,3 +1186,105 @@ class DeleteBackupResponse(BaseModel):
     model_config = {"populate_by_name": True}
     
     backup_description: Optional[BackupDetails] = Field(default=None, alias="BackupDescription")
+
+
+# =============================================================================
+# PartiQL Operations (M2 Phase 4)
+# =============================================================================
+
+class ExecuteStatementRequest(BaseModel):
+    """Request model for ExecuteStatement operation.
+    
+    Executes a PartiQL statement against a DynamoDB table.
+    
+    Attributes:
+        Statement: The PartiQL statement to execute (required)
+        Parameters: Parameters for the statement (optional)
+        ConsistentRead: Whether to use strongly consistent reads
+        NextToken: Pagination token for continuing a previous query
+        ReturnConsumedCapacity: Whether to return consumed capacity info
+        Limit: Maximum number of items to evaluate
+    """
+    model_config = {"populate_by_name": True}
+    
+    statement: str = Field(..., alias="Statement")
+    parameters: Optional[List[Dict[str, Any]]] = Field(default=None, alias="Parameters")
+    consistent_read: Optional[bool] = Field(default=None, alias="ConsistentRead")
+    next_token: Optional[str] = Field(default=None, alias="NextToken")
+    return_consumed_capacity: Optional[str] = Field(default=None, alias="ReturnConsumedCapacity")
+    limit: Optional[int] = Field(default=None, alias="Limit")
+
+
+class ExecuteStatementResponse(BaseModel):
+    """Response model for ExecuteStatement operation.
+    
+    Attributes:
+        Items: The items returned by the statement (for SELECT)
+        NextToken: Pagination token for continuing the query
+        LastEvaluatedKey: The primary key of the last evaluated item
+        ConsumedCapacity: The consumed capacity units
+    """
+    model_config = {"populate_by_name": True}
+    
+    items: Optional[List[Dict[str, Any]]] = Field(default=None, alias="Items")
+    next_token: Optional[str] = Field(default=None, alias="NextToken")
+    last_evaluated_key: Optional[Dict[str, Any]] = Field(default=None, alias="LastEvaluatedKey")
+    consumed_capacity: Optional[Dict[str, Any]] = Field(default=None, alias="ConsumedCapacity")
+
+
+class BatchStatementRequest(BaseModel):
+    """A single PartiQL statement request for batch execution.
+    
+    Attributes:
+        Statement: The PartiQL statement to execute
+        Parameters: Parameters for the statement
+        ConsistentRead: Whether to use strongly consistent reads
+    """
+    model_config = {"populate_by_name": True}
+    
+    statement: str = Field(..., alias="Statement")
+    parameters: Optional[List[Dict[str, Any]]] = Field(default=None, alias="Parameters")
+    consistent_read: Optional[bool] = Field(default=None, alias="ConsistentRead")
+
+
+class BatchStatementResponse(BaseModel):
+    """Response for a single statement in a batch.
+    
+    Attributes:
+        Item: The item returned (for SELECT)
+        TableName: The name of the table affected
+        Error: Error information if the statement failed
+    """
+    model_config = {"populate_by_name": True}
+    
+    item: Optional[Dict[str, Any]] = Field(default=None, alias="Item")
+    table_name: Optional[str] = Field(default=None, alias="TableName")
+    error: Optional[Dict[str, Any]] = Field(default=None, alias="Error")
+
+
+class BatchExecuteStatementRequest(BaseModel):
+    """Request model for BatchExecuteStatement operation.
+    
+    Executes multiple PartiQL statements in a batch.
+    
+    Attributes:
+        Statements: List of PartiQL statements to execute (required)
+        ReturnConsumedCapacity: Whether to return consumed capacity info
+    """
+    model_config = {"populate_by_name": True}
+    
+    statements: List[BatchStatementRequest] = Field(..., alias="Statements")
+    return_consumed_capacity: Optional[str] = Field(default=None, alias="ReturnConsumedCapacity")
+
+
+class BatchExecuteStatementResponse(BaseModel):
+    """Response model for BatchExecuteStatement operation.
+    
+    Attributes:
+        Responses: List of responses for each statement
+        ConsumedCapacity: The consumed capacity units
+    """
+    model_config = {"populate_by_name": True}
+    
+    responses: List[BatchStatementResponse] = Field(default_factory=list, alias="Responses")
+    consumed_capacity: Optional[List[Dict[str, Any]]] = Field(default=None, alias="ConsumedCapacity")

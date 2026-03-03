@@ -112,6 +112,10 @@ async def dynamodb_endpoint(
         return await handle_list_backups(body, config)
     elif operation == "DeleteBackup":
         return await handle_delete_backup(body, config)
+    elif operation == "ExecuteStatement":
+        return await handle_execute_statement(body, config)
+    elif operation == "BatchExecuteStatement":
+        return await handle_batch_execute_statement(body, config)
     else:
         return JSONResponse(
             status_code=400,
@@ -1492,6 +1496,121 @@ async def handle_delete_backup(body: dict, config: Config) -> JSONResponse:
             status_code=400,
             content={"__type": e.error_type, "message": e.message}
         )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+# =============================================================================
+# PartiQL Operations (M2 Phase 4)
+# =============================================================================
+
+async def handle_execute_statement(body: dict, config: Config) -> JSONResponse:
+    """Handle ExecuteStatement operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            ExecuteStatementRequest,
+            ExecuteStatementResponse,
+        )
+        from dyscount_core.services.partiql_service import PartiQLService
+        
+        # Parse request
+        request = ExecuteStatementRequest.model_validate(body)
+        
+        # Create service and execute
+        service = PartiQLService(config)
+        response = await service.execute_statement(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
+    except ResourceNotFoundException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except ValidationException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except DynamoDBException as e:
+        return JSONResponse(
+            status_code=400,
+            content={"__type": e.error_type, "message": e.message}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "__type": "com.amazonaws.dynamodb.v20120810#InternalServerError",
+                "message": str(e)
+            }
+        )
+    finally:
+        if service:
+            await service.close()
+
+
+async def handle_batch_execute_statement(body: dict, config: Config) -> JSONResponse:
+    """Handle BatchExecuteStatement operation"""
+    service = None
+    try:
+        from dyscount_core.models.operations import (
+            BatchExecuteStatementRequest,
+            BatchExecuteStatementResponse,
+        )
+        from dyscount_core.services.partiql_service import PartiQLService
+        
+        # Parse request
+        request = BatchExecuteStatementRequest.model_validate(body)
+        
+        # Create service and execute
+        service = PartiQLService(config)
+        response = await service.batch_execute_statement(request)
+        
+        # Serialize response
+        content = json.loads(
+            json.dumps(
+                response.model_dump(by_alias=True, exclude_none=True),
+                cls=DynamoDBJSONEncoder
+            )
+        )
+        
+        # Return success
+        return JSONResponse(status_code=200, content=content)
+        
     except ValidationException as e:
         return JSONResponse(
             status_code=400,
