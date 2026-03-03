@@ -259,6 +259,200 @@ func (tm *TableManager) loadMetadata(db *sql.DB, tableName string) (*models.Tabl
 	return &metadata, nil
 }
 
+// UpdateTable updates a table's configuration.
+func (tm *TableManager) UpdateTable(req *models.UpdateTableRequest) (*models.TableMetadata, error) {
+	dbPath := tm.getDBPath(req.TableName)
+
+	// Check if table exists
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("table not found: %s", req.TableName)
+	}
+
+	// Open database
+	db, err := sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	// Get current metadata
+	metadata, err := tm.DescribeTable(req.TableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update provisioned throughput if provided
+	if req.ProvisionedThroughput != nil {
+		metadata.ProvisionedThroughput = req.ProvisionedThroughput
+	}
+
+	// Update billing mode if provided
+	if req.BillingMode != "" {
+		if metadata.BillingModeSummary == nil {
+			metadata.BillingModeSummary = &models.BillingModeSummary{}
+		}
+		metadata.BillingModeSummary.BillingMode = req.BillingMode
+		metadata.BillingModeSummary.LastUpdateToPayPerRequestDateTime = time.Now().UTC()
+	}
+
+	// Process GSI updates
+	for _, gsiUpdate := range req.GlobalSecondaryIndexUpdates {
+		if gsiUpdate.Create != nil {
+			if err := tm.createGSI(db, metadata, gsiUpdate.Create); err != nil {
+				return nil, fmt.Errorf("failed to create GSI: %w", err)
+			}
+		}
+		if gsiUpdate.Update != nil {
+			if err := tm.updateGSI(db, gsiUpdate.Update); err != nil {
+				return nil, fmt.Errorf("failed to update GSI: %w", err)
+			}
+		}
+		if gsiUpdate.Delete != nil {
+			if err := tm.deleteGSI(db, metadata, gsiUpdate.Delete); err != nil {
+				return nil, fmt.Errorf("failed to delete GSI: %w", err)
+			}
+		}
+	}
+
+	// Update attribute definitions if provided
+	if len(req.AttributeDefinitions) > 0 {
+		// Merge new attribute definitions with existing ones
+		existingAttrs := make(map[string]models.AttributeDefinition)
+		for _, attr := range metadata.AttributeDefinitions {
+			existingAttrs[attr.AttributeName] = attr
+		}
+		for _, attr := range req.AttributeDefinitions {
+			existingAttrs[attr.AttributeName] = attr
+		}
+
+		// Convert back to slice
+		metadata.AttributeDefinitions = make([]models.AttributeDefinition, 0, len(existingAttrs))
+		for _, attr := range existingAttrs {
+			metadata.AttributeDefinitions = append(metadata.AttributeDefinitions, attr)
+		}
+	}
+
+	// Store updated metadata
+	if err := tm.storeTableMetadata(db, metadata); err != nil {
+		return nil, fmt.Errorf("failed to store metadata: %w", err)
+	}
+
+	return metadata, nil
+}
+
+// createGSI creates a new Global Secondary Index.
+func (tm *TableManager) createGSI(db *sql.DB, metadata *models.TableMetadata, create *models.CreateGlobalSecondaryIndexAction) error {
+	// Check if GSI already exists
+	for _, gsi := range metadata.GlobalSecondaryIndexes {
+		if gsi.IndexName == create.IndexName {
+			return fmt.Errorf("GSI already exists: %s", create.IndexName)
+		}
+	}
+
+	// Create GSI table
+	gsiTableName := fmt.Sprintf("gsi_%s", create.IndexName)
+	_, err := db.Exec(fmt.Sprintf(`
+		CREATE TABLE IF NOT EXISTS "%s" (
+			gsi_pk TEXT NOT NULL,
+			gsi_sk TEXT,
+			pk TEXT NOT NULL,
+			sk TEXT,
+			PRIMARY KEY (gsi_pk, gsi_sk)
+		)
+	`, gsiTableName))
+	if err != nil {
+		return fmt.Errorf("failed to create GSI table: %w", err)
+	}
+
+	// Create index on gsi_pk for faster lookups
+	_, err = db.Exec(fmt.Sprintf(`
+		CREATE INDEX IF NOT EXISTS "idx_%s_gsi_pk" ON "%s"(gsi_pk)
+	`, gsiTableName, gsiTableName))
+	if err != nil {
+		return fmt.Errorf("failed to create GSI index: %w", err)
+	}
+
+	// Add GSI to metadata
+	gsi := models.GlobalSecondaryIndex{
+		IndexName:             create.IndexName,
+		KeySchema:             create.KeySchema,
+		Projection:            create.Projection,
+		ProvisionedThroughput: create.ProvisionedThroughput,
+	}
+	metadata.GlobalSecondaryIndexes = append(metadata.GlobalSecondaryIndexes, gsi)
+
+	// Store index metadata
+	if err := tm.storeIndexMetadata(db, gsi, "GSI"); err != nil {
+		return fmt.Errorf("failed to store GSI metadata: %w", err)
+	}
+
+	return nil
+}
+
+// updateGSI updates an existing Global Secondary Index.
+func (tm *TableManager) updateGSI(db *sql.DB, update *models.UpdateGlobalSecondaryIndexAction) error {
+	// Update provisioned throughput in index metadata
+	provisionedThroughputJSON, _ := json.Marshal(update.ProvisionedThroughput)
+	_, err := db.Exec(`
+		UPDATE __index_metadata 
+		SET provisioned_throughput = ?
+		WHERE index_name = ? AND index_type = 'GSI'
+	`, provisionedThroughputJSON, update.IndexName)
+
+	if err != nil {
+		return fmt.Errorf("failed to update GSI: %w", err)
+	}
+
+	return nil
+}
+
+// deleteGSI deletes a Global Secondary Index.
+func (tm *TableManager) deleteGSI(db *sql.DB, metadata *models.TableMetadata, del *models.DeleteGlobalSecondaryIndexAction) error {
+	// Find and remove GSI from metadata
+	found := false
+	newGSIs := make([]models.GlobalSecondaryIndex, 0, len(metadata.GlobalSecondaryIndexes))
+	for _, gsi := range metadata.GlobalSecondaryIndexes {
+		if gsi.IndexName == del.IndexName {
+			found = true
+			continue
+		}
+		newGSIs = append(newGSIs, gsi)
+	}
+	if !found {
+		return fmt.Errorf("GSI not found: %s", del.IndexName)
+	}
+	metadata.GlobalSecondaryIndexes = newGSIs
+
+	// Drop GSI table
+	gsiTableName := fmt.Sprintf("gsi_%s", del.IndexName)
+	_, err := db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS "%s"`, gsiTableName))
+	if err != nil {
+		return fmt.Errorf("failed to drop GSI table: %w", err)
+	}
+
+	// Remove index metadata
+	_, err = db.Exec(`DELETE FROM __index_metadata WHERE index_name = ? AND index_type = 'GSI'`, del.IndexName)
+	if err != nil {
+		return fmt.Errorf("failed to delete GSI metadata: %w", err)
+	}
+
+	return nil
+}
+
+// storeTableMetadata stores table metadata in the database.
+func (tm *TableManager) storeTableMetadata(db *sql.DB, metadata *models.TableMetadata) error {
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	_, err = db.Exec(
+		"INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?, ?)",
+		"table_metadata", metadataJSON,
+	)
+	return err
+}
+
 // storeIndexMetadata stores index metadata in the database.
 func (tm *TableManager) storeIndexMetadata(db *sql.DB, index interface{}, indexType string) error {
 	var indexName string

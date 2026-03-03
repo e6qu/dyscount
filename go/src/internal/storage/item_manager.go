@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -326,51 +327,288 @@ func (im *ItemManager) UpdateItem(tableName string, key models.Item, updateExpre
 	return currentItem, oldItem, nil
 }
 
-// applyUpdateExpression applies a simple SET update expression to an item.
+// applyUpdateExpression applies an update expression to an item.
+// Supports SET, ADD, DELETE, and REMOVE actions.
 func (im *ItemManager) applyUpdateExpression(item models.Item, expression string, 
 	expressionValues map[string]models.AttributeValue) (models.Item, error) {
 	
-	// Simple parser for SET expressions
-	// Format: SET attr1 = :val1, attr2 = :val2, ...
-	upperExpr := strings.ToUpper(expression)
-	if !strings.HasPrefix(upperExpr, "SET ") {
-		return nil, fmt.Errorf("unsupported update expression: %s", expression)
-	}
-
-	// Remove SET prefix
-	expr := expression[4:]
-
-	// Split by commas
-	assignments := im.splitAssignments(expr)
-
-	for _, assignment := range assignments {
-		assignment = strings.TrimSpace(assignment)
-		parts := strings.SplitN(assignment, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid assignment: %s", assignment)
-		}
-
-		attrName := strings.TrimSpace(parts[0])
-		valueRef := strings.TrimSpace(parts[1])
-
-		// Check for expression attribute names (:#name -> actual name)
-		if strings.HasPrefix(attrName, "#") {
-			// For simplicity, keep the reference name
-			attrName = strings.TrimPrefix(attrName, "#")
-		}
-
-		// Look up value in expression values
-		if strings.HasPrefix(valueRef, ":") {
-			valueKey := valueRef[1:] // Remove leading :
-			if value, ok := expressionValues[valueKey]; ok {
-				item[attrName] = value
-			} else {
-				return nil, fmt.Errorf("missing value for key: %s", valueKey)
+	// Parse the expression to identify actions
+	actions := im.parseUpdateExpression(expression)
+	
+	for _, action := range actions {
+		switch action.Action {
+		case "SET":
+			if err := im.applySET(item, action, expressionValues); err != nil {
+				return nil, err
 			}
+		case "ADD":
+			if err := im.applyADD(item, action, expressionValues); err != nil {
+				return nil, err
+			}
+		case "DELETE":
+			if err := im.applyDELETE(item, action, expressionValues); err != nil {
+				return nil, err
+			}
+		case "REMOVE":
+			if err := im.applyREMOVE(item, action, expressionValues); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("unsupported update action: %s", action.Action)
 		}
 	}
 
 	return item, nil
+}
+
+// UpdateAction represents a single update action.
+type UpdateAction struct {
+	Action string // SET, ADD, DELETE, REMOVE
+	Path   string // Attribute path
+	Value  string // Value reference or literal
+}
+
+// parseUpdateExpression parses an update expression into actions.
+func (im *ItemManager) parseUpdateExpression(expression string) []UpdateAction {
+	var actions []UpdateAction
+	upperExpr := strings.ToUpper(expression)
+	
+	// Find all action keywords and their positions
+	actionKeywords := []string{"SET", "ADD", "DELETE", "REMOVE"}
+	actionPositions := make(map[string]int)
+	
+	for _, keyword := range actionKeywords {
+		if pos := strings.Index(upperExpr, keyword+" "); pos != -1 {
+			actionPositions[keyword] = pos
+		}
+	}
+	
+	// Sort actions by position
+	type actionPos struct {
+		action string
+		pos    int
+	}
+	var sortedActions []actionPos
+	for action, pos := range actionPositions {
+		sortedActions = append(sortedActions, actionPos{action, pos})
+	}
+	sort.Slice(sortedActions, func(i, j int) bool {
+		return sortedActions[i].pos < sortedActions[j].pos
+	})
+	
+	// Parse each action's content
+	for i, ap := range sortedActions {
+		startPos := ap.pos
+		endPos := len(expression)
+		if i < len(sortedActions)-1 {
+			endPos = sortedActions[i+1].pos
+		}
+		
+		actionContent := strings.TrimSpace(expression[startPos:endPos])
+		actionActions := im.parseActionContent(ap.action, actionContent)
+		actions = append(actions, actionActions...)
+	}
+	
+	return actions
+}
+
+// parseActionContent parses the content of a specific action.
+func (im *ItemManager) parseActionContent(actionName, content string) []UpdateAction {
+	var actions []UpdateAction
+	
+	// Remove action keyword prefix
+	prefix := actionName + " "
+	if strings.HasPrefix(strings.ToUpper(content), prefix) {
+		content = content[len(prefix):]
+	}
+	
+	// Split by commas at top level
+	parts := im.splitAssignments(content)
+	
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		
+		action := UpdateAction{Action: actionName}
+		
+		switch actionName {
+		case "SET":
+			// Format: path = value
+			if idx := strings.Index(part, "="); idx != -1 {
+				action.Path = strings.TrimSpace(part[:idx])
+				action.Value = strings.TrimSpace(part[idx+1:])
+			}
+		case "ADD", "DELETE":
+			// Format: path value
+			parts := strings.Fields(part)
+			if len(parts) >= 2 {
+				action.Path = parts[0]
+				action.Value = parts[1]
+			}
+		case "REMOVE":
+			// Format: path (no value)
+			action.Path = part
+		}
+		
+		if action.Path != "" {
+			actions = append(actions, action)
+		}
+	}
+	
+	return actions
+}
+
+// applySET applies a SET action.
+func (im *ItemManager) applySET(item models.Item, action UpdateAction, expressionValues map[string]models.AttributeValue) error {
+	attrName := action.Path
+	
+	// Handle expression attribute names (#name)
+	if strings.HasPrefix(attrName, "#") {
+		attrName = strings.TrimPrefix(attrName, "#")
+	}
+	
+	valueRef := action.Value
+	if strings.HasPrefix(valueRef, ":") {
+		valueKey := valueRef[1:]
+		if value, ok := expressionValues[valueKey]; ok {
+			item[attrName] = value
+		} else {
+			return fmt.Errorf("missing value for key: %s", valueKey)
+		}
+	}
+	return nil
+}
+
+// applyADD applies an ADD action (for numbers or sets).
+func (im *ItemManager) applyADD(item models.Item, action UpdateAction, expressionValues map[string]models.AttributeValue) error {
+	attrName := action.Path
+	if strings.HasPrefix(attrName, "#") {
+		attrName = strings.TrimPrefix(attrName, "#")
+	}
+	
+	valueRef := action.Value
+	if !strings.HasPrefix(valueRef, ":") {
+		return fmt.Errorf("invalid value reference: %s", valueRef)
+	}
+	
+	valueKey := valueRef[1:]
+	newValue, ok := expressionValues[valueKey]
+	if !ok {
+		return fmt.Errorf("missing value for key: %s", valueKey)
+	}
+	
+	existingValue, exists := item[attrName]
+	if !exists {
+		// If attribute doesn't exist, just set it
+		item[attrName] = newValue
+		return nil
+	}
+	
+	// Try to add numbers
+	existingNum, existingIsNum := existingValue.GetNumber()
+	newNum, newIsNum := newValue.GetNumber()
+	if existingIsNum && newIsNum {
+		// Parse and add numbers
+		existingFloat, _ := strconv.ParseFloat(existingNum, 64)
+		newFloat, _ := strconv.ParseFloat(newNum, 64)
+		result := existingFloat + newFloat
+		item[attrName] = models.NewNumberAttribute(strconv.FormatFloat(result, 'f', -1, 64))
+		return nil
+	}
+	
+	// Try to add to sets
+	if existingSS, ok := existingValue["SS"].([]interface{}); ok {
+		if newSS, ok := newValue["SS"].([]interface{}); ok {
+			// Add to string set
+			setMap := make(map[string]bool)
+			for _, v := range existingSS {
+				if s, ok := v.(string); ok {
+					setMap[s] = true
+				}
+			}
+			for _, v := range newSS {
+				if s, ok := v.(string); ok {
+					setMap[s] = true
+				}
+			}
+			newSet := make([]string, 0, len(setMap))
+			for s := range setMap {
+				newSet = append(newSet, s)
+			}
+			item[attrName] = models.NewStringSetAttribute(newSet)
+			return nil
+		}
+	}
+	
+	// For other types, just replace
+	item[attrName] = newValue
+	return nil
+}
+
+// applyDELETE applies a DELETE action (for removing from sets).
+func (im *ItemManager) applyDELETE(item models.Item, action UpdateAction, expressionValues map[string]models.AttributeValue) error {
+	attrName := action.Path
+	if strings.HasPrefix(attrName, "#") {
+		attrName = strings.TrimPrefix(attrName, "#")
+	}
+	
+	valueRef := action.Value
+	if !strings.HasPrefix(valueRef, ":") {
+		return fmt.Errorf("invalid value reference: %s", valueRef)
+	}
+	
+	valueKey := valueRef[1:]
+	deleteValue, ok := expressionValues[valueKey]
+	if !ok {
+		return fmt.Errorf("missing value for key: %s", valueKey)
+	}
+	
+	existingValue, exists := item[attrName]
+	if !exists {
+		return nil // Nothing to delete
+	}
+	
+	// Try to delete from string set
+	if existingSS, ok := existingValue["SS"].([]interface{}); ok {
+		if deleteSS, ok := deleteValue["SS"].([]interface{}); ok {
+			deleteMap := make(map[string]bool)
+			for _, v := range deleteSS {
+				if s, ok := v.(string); ok {
+					deleteMap[s] = true
+				}
+			}
+			
+			newSet := make([]string, 0)
+			for _, v := range existingSS {
+				if s, ok := v.(string); ok {
+					if !deleteMap[s] {
+						newSet = append(newSet, s)
+					}
+				}
+			}
+			
+			if len(newSet) == 0 {
+				delete(item, attrName)
+			} else {
+				item[attrName] = models.NewStringSetAttribute(newSet)
+			}
+		}
+	}
+	
+	return nil
+}
+
+// applyREMOVE applies a REMOVE action.
+func (im *ItemManager) applyREMOVE(item models.Item, action UpdateAction, expressionValues map[string]models.AttributeValue) error {
+	attrName := action.Path
+	if strings.HasPrefix(attrName, "#") {
+		attrName = strings.TrimPrefix(attrName, "#")
+	}
+	
+	delete(item, attrName)
+	return nil
 }
 
 // splitAssignments splits update expression assignments, handling nested commas.

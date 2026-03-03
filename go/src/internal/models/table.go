@@ -73,3 +73,64 @@ type Tag struct {
 	Key   string `json:"Key"`
 	Value string `json:"Value"`
 }
+
+// UpdateTableRequest represents an UpdateTable request.
+type UpdateTableRequest struct {
+	TableName                       string                         `json:"TableName" binding:"required"`
+	AttributeDefinitions            []AttributeDefinition          `json:"AttributeDefinitions,omitempty"`
+	BillingMode                     string                         `json:"BillingMode,omitempty"`
+	GlobalSecondaryIndexUpdates     []GlobalSecondaryIndexUpdate   `json:"GlobalSecondaryIndexUpdates,omitempty"`
+	ProvisionedThroughput           *ProvisionedThroughput         `json:"ProvisionedThroughput,omitempty"`
+	ReplicaUpdates                  []ReplicaUpdate                `json:"ReplicaUpdates,omitempty"`
+	SSESpecification                *SSESpecification              `json:"SSESpecification,omitempty"`
+	StreamSpecification             *StreamSpecification           `json:"StreamSpecification,omitempty"`
+}
+
+// GlobalSecondaryIndexUpdate represents a GSI update operation.
+type GlobalSecondaryIndexUpdate struct {
+	Create *CreateGlobalSecondaryIndexAction `json:"Create,omitempty"`
+	Update *UpdateGlobalSecondaryIndexAction `json:"Update,omitempty"`
+	Delete *DeleteGlobalSecondaryIndexAction `json:"Delete,omitempty"`
+}
+
+// CreateGlobalSecondaryIndexAction represents creating a GSI.
+type CreateGlobalSecondaryIndexAction struct {
+	IndexName             string                 `json:"IndexName" binding:"required"`
+	KeySchema             []KeySchemaElement     `json:"KeySchema" binding:"required"`
+	Projection            Projection             `json:"Projection" binding:"required"`
+	ProvisionedThroughput *ProvisionedThroughput `json:"ProvisionedThroughput,omitempty"`
+}
+
+// UpdateGlobalSecondaryIndexAction represents updating a GSI.
+type UpdateGlobalSecondaryIndexAction struct {
+	IndexName             string                 `json:"IndexName" binding:"required"`
+	ProvisionedThroughput *ProvisionedThroughput `json:"ProvisionedThroughput,omitempty"`
+}
+
+// DeleteGlobalSecondaryIndexAction represents deleting a GSI.
+type DeleteGlobalSecondaryIndexAction struct {
+	IndexName string `json:"IndexName" binding:"required"`
+}
+
+// ReplicaUpdate represents a replica update (placeholder).
+type ReplicaUpdate struct {
+	// Placeholder for replica updates
+}
+
+// SSESpecification represents server-side encryption settings.
+type SSESpecification struct {
+	Enabled        bool   `json:"Enabled,omitempty"`
+	SSEType        string `json:"SSEType,omitempty"`
+	KMSMasterKeyID string `json:"KMSMasterKeyId,omitempty"`
+}
+
+// StreamSpecification represents stream settings.
+type StreamSpecification struct {
+	StreamEnabled  bool   `json:"StreamEnabled,omitempty"`
+	StreamViewType string `json:"StreamViewType,omitempty"`
+}
+
+// UpdateTableResponse represents an UpdateTable response.
+type UpdateTableResponse struct {
+	TableDescription TableMetadata `json:"TableDescription"`
+}

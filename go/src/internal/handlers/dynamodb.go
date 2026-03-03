@@ -67,6 +67,8 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 	switch operation {
 	case "CreateTable":
 		h.handleCreateTable(c, &req)
+	case "UpdateTable":
+		h.handleUpdateTable(c, &req)
 	case "DeleteTable":
 		h.handleDeleteTable(c, &req)
 	case "ListTables":
@@ -451,6 +453,62 @@ func (h *DynamoDBHandler) handleCreateTable(c *gin.Context, req *models.DynamoDB
 	// Create table
 	metadata, err := h.tableManager.CreateTable(req)
 	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceInUseException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.DynamoDBResponse{
+		TableDescription: metadata,
+	})
+}
+
+func (h *DynamoDBHandler) handleUpdateTable(c *gin.Context, req *models.DynamoDBRequest) {
+	if req.TableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "Table name cannot be empty",
+		})
+		return
+	}
+
+	// Build UpdateTableRequest
+	updateReq := models.UpdateTableRequest{
+		TableName:                   req.TableName,
+		AttributeDefinitions:        req.AttributeDefinitions,
+		BillingMode:                 req.BillingMode,
+		ProvisionedThroughput:       req.ProvisionedThroughput,
+	}
+
+	// Parse GSI updates from request
+	// Note: The DynamoDBRequest would need to be extended to include GSI updates
+	// For now, we'll handle them if they're in the raw request body
+	var rawReq struct {
+		GlobalSecondaryIndexUpdates []models.GlobalSecondaryIndexUpdate `json:"GlobalSecondaryIndexUpdates"`
+	}
+	if err := c.ShouldBindJSON(&rawReq); err == nil {
+		updateReq.GlobalSecondaryIndexUpdates = rawReq.GlobalSecondaryIndexUpdates
+	}
+
+	// Update table
+	metadata, err := h.tableManager.UpdateTable(&updateReq)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
 		if strings.Contains(err.Error(), "already exists") {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
 				Type:    "com.amazonaws.dynamodb.v20120810#ResourceInUseException",
