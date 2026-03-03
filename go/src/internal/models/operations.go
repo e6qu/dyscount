@@ -722,3 +722,131 @@ type ListImportsResponse struct {
 	ImportSummaries []ImportSummary `json:"ImportSummaries,omitempty"`
 	NextToken       string          `json:"NextToken,omitempty"`
 }
+
+
+// Streams Models
+
+// StreamStatus represents the status of a stream.
+type StreamStatus string
+
+const (
+	StreamStatusEnabling  StreamStatus = "ENABLING"
+	StreamStatusEnabled   StreamStatus = "ENABLED"
+	StreamStatusDisabling StreamStatus = "DISABLING"
+	StreamStatusDisabled  StreamStatus = "DISABLED"
+)
+
+// StreamViewType represents the type of data written to a stream.
+type StreamViewType string
+
+const (
+	StreamViewTypeNewImage         StreamViewType = "NEW_IMAGE"
+	StreamViewTypeOldImage         StreamViewType = "OLD_IMAGE"
+	StreamViewTypeNewAndOldImages StreamViewType = "NEW_AND_OLD_IMAGES"
+	StreamViewTypeKeysOnly         StreamViewType = "KEYS_ONLY"
+)
+
+// Stream represents a stream.
+type Stream struct {
+	StreamArn   string       `json:"StreamArn,omitempty"`
+	StreamLabel string       `json:"StreamLabel,omitempty"`
+	StreamStatus StreamStatus `json:"StreamStatus,omitempty"`
+	StreamViewType StreamViewType `json:"StreamViewType,omitempty"`
+	TableName   string       `json:"TableName,omitempty"`
+	KeySchema   []KeySchemaElement `json:"KeySchema,omitempty"`
+}
+
+// StreamDescription represents a stream description.
+type StreamDescription struct {
+	StreamArn   string       `json:"StreamArn,omitempty"`
+	StreamLabel string       `json:"StreamLabel,omitempty"`
+	StreamStatus StreamStatus `json:"StreamStatus,omitempty"`
+	StreamViewType StreamViewType `json:"StreamViewType,omitempty"`
+	TableName   string       `json:"TableName,omitempty"`
+	KeySchema   []KeySchemaElement `json:"KeySchema,omitempty"`
+	Shards      []Shard      `json:"Shards,omitempty"`
+}
+
+// Shard represents a shard in a stream.
+type Shard struct {
+	ShardId       string `json:"ShardId,omitempty"`
+	SequenceNumberRange SequenceNumberRange `json:"SequenceNumberRange,omitempty"`
+}
+
+// SequenceNumberRange represents a sequence number range.
+type SequenceNumberRange struct {
+	StartingSequenceNumber string `json:"StartingSequenceNumber,omitempty"`
+	EndingSequenceNumber   string `json:"EndingSequenceNumber,omitempty"`
+}
+
+// StreamRecord represents a stream record.
+type StreamRecord struct {
+	ApproximateCreationDateTime int64          `json:"ApproximateCreationDateTime,omitempty"`
+	Keys                        Item           `json:"Keys,omitempty"`
+	NewImage                    Item           `json:"NewImage,omitempty"`
+	OldImage                    Item           `json:"OldImage,omitempty"`
+	SequenceNumber              string         `json:"SequenceNumber,omitempty"`
+	SizeBytes                   int64          `json:"SizeBytes,omitempty"`
+	StreamViewType              StreamViewType `json:"StreamViewType,omitempty"`
+}
+
+// Record represents a record in a stream.
+type Record struct {
+	AwsRegion      string       `json:"awsRegion,omitempty"`
+	Dynamodb       StreamRecord `json:"dynamodb,omitempty"`
+	EventID        string       `json:"eventID,omitempty"`
+	EventName      string       `json:"eventName,omitempty"`
+	EventSource    string       `json:"eventSource,omitempty"`
+	EventVersion   string       `json:"eventVersion,omitempty"`
+	EventSourceARN string       `json:"eventSourceARN,omitempty"`
+}
+
+// ListStreamsRequest represents a ListStreams request.
+type ListStreamsRequest struct {
+	TableName  string `json:"TableName,omitempty"`
+	Limit      int    `json:"Limit,omitempty"`
+	ExclusiveStartStreamArn string `json:"ExclusiveStartStreamArn,omitempty"`
+}
+
+// ListStreamsResponse represents a ListStreams response.
+type ListStreamsResponse struct {
+	Streams           []Stream `json:"Streams,omitempty"`
+	LastEvaluatedStreamArn string `json:"LastEvaluatedStreamArn,omitempty"`
+}
+
+// DescribeStreamRequest represents a DescribeStream request.
+type DescribeStreamRequest struct {
+	StreamArn string `json:"StreamArn" binding:"required"`
+	Limit     int    `json:"Limit,omitempty"`
+	ExclusiveStartShardId string `json:"ExclusiveStartShardId,omitempty"`
+}
+
+// DescribeStreamResponse represents a DescribeStream response.
+type DescribeStreamResponse struct {
+	StreamDescription StreamDescription `json:"StreamDescription,omitempty"`
+}
+
+// GetShardIteratorRequest represents a GetShardIterator request.
+type GetShardIteratorRequest struct {
+	StreamArn         string `json:"StreamArn" binding:"required"`
+	ShardId           string `json:"ShardId" binding:"required"`
+	ShardIteratorType string `json:"ShardIteratorType" binding:"required"`
+	SequenceNumber    string `json:"SequenceNumber,omitempty"`
+}
+
+// GetShardIteratorResponse represents a GetShardIterator response.
+type GetShardIteratorResponse struct {
+	ShardIterator string `json:"ShardIterator,omitempty"`
+}
+
+// GetRecordsRequest represents a GetRecords request.
+type GetRecordsRequest struct {
+	ShardIterator string `json:"ShardIterator" binding:"required"`
+	Limit         int    `json:"Limit,omitempty"`
+}
+
+// GetRecordsResponse represents a GetRecords response.
+type GetRecordsResponse struct {
+	Records            []Record `json:"Records,omitempty"`
+	NextShardIterator  string   `json:"NextShardIterator,omitempty"`
+}

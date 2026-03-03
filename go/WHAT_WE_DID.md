@@ -719,3 +719,73 @@ Implemented PartiQL support and Import/Export operations - 8 new operations to r
 - Go M3 Phase 6: DynamoDB Streams - ListStreams, DescribeStream, GetShardIterator, GetRecords
 
 ---
+
+## 2026-03-03: Go M3 Phase 5 - DynamoDB Streams
+
+**Branch**: `feature/GO-streams`
+
+### Summary
+
+Implemented DynamoDB Streams operations for real-time change data capture.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/stream_manager.go`**
+   - `StreamManager` struct for managing streams
+   - `EnableStream()` - Enable stream on a table
+   - `DisableStream()` - Disable stream on a table
+   - `DescribeStream()` - Get stream details
+   - `ListStreams()` - List all streams
+   - `GetShardIterator()` - Get iterator for reading records
+   - `GetRecords()` - Read records from stream
+   - `WriteStreamRecord()` - Write record to stream (internal)
+
+2. **`go/src/internal/storage/stream_test.go`**
+   - Tests for enabling/disabling streams
+   - Tests for describing streams
+   - Tests for listing streams
+   - Tests for getting shard iterators
+   - Tests for writing and reading records
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added stream models: StreamStatus, StreamViewType, Stream, StreamDescription, Shard, SequenceNumberRange, StreamRecord, Record
+   - Added request/response models: ListStreamsRequest/Response, DescribeStreamRequest/Response, GetShardIteratorRequest/Response, GetRecordsRequest/Response
+
+2. **`go/src/internal/models/table.go`**
+   - Updated StreamSpecification to use StreamViewType type
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added routing for Streams operations: ListStreams, DescribeStream, GetShardIterator, GetRecords
+   - Added handler methods for all stream operations
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| ListStreams | ✅ | List all streams, optionally filtered by table |
+| DescribeStream | ✅ | Get stream details including shards |
+| GetShardIterator | ✅ | Get iterator for reading stream records |
+| GetRecords | ✅ | Read records from a stream |
+| StreamRecord | ✅ | Record structure for stream events |
+| StreamViewType | ✅ | NEW_IMAGE, OLD_IMAGE, NEW_AND_OLD_IMAGES, KEYS_ONLY |
+
+### Tests
+
+- 10 Streams tests added
+- Total: 172 Go tests passing
+
+### Metrics
+
+- **Operations**: 43/61 (70%) - Up from 39/61 (64%)
+- **Tests**: 172 passing - Up from 162
+
+### Next Steps
+
+- Go M3 Phase 6: Point-in-Time Recovery (PITR) - UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime
+- Go M3 Phase 7: Global Tables - CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables
+
+---

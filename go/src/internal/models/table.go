@@ -126,8 +126,8 @@ type SSESpecification struct {
 
 // StreamSpecification represents stream settings.
 type StreamSpecification struct {
-	StreamEnabled  bool   `json:"StreamEnabled,omitempty"`
-	StreamViewType string `json:"StreamViewType,omitempty"`
+	StreamEnabled  bool           `json:"StreamEnabled,omitempty"`
+	StreamViewType StreamViewType `json:"StreamViewType,omitempty"`
 }
 
 // UpdateTableResponse represents an UpdateTable response.

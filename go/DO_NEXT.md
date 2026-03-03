@@ -5,10 +5,10 @@
 Go implementation:
 - **M1 (Foundation)**: ✅ Complete - 16 operations
 - **M2 (Feature Parity)**: ✅ Complete - All phases finished
-- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅
+- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅, Streams ✅
 
-**Current Operations**: 39/61 (64%)
-**Tests**: 162 passing
+**Current Operations**: 43/61 (70%)
+**Tests**: 172 passing
 
 ## Completed Work
 
@@ -33,6 +33,7 @@ Go implementation:
 - **Phase 2.8**: DescribeBackup - 2 tests ✅
 - **Phase 3**: PartiQL (ExecuteStatement, BatchExecuteStatement) - 6 tests ✅
 - **Phase 4**: Import/Export (ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports) - 6 tests ✅
+- **Phase 5**: Streams (ListStreams, DescribeStream, GetShardIterator, GetRecords) - 10 tests ✅
 
 ## Next Phase: M3 Phase 5 - Point-in-Time Recovery (PITR) and Streams
 

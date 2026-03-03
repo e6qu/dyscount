@@ -79,7 +79,7 @@ Go implementation using Gin framework with SQLite backend.
 | PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime | ❌ |
 | PartiQL | ExecuteStatement, BatchExecuteStatement | ✅ |
 | Import/Export | ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports | ✅ |
-| Streams | 4 operations | ❌ |
+| Streams | ListStreams, DescribeStream, GetShardIterator, GetRecords | ✅ |
 
 ## Critical Gaps
 
@@ -92,9 +92,9 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 162 (+12 PartiQL and Import/Export tests)
+- **Test Count**: 172 (+10 Streams tests)
 - **Test Coverage**: ~76%
-- **Operations**: 39/61 (64%)
+- **Operations**: 43/61 (70%)
 - **M2 Feature Parity**: ✅ COMPLETE
   - Condition Expressions: ✅
   - Batch Operations: ✅
@@ -108,6 +108,7 @@ Go implementation using Gin framework with SQLite backend.
   - Tagging: ✅ Complete
   - PartiQL: ✅ Complete
   - Import/Export: ✅ Complete
+  - Streams: ✅ Complete
 
 ## Next Phase: M3 Advanced Features
 
