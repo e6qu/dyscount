@@ -519,3 +519,206 @@ type RestoreTableFromBackupRequest struct {
 type RestoreTableFromBackupResponse struct {
 	TableDescription TableMetadata `json:"TableDescription,omitempty"`
 }
+
+// PartiQL Models
+
+// ExecuteStatementRequest represents an ExecuteStatement request.
+type ExecuteStatementRequest struct {
+	Statement             string                 `json:"Statement" binding:"required"`
+	Parameters            []Item                 `json:"Parameters,omitempty"`
+	ConsistentRead        bool                   `json:"ConsistentRead,omitempty"`
+	NextToken             string                 `json:"NextToken,omitempty"`
+	ReturnConsumedCapacity string                `json:"ReturnConsumedCapacity,omitempty"`
+	Limit                 int                    `json:"Limit,omitempty"`
+}
+
+// ExecuteStatementResponse represents an ExecuteStatement response.
+type ExecuteStatementResponse struct {
+	Items            []Item            `json:"Items,omitempty"`
+	NextToken        string            `json:"NextToken,omitempty"`
+	LastEvaluatedKey Item              `json:"LastEvaluatedKey,omitempty"`
+}
+
+// BatchStatementRequest represents a single PartiQL statement in a batch.
+type BatchStatementRequest struct {
+	Statement      string `json:"Statement" binding:"required"`
+	Parameters     []Item `json:"Parameters,omitempty"`
+	ConsistentRead bool   `json:"ConsistentRead,omitempty"`
+}
+
+// BatchStatementResponse represents a response for a single statement in a batch.
+type BatchStatementResponse struct {
+	Item       Item   `json:"Item,omitempty"`
+	TableName  string `json:"TableName,omitempty"`
+	Error      *ErrorResponse `json:"Error,omitempty"`
+}
+
+// BatchExecuteStatementRequest represents a BatchExecuteStatement request.
+type BatchExecuteStatementRequest struct {
+	Statements             []BatchStatementRequest `json:"Statements" binding:"required"`
+	ReturnConsumedCapacity string                  `json:"ReturnConsumedCapacity,omitempty"`
+}
+
+// BatchExecuteStatementResponse represents a BatchExecuteStatement response.
+type BatchExecuteStatementResponse struct {
+	Responses []BatchStatementResponse `json:"Responses,omitempty"`
+}
+
+// Export/Import Models
+
+// ExportFormat represents the export format.
+type ExportFormat string
+
+const (
+	ExportFormatDynamoDBJSON ExportFormat = "DYNAMODB_JSON"
+	ExportFormatION          ExportFormat = "ION"
+)
+
+// ExportType represents the export type.
+type ExportType string
+
+const (
+	ExportTypeFullExport       ExportType = "FULL_EXPORT"
+	ExportTypeIncrementalExport ExportType = "INCREMENTAL_EXPORT"
+)
+
+// ExportStatus represents the export status.
+type ExportStatus string
+
+const (
+	ExportStatusInProgress ExportStatus = "IN_PROGRESS"
+	ExportStatusCompleted  ExportStatus = "COMPLETED"
+	ExportStatusFailed     ExportStatus = "FAILED"
+)
+
+// ExportDescription represents an export description.
+type ExportDescription struct {
+	ExportArn      string       `json:"ExportArn,omitempty"`
+	ExportStatus   ExportStatus `json:"ExportStatus,omitempty"`
+	ExportTime     int64        `json:"ExportTime,omitempty"`
+	TableArn       string       `json:"TableArn,omitempty"`
+	TableName      string       `json:"TableName,omitempty"`
+	S3Bucket       string       `json:"S3Bucket,omitempty"`
+	S3Prefix       string       `json:"S3Prefix,omitempty"`
+	ExportFormat   ExportFormat `json:"ExportFormat,omitempty"`
+	ExportType     ExportType   `json:"ExportType,omitempty"`
+	FailureCode    string       `json:"FailureCode,omitempty"`
+	FailureMessage string       `json:"FailureMessage,omitempty"`
+	ItemCount      int64        `json:"ItemCount,omitempty"`
+	ProcessedBytes int64        `json:"ProcessedBytes,omitempty"`
+}
+
+// ExportTableToPointInTimeRequest represents an ExportTableToPointInTime request.
+type ExportTableToPointInTimeRequest struct {
+	TableArn        string       `json:"TableArn" binding:"required"`
+	S3Bucket        string       `json:"S3Bucket" binding:"required"`
+	ExportTime      int64        `json:"ExportTime,omitempty"`
+	ClientToken     string       `json:"ClientToken,omitempty"`
+	S3Prefix        string       `json:"S3Prefix,omitempty"`
+	S3BucketOwner   string       `json:"S3BucketOwner,omitempty"`
+	ExportFormat    ExportFormat `json:"ExportFormat,omitempty"`
+	ExportType      ExportType   `json:"ExportType,omitempty"`
+}
+
+// ExportTableToPointInTimeResponse represents an ExportTableToPointInTime response.
+type ExportTableToPointInTimeResponse struct {
+	ExportDescription ExportDescription `json:"ExportDescription,omitempty"`
+}
+
+// DescribeExportRequest represents a DescribeExport request.
+type DescribeExportRequest struct {
+	ExportArn string `json:"ExportArn" binding:"required"`
+}
+
+// DescribeExportResponse represents a DescribeExport response.
+type DescribeExportResponse struct {
+	ExportDescription ExportDescription `json:"ExportDescription,omitempty"`
+}
+
+// ExportSummary represents a summary of an export.
+type ExportSummary struct {
+	ExportArn    string       `json:"ExportArn,omitempty"`
+	ExportStatus ExportStatus `json:"ExportStatus,omitempty"`
+	ExportType   ExportType   `json:"ExportType,omitempty"`
+}
+
+// ListExportsRequest represents a ListExports request.
+type ListExportsRequest struct {
+	TableArn   string `json:"TableArn,omitempty"`
+	MaxResults int    `json:"MaxResults,omitempty"`
+	NextToken  string `json:"NextToken,omitempty"`
+}
+
+// ListExportsResponse represents a ListExports response.
+type ListExportsResponse struct {
+	ExportSummaries []ExportSummary `json:"ExportSummaries,omitempty"`
+	NextToken       string          `json:"NextToken,omitempty"`
+}
+
+// ImportStatus represents the import status.
+type ImportStatus string
+
+const (
+	ImportStatusInProgress ImportStatus = "IN_PROGRESS"
+	ImportStatusCompleted  ImportStatus = "COMPLETED"
+	ImportStatusFailed     ImportStatus = "FAILED"
+)
+
+// ImportDescription represents an import description.
+type ImportDescription struct {
+	ImportArn       string       `json:"ImportArn,omitempty"`
+	ImportStatus    ImportStatus `json:"ImportStatus,omitempty"`
+	TableArn        string       `json:"TableArn,omitempty"`
+	TableName       string       `json:"TableName,omitempty"`
+	S3BucketSource  string       `json:"S3BucketSource,omitempty"`
+	S3Prefix        string       `json:"S3Prefix,omitempty"`
+	ImportFormat    ExportFormat `json:"ImportFormat,omitempty"`
+	FailureCode     string       `json:"FailureCode,omitempty"`
+	FailureMessage  string       `json:"FailureMessage,omitempty"`
+	ItemCount       int64        `json:"ItemCount,omitempty"`
+	ProcessedBytes  int64        `json:"ProcessedBytes,omitempty"`
+}
+
+// ImportTableRequest represents an ImportTable request.
+type ImportTableRequest struct {
+	TableName       string       `json:"TableName" binding:"required"`
+	S3BucketSource  string       `json:"S3BucketSource" binding:"required"`
+	S3Prefix        string       `json:"S3Prefix,omitempty"`
+	ImportFormat    ExportFormat `json:"ImportFormat,omitempty"`
+	KeySchema       []KeySchemaElement `json:"KeySchema" binding:"required"`
+	AttributeDefinitions []AttributeDefinition `json:"AttributeDefinitions" binding:"required"`
+}
+
+// ImportTableResponse represents an ImportTable response.
+type ImportTableResponse struct {
+	ImportDescription ImportDescription `json:"ImportDescription,omitempty"`
+}
+
+// DescribeImportRequest represents a DescribeImport request.
+type DescribeImportRequest struct {
+	ImportArn string `json:"ImportArn" binding:"required"`
+}
+
+// DescribeImportResponse represents a DescribeImport response.
+type DescribeImportResponse struct {
+	ImportDescription ImportDescription `json:"ImportDescription,omitempty"`
+}
+
+// ImportSummary represents a summary of an import.
+type ImportSummary struct {
+	ImportArn    string       `json:"ImportArn,omitempty"`
+	ImportStatus ImportStatus `json:"ImportStatus,omitempty"`
+}
+
+// ListImportsRequest represents a ListImports request.
+type ListImportsRequest struct {
+	TableArn   string `json:"TableArn,omitempty"`
+	MaxResults int    `json:"MaxResults,omitempty"`
+	NextToken  string `json:"NextToken,omitempty"`
+}
+
+// ListImportsResponse represents a ListImports response.
+type ListImportsResponse struct {
+	ImportSummaries []ImportSummary `json:"ImportSummaries,omitempty"`
+	NextToken       string          `json:"NextToken,omitempty"`
+}

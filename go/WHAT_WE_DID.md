@@ -633,3 +633,89 @@ Implemented DescribeBackup operation to complete the backup operations set.
 - Or: Implement PartiQL support
 
 ---
+
+## 2026-03-03: Go M3 Phases 3 & 4 - PartiQL and Import/Export Operations
+
+**Branch**: `feature/GO-partiql-import-export`
+
+### Summary
+
+Implemented PartiQL support and Import/Export operations - 8 new operations to reach 64% parity with Python.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/partiql.go`**
+   - `PartiQLEngine` struct for executing PartiQL statements
+   - `ExecuteStatement()` - Execute single PartiQL statement
+   - `BatchExecuteStatement()` - Execute batch of statements
+   - Support for SELECT, INSERT, UPDATE, DELETE statements
+   - Simple regex-based parser for PartiQL syntax
+
+2. **`go/src/internal/storage/partiql_test.go`**
+   - Tests for SELECT statements
+   - Tests for INSERT statements
+   - Tests for DELETE statements
+   - Tests for batch execution
+
+3. **`go/src/internal/storage/import_export.go`**
+   - `ImportExportManager` struct for managing import/export operations
+   - `ExportTableToPointInTime()` - Create export task
+   - `DescribeExport()` - Get export details
+   - `ListExports()` - List all exports
+   - `ImportTable()` - Create import task
+   - `DescribeImport()` - Get import details
+   - `ListImports()` - List all imports
+
+4. **`go/src/internal/storage/import_export_test.go`**
+   - Tests for export creation and description
+   - Tests for import creation and description
+   - Tests for listing exports/imports
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added PartiQL models: ExecuteStatementRequest/Response, BatchStatementRequest/Response, BatchExecuteStatementRequest/Response
+   - Added Import/Export models: ExportDescription, ExportTableToPointInTimeRequest/Response, DescribeExportRequest/Response, ListExportsRequest/Response, ImportDescription, ImportTableRequest/Response, DescribeImportRequest/Response, ListImportsRequest/Response
+   - Added enums: ExportFormat, ExportType, ExportStatus, ImportStatus
+
+2. **`go/src/internal/storage/table_manager.go`**
+   - Added `GetDataDirectory()` method
+   - Added `GetNamespace()` method
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added routing for PartiQL operations: ExecuteStatement, BatchExecuteStatement
+   - Added routing for Import/Export operations: ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports
+   - Added handler methods for all new operations
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| ExecuteStatement | ✅ | Execute single PartiQL statement (SELECT, INSERT, UPDATE, DELETE) |
+| BatchExecuteStatement | ✅ | Execute multiple PartiQL statements |
+| ExportTableToPointInTime | ✅ | Export table to S3 |
+| DescribeExport | ✅ | Get export task details |
+| ListExports | ✅ | List all export tasks |
+| ImportTable | ✅ | Import table from S3 |
+| DescribeImport | ✅ | Get import task details |
+| ListImports | ✅ | List all import tasks |
+
+### Tests
+
+- 6 PartiQL tests added
+- 6 Import/Export tests added
+- Total: 162 Go tests passing
+
+### Metrics
+
+- **Operations**: 39/61 (64%) - Up from 31/61 (51%)
+- **Tests**: 162 passing - Up from 150
+
+### Next Steps
+
+- Go M3 Phase 5: Point-in-Time Recovery (PITR) - UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime
+- Go M3 Phase 6: DynamoDB Streams - ListStreams, DescribeStream, GetShardIterator, GetRecords
+
+---
