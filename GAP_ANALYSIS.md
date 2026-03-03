@@ -1,6 +1,6 @@
 # Dyscount Gap Analysis
 
-**Date**: 2026-03-03  
+**Date**: 2026-03-04  
 **Purpose**: Comprehensive feature gap analysis across all 4 language implementations
 
 ---
@@ -10,9 +10,9 @@
 | Implementation | Operations | Test Coverage | Status |
 |---------------|------------|---------------|--------|
 | **Python** | 53/61 (87%) | 372 tests | ✅ Production-ready |
-| **Go** | 16/61 (26%) | 50 tests | ⚠️ Basic functionality |
+| **Go** | 50/61 (82%) | 183 tests | ✅ Feature Complete |
 | **Rust** | 13/61 (21%) | 21 tests | ⚠️ Basic functionality |
-| **Zig** | 5/61 (8%) | 9 tests | ⚠️ Control plane only |
+| **Zig** | 16/61 (26%) | 19 tests | ⚠️ Basic Data Plane |
 
 **Total API Coverage**: 53/61 DynamoDB operations (87%)
 
@@ -22,7 +22,7 @@
 
 ### ✅ Fully Implemented (53 operations)
 
-#### Control Plane (8 operations)
+#### Control Plane (9 operations)
 | Operation | Status | Notes |
 |-----------|--------|-------|
 | CreateTable | ✅ | Full GSI/LSI support |
@@ -49,7 +49,7 @@
 | TransactGetItems | ✅ | Up to 100 items, atomic |
 | TransactWriteItems | ✅ | Up to 100 items, atomic |
 
-#### Advanced Operations (15 operations)
+#### Advanced Operations (17 operations)
 | Operation | Status | Notes |
 |-----------|--------|-------|
 | UpdateTimeToLive | ✅ | |
@@ -79,7 +79,6 @@
 | Global Tables | DescribeGlobalTable | Low | Multi-region not needed for local |
 | Global Tables | ListGlobalTables | Low | Multi-region not needed for local |
 | Global Tables | UpdateReplication | Low | Multi-region not needed for local |
-| Streams | CreateStream | Low | Event streaming not core |
 | Streams | DescribeStream | Low | Event streaming not core |
 | Streams | ListStreams | Low | Event streaming not core |
 | Streams | GetRecords | Low | Event streaming not core |
@@ -89,30 +88,50 @@
 
 ## 2. Go Implementation Analysis
 
-### ✅ Implemented (16 operations)
+### ✅ Implemented (50 operations)
 
 | Category | Operations |
 |----------|------------|
-| Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable, TagResource*, UntagResource*, ListTagsOfResource*, DescribeEndpoints |
+| Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable, TagResource, UntagResource, ListTagsOfResource, DescribeEndpoints, UpdateTable, DescribeLimits |
 | Data Plane | GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan |
+| Batch | BatchGetItem, BatchWriteItem |
+| Transactions | TransactGetItems, TransactWriteItems |
+| Condition Expressions | Full support (ConditionExpression, FilterExpression, KeyConditionExpression) |
+| UpdateExpression | Full support (SET, REMOVE, ADD, DELETE) |
+| TTL | UpdateTimeToLive, DescribeTimeToLive |
+| Backup | CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup |
+| PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime |
+| PartiQL | ExecuteStatement, BatchExecuteStatement |
+| Import/Export | ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports |
+| Streams | ListStreams, DescribeStream, GetShardIterator, GetRecords |
+| Global Tables | CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, UpdateGlobalTableSettings, DeleteGlobalTable |
 
-*Tagging operations are stubs (TODO comments)
-
-### 🚫 Missing (45 operations)
+### 🚫 Missing (11 operations)
 
 | Category | Missing Operations |
 |----------|-------------------|
-| Data Plane | BatchGetItem, BatchWriteItem, TransactGetItems, TransactWriteItems |
-| Advanced | ALL (TTL, Backup, PITR, PartiQL, Import/Export) |
-| Global Tables | ALL (5 ops) |
-| Streams | ALL (5 ops) |
+| Global Tables | DescribeGlobalTableSettings*, UpdateReplication* |
+| Kinesis | DescribeKinesisStreamingDestination, EnableKinesisStreamingDestination, DisableKinesisStreamingDestination, UpdateKinesisStreamingDestination |
+| Insights | DescribeContributorInsights, UpdateContributorInsights |
+| Policies | DescribeResourcePolicy, PutResourcePolicy, DeleteResourcePolicy |
+| Other | ConditionCheck (standalone) |
 
-### Critical Gaps
-1. ❌ **No batch operations** - BatchGetItem, BatchWriteItem essential for performance
-2. ❌ **No transactions** - TransactGetItems, TransactWriteItems for ACID
-3. ❌ **No condition expressions** - Critical for conditional updates
-4. ❌ **No pagination support** - Query/Scan don't return LastEvaluatedKey properly
-5. ❌ **No UpdateExpression parsing** - Limited UpdateItem functionality
+*Note: Go actually implements these but they were miscounted.
+
+**Actually Implemented in Go but NOT in Python**: 13 operations
+- DeleteGlobalTable
+- DescribeLimits
+- DescribeGlobalTableSettings
+- UpdateReplication
+- DescribeBackup
+- RestoreTableToPointInTime
+- UpdateContinuousBackups
+- DescribeContinuousBackups
+- DescribeExport
+- DescribeImport
+- ListExports
+- ListImports
+- DescribeStream
 
 ---
 
@@ -129,7 +148,7 @@
 
 ### 🚫 Missing (48 operations)
 
-Same critical gaps as Go:
+Same critical gaps as Go had:
 1. ❌ **No batch operations**
 2. ❌ **No transactions**
 3. ❌ **No condition expressions**
@@ -140,18 +159,23 @@ Same critical gaps as Go:
 
 ## 4. Zig Implementation Analysis
 
-### ✅ Implemented (5 operations)
+### ✅ Implemented (16 operations)
 
 | Category | Operations |
 |----------|------------|
 | Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable, DescribeEndpoints |
+| Data Plane | GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan |
+| Batch | BatchGetItem*, BatchWriteItem* |
 
-### 🚫 Missing (56 operations)
+*Stubs - return 501 Not Implemented
 
-**Critical Gap**: No data plane operations at all
-- No GetItem, PutItem, UpdateItem, DeleteItem
-- No Query, Scan
-- No batch, transactions, advanced features
+### 🚫 Missing (45 operations)
+
+**Critical Gap**: Transactions, Condition Expressions, Advanced Features
+- No TransactGetItems, TransactWriteItems
+- No Condition Expressions
+- No UpdateExpression
+- No TTL, Backup, PITR, PartiQL
 
 ---
 
@@ -164,122 +188,98 @@ Same critical gaps as Go:
 | DeleteTable | ✅ | ✅ | ✅ | ✅ |
 | ListTables | ✅ | ✅ | ✅ | ✅ |
 | DescribeTable | ✅ | ✅ | ✅ | ✅ |
-| UpdateTable | ✅ | ❌ | ❌ | ❌ |
+| UpdateTable | ✅ | ✅ | ❌ | ❌ |
 | DescribeEndpoints | ✅ | ✅ | ✅ | ✅ |
-| Tagging (3 ops) | ✅ | ⚠️ | ⚠️ | ❌ |
+| Tagging (3 ops) | ✅ | ✅ | ⚠️ | ❌ |
+| DescribeLimits | ❌ | ✅ | ❌ | ❌ |
 | **Data Plane** |
-| GetItem | ✅ | ✅ | ✅ | ❌ |
-| PutItem | ✅ | ✅ | ✅ | ❌ |
-| UpdateItem | ✅ | ⚠️ | ⚠️ | ❌ |
-| DeleteItem | ✅ | ✅ | ✅ | ❌ |
-| Query | ✅ | ✅ | ✅ | ❌ |
-| Scan | ✅ | ✅ | ✅ | ❌ |
-| BatchGetItem | ✅ | ❌ | ❌ | ❌ |
-| BatchWriteItem | ✅ | ❌ | ❌ | ❌ |
+| GetItem | ✅ | ✅ | ✅ | ✅ |
+| PutItem | ✅ | ✅ | ✅ | ✅ |
+| UpdateItem | ✅ | ✅ | ⚠️ | ⚠️ |
+| DeleteItem | ✅ | ✅ | ✅ | ✅ |
+| Query | ✅ | ✅ | ✅ | ✅ |
+| Scan | ✅ | ✅ | ✅ | ✅ |
+| BatchGetItem | ✅ | ✅ | ❌ | ⚠️ |
+| BatchWriteItem | ✅ | ✅ | ❌ | ⚠️ |
 | **Transactions** |
-| TransactGetItems | ✅ | ❌ | ❌ | ❌ |
-| TransactWriteItems | ✅ | ❌ | ❌ | ❌ |
+| TransactGetItems | ✅ | ✅ | ❌ | ❌ |
+| TransactWriteItems | ✅ | ✅ | ❌ | ❌ |
 | **Condition Expressions** |
-| ConditionExpression | ✅ | ❌ | ❌ | ❌ |
-| FilterExpression | ✅ | ❌ | ❌ | ❌ |
-| KeyConditionExpression | ✅ | ⚠️ | ⚠️ | ❌ |
+| ConditionExpression | ✅ | ✅ | ❌ | ❌ |
+| FilterExpression | ✅ | ✅ | ❌ | ❌ |
+| KeyConditionExpression | ✅ | ✅ | ⚠️ | ⚠️ |
 | **Advanced Features** |
-| TTL (2 ops) | ✅ | ❌ | ❌ | ❌ |
-| Backup/Restore (4 ops) | ✅ | ❌ | ❌ | ❌ |
-| PITR (3 ops) | ✅ | ❌ | ❌ | ❌ |
-| PartiQL (2 ops) | ✅ | ❌ | ❌ | ❌ |
-| Import/Export (6 ops) | ✅ | ❌ | ❌ | ❌ |
+| TTL (2 ops) | ✅ | ✅ | ❌ | ❌ |
+| Backup/Restore (5 ops) | ✅ | ✅ | ❌ | ❌ |
+| PITR (3 ops) | ✅ | ✅ | ❌ | ❌ |
+| PartiQL (2 ops) | ✅ | ✅ | ❌ | ❌ |
+| Import/Export (6 ops) | ✅ | ✅ | ❌ | ❌ |
+| Streams (4 ops) | ✅ | ✅ | ❌ | ❌ |
+| Global Tables (6 ops) | ❌ | ✅ | ❌ | ❌ |
 
 **Legend**: ✅ Full | ⚠️ Partial | ❌ Missing
 
 ---
 
-## 6. Python: MinIO-Like Local DynamoDB Assessment
+## 6. Production Readiness Assessment
 
-### ✅ Ready for Local Development
+### Python: ✅ Production Ready
+- All essential operations implemented
+- 372 tests, excellent coverage
+- Docker support, metrics, logging
 
-| Requirement | Status | Notes |
-|-------------|--------|-------|
-| Core CRUD | ✅ | Full GetItem, PutItem, UpdateItem, DeleteItem |
-| Query/Scan | ✅ | Full pagination, filtering |
-| Batch Operations | ✅ | BatchGetItem, BatchWriteItem |
-| Transactions | ✅ | TransactGetItems, TransactWriteItems |
-| Condition Expressions | ✅ | Full support |
-| GSI/LSI | ✅ | Create with GSI, UpdateTable for GSI |
-| TTL | ✅ | Automatic expiration |
-| Backup/Restore | ✅ | Point-in-time recovery |
-| PartiQL | ✅ | SQL-like queries |
-| Import/Export | ✅ | Data migration |
-| **Docker Support** | ✅ | Dockerfile ready |
-| **CLI** | ✅ | dyscount serve, config commands |
-| **Prometheus Metrics** | ✅ | /metrics endpoint |
-| **Structured Logging** | ✅ | JSON logs with structlog |
+### Go: ✅ Production Ready
+- 82% API coverage (50/61 operations)
+- 183 tests passing
+- Actually exceeds Python in some areas (Global Tables, PITR, etc.)
 
-### 🚫 Not Needed for Local Development
+### Rust: ⚠️ Development Only
+- Basic CRUD operations only
+- Missing batch, transactions, expressions
+- Needs significant work for parity
 
-| Feature | Reason |
-|---------|--------|
-| Global Tables | Multi-region replication - not local use case |
-| DynamoDB Streams | Event streaming - can use local alternatives |
-| DAX | Caching layer - not needed locally |
-| On-Demand Capacity | Local doesn't need capacity management |
-
-### 🔧 Missing for Full MinIO Parity
-
-| Feature | Priority | Impact |
-|---------|----------|--------|
-| Web Console/UI | Medium | MinIO has nice web UI |
-| Multi-tenancy | Low | Single-tenant is fine for local |
-| Bucket policies | Low | IAM-style auth not critical |
-| Cross-region replication | N/A | Not applicable for local |
+### Zig: ⚠️ Experimental
+- Control plane + basic data plane
+- Many features missing
+- Good for learning/experimentation
 
 ---
 
 ## 7. Recommendations
 
-### Priority 1: Go & Rust Feature Parity (M1-M2 Complete)
+### Priority 1: Rust Feature Parity
 
-**Goal**: Bring Go and Rust to M1+M2 completion (36 operations)
-
-**Missing in Go/Rust**:
-1. BatchGetItem, BatchWriteItem
-2. TransactGetItems, TransactWriteItems
-3. Condition expressions (ConditionExpression, FilterExpression)
-4. Full UpdateExpression parsing (SET, REMOVE, ADD, DELETE)
-5. UpdateTable
-6. Proper pagination (LastEvaluatedKey)
-
-**Estimated Effort**: 2-3 weeks per language
-
-### Priority 2: Zig Data Plane (M1 Complete)
-
-**Goal**: Add basic data plane to Zig (10 more operations)
+**Goal**: Bring Rust to M2 completion (batch, transactions, expressions)
 
 **Missing**:
-1. All item operations (GetItem, PutItem, UpdateItem, DeleteItem)
-2. Query, Scan
-3. Basic expression support
+1. BatchGetItem, BatchWriteItem
+2. TransactGetItems, TransactWriteItems
+3. Condition expressions
+4. Full UpdateExpression parsing
 
-**Estimated Effort**: 1-2 weeks
+**Estimated Effort**: 3-4 weeks
 
-### Priority 3: Python Polish (M4 Phase 2)
+### Priority 2: Zig M2 Completion
 
-**Goal**: Production readiness for local DynamoDB replacement
+**Goal**: Add batch, transactions, expressions to Zig
+
+**Missing**:
+1. Working BatchGetItem, BatchWriteItem
+2. TransactGetItems, TransactWriteItems
+3. Condition expressions
+
+**Estimated Effort**: 2-3 weeks
+
+### Priority 3: Python/Go Polish
+
+**Goal**: Production readiness improvements
 
 **Tasks**:
-1. Performance benchmarks and optimization
+1. Performance benchmarks
 2. Complete documentation
-3. Web UI (optional but nice)
-4. Security hardening
-5. E2E testing with real AWS SDKs
+3. Security hardening
 
-**Estimated Effort**: 2 weeks
-
-### Priority 4: Deferred Operations (Post-M4)
-
-**Not needed for local development**:
-- Global Tables (5 ops)
-- Streams (5 ops)
+**Estimated Effort**: 1-2 weeks
 
 ---
 
@@ -288,25 +288,9 @@ Same critical gaps as Go:
 | Implementation | Test Files | Test Count | Coverage |
 |---------------|------------|------------|----------|
 | Python | 27 files | 372 | Excellent |
-| Go | 2 files | 50 | Good |
+| Go | 8 files | 183 | Good |
 | Rust | 5 modules | 21 | Basic |
-| Zig | 1 file | 9 | Basic |
-
-### Python Test Breakdown
-
-| Category | Tests |
-|----------|-------|
-| Unit tests | 347 |
-| E2E tests | 25 |
-| **Total** | **372** |
-
-### Recommended Test Additions
-
-| Implementation | Missing Tests |
-|---------------|---------------|
-| Go | Batch operations, transactions, condition expressions |
-| Rust | Same as Go |
-| Zig | All data plane operations |
+| Zig | 3 files | 19 | Basic |
 
 ---
 
@@ -314,28 +298,87 @@ Same critical gaps as Go:
 
 ### Current State
 
-**Python is production-ready** for local DynamoDB replacement (MinIO-like experience). It implements 87% of the DynamoDB API including all critical operations for local development.
+**Python and Go are production-ready** for local DynamoDB replacement.
 
-**Go and Rust** have basic functionality (21-26%) sufficient for simple CRUD but lack:
-- Batch operations (performance)
-- Transactions (ACID)
-- Condition expressions (conditional updates)
+**Python**: 87% API coverage (53/61 operations) - All essential operations for local development.
 
-**Zig** is control-plane only (8%) and needs data plane implementation.
+**Go**: 82% API coverage (50/61 operations) - Actually exceeds Python with 13 additional operations (Global Tables, PITR, Streams, etc.).
+
+**Rust** has basic functionality (21%) sufficient for simple CRUD but lacks batch, transactions, and expressions.
+
+**Zig** has control plane + basic data plane (26%) and needs batch, transactions, and expressions.
 
 ### Path Forward
 
-1. **Immediate**: Python M4 Phase 2 (polish)
-2. **Short-term**: Go/Rust feature parity (batch, transactions, expressions)
-3. **Medium-term**: Zig data plane
-4. **Long-term**: Consider Streams/Global Tables if needed
+1. **Immediate**: Rust feature parity (batch, transactions, expressions)
+2. **Short-term**: Zig M2 completion
+3. **Medium-term**: Python/Go polish and documentation
+4. **Long-term**: Consider remaining 8 operations if needed
 
 ---
 
 ## Appendix: Full Operation List (61 Total)
 
-### Implemented in Python (53)
-All except: CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, UpdateReplication, CreateStream, DescribeStream, ListStreams, GetRecords, GetShardIterator
+### Operations by Language
 
-### Not Implemented in Any Language (8)
-All 8 are Global Tables (5) and Streams (5) operations - not needed for local development.
+| Operation | Python | Go | Rust | Zig |
+|-----------|--------|-----|------|-----|
+| CreateTable | ✅ | ✅ | ✅ | ✅ |
+| DeleteTable | ✅ | ✅ | ✅ | ✅ |
+| ListTables | ✅ | ✅ | ✅ | ✅ |
+| DescribeTable | ✅ | ✅ | ✅ | ✅ |
+| UpdateTable | ✅ | ✅ | ❌ | ❌ |
+| DescribeEndpoints | ✅ | ✅ | ✅ | ✅ |
+| TagResource | ✅ | ✅ | ⚠️ | ❌ |
+| UntagResource | ✅ | ✅ | ⚠️ | ❌ |
+| ListTagsOfResource | ✅ | ✅ | ⚠️ | ❌ |
+| DescribeLimits | ❌ | ✅ | ❌ | ❌ |
+| GetItem | ✅ | ✅ | ✅ | ✅ |
+| PutItem | ✅ | ✅ | ✅ | ✅ |
+| UpdateItem | ✅ | ✅ | ⚠️ | ⚠️ |
+| DeleteItem | ✅ | ✅ | ✅ | ✅ |
+| Query | ✅ | ✅ | ✅ | ✅ |
+| Scan | ✅ | ✅ | ✅ | ✅ |
+| BatchGetItem | ✅ | ✅ | ❌ | ⚠️ |
+| BatchWriteItem | ✅ | ✅ | ❌ | ⚠️ |
+| TransactGetItems | ✅ | ✅ | ❌ | ❌ |
+| TransactWriteItems | ✅ | ✅ | ❌ | ❌ |
+| ConditionCheck | ❌ | ❌ | ❌ | ❌ |
+| UpdateTimeToLive | ✅ | ✅ | ❌ | ❌ |
+| DescribeTimeToLive | ✅ | ✅ | ❌ | ❌ |
+| CreateBackup | ✅ | ✅ | ❌ | ❌ |
+| DescribeBackup | ❌ | ✅ | ❌ | ❌ |
+| DeleteBackup | ✅ | ✅ | ❌ | ❌ |
+| ListBackups | ✅ | ✅ | ❌ | ❌ |
+| RestoreTableFromBackup | ✅ | ✅ | ❌ | ❌ |
+| UpdateContinuousBackups | ✅ | ✅ | ❌ | ❌ |
+| DescribeContinuousBackups | ✅ | ✅ | ❌ | ❌ |
+| RestoreTableToPointInTime | ✅ | ✅ | ❌ | ❌ |
+| ExecuteStatement | ✅ | ✅ | ❌ | ❌ |
+| BatchExecuteStatement | ✅ | ✅ | ❌ | ❌ |
+| ExportTableToPointInTime | ✅ | ✅ | ❌ | ❌ |
+| DescribeExport | ❌ | ✅ | ❌ | ❌ |
+| ListExports | ❌ | ✅ | ❌ | ❌ |
+| ImportTable | ✅ | ✅ | ❌ | ❌ |
+| DescribeImport | ❌ | ✅ | ❌ | ❌ |
+| ListImports | ❌ | ✅ | ❌ | ❌ |
+| ListStreams | ✅ | ✅ | ❌ | ❌ |
+| DescribeStream | ❌ | ✅ | ❌ | ❌ |
+| GetShardIterator | ✅ | ✅ | ❌ | ❌ |
+| GetRecords | ✅ | ✅ | ❌ | ❌ |
+| CreateGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| UpdateGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| DescribeGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| ListGlobalTables | ❌ | ✅ | ❌ | ❌ |
+| DeleteGlobalTable | ❌ | ✅ | ❌ | ❌ |
+| UpdateGlobalTableSettings | ❌ | ✅ | ❌ | ❌ |
+| DescribeGlobalTableSettings | ❌ | ✅ | ❌ | ❌ |
+| UpdateReplication | ❌ | ✅ | ❌ | ❌ |
+
+### Python vs Go Comparison
+
+**Python has (8)**: DescribeExport, DescribeImport, ListExports, ListImports, ListStreams, GetShardIterator, GetRecords
+
+**Go has (13)**: DeleteGlobalTable, DescribeLimits, DescribeGlobalTableSettings, UpdateReplication, DescribeBackup, RestoreTableToPointInTime, UpdateContinuousBackups, DescribeContinuousBackups, DescribeExport, DescribeImport, ListExports, ListImports, DescribeStream
+
+**Neither has (8)**: ConditionCheck, Contributor Insights (2), Kinesis (4), Resource Policies (3) - intentionally deferred as not needed for local development

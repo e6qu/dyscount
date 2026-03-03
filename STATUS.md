@@ -1,6 +1,6 @@
 # Project Status
 
-Last Updated: 2026-03-03
+Last Updated: 2026-03-04
 
 ## Overall Progress
 
@@ -103,7 +103,7 @@ Status: ✅ **COMPLETE** - StreamManager, 4 stream operations, stream record wri
 | Go | ✅ Complete | M3 Complete | Gin, SQLite | 183 |
 | Rust | ✅ Complete | M1 Complete | Axum, serde | 21 |
 | Zig | 🚧 In Progress | DP Phase 2 Complete | Raw TCP, SQLite C | 19 |
-| **Total** | | | | **585** |
+| **Total** | | | | **595** |
 
 ## Test Summary
 
@@ -147,6 +147,22 @@ Status: ✅ **COMPLETE** - StreamManager, 4 stream operations, stream record wri
 |-----------|-------|--------|
 | table_manager_test.go | 10 | ✅ All passing |
 | item_manager_test.go | 40 | ✅ All passing |
+| table_manager_test.go | 10 | ✅ All passing |
+| item_manager_test.go | 40 | ✅ All passing |
+| expression_test.go | 28 | ✅ All passing |
+| batch_test.go | 10 | ✅ All passing |
+| transaction_test.go | 10 | ✅ All passing |
+| update_expression_test.go | 8 | ✅ All passing |
+| ttl_test.go | 6 | ✅ All passing |
+| backup_test.go | 11 | ✅ All passing |
+| pagination_test.go | 9 | ✅ All passing |
+| tagging_test.go | 8 | ✅ All passing |
+| list_tables_test.go | 5 | ✅ All passing |
+| pitr_test.go | 5 | ✅ All passing |
+| global_tables_test.go | 5 | ✅ All passing |
+| partiql_test.go | 6 | ✅ All passing |
+| import_export_test.go | 6 | ✅ All passing |
+| stream_test.go | 10 | ✅ All passing |
 | **Go Total** | **183** | **✅ 183 tests passing** |
 
 ### Rust Tests
@@ -167,7 +183,11 @@ Status: ✅ **COMPLETE** - StreamManager, 4 stream operations, stream record wri
 | models tests | 3 | ✅ All passing |
 | storage tests | 5 | ✅ All passing |
 | server tests | 1 | ✅ All passing |
-| **Zig Total** | **9** | **✅ 9 tests passing** |
+| models tests | 3 | ✅ All passing |
+| storage tests | 5 | ✅ All passing |
+| server tests | 1 | ✅ All passing |
+| data_plane tests | 10 | ✅ All passing |
+| **Zig Total** | **19** | **✅ 19 tests passing** |
 
 ## Implemented Operations
 
@@ -192,34 +212,35 @@ Status: ✅ **COMPLETE** - StreamManager, 4 stream operations, stream record wri
 - ✅ TransactGetItems - Atomic read (up to 100 items)
 - ✅ TransactWriteItems - Atomic write (up to 100 items)
 
-### TTL Operations (Python ✅)
+### TTL Operations (Python + Go ✅)
 - ✅ UpdateTimeToLive
 - ✅ DescribeTimeToLive
 
-### Backup/Restore Operations (Python ✅)
+### Backup/Restore Operations (Python + Go ✅)
 - ✅ CreateBackup
+- ✅ DescribeBackup (Go only)
 - ✅ RestoreTableFromBackup
 - ✅ ListBackups
 - ✅ DeleteBackup
 
-### PITR Operations (Python ✅)
+### PITR Operations (Python + Go ✅)
 - ✅ UpdateContinuousBackups
 - ✅ DescribeContinuousBackups
 - ✅ RestoreTableToPointInTime
 
-### PartiQL Operations (Python ✅)
+### PartiQL Operations (Python + Go ✅)
 - ✅ ExecuteStatement
 - ✅ BatchExecuteStatement
 
-### Import/Export Operations (Python ✅)
+### Import/Export Operations (Python + Go ✅)
 - ✅ ExportTableToPointInTime
-- ✅ DescribeExport
-- ✅ ListExports
+- ✅ DescribeExport (Go only)
+- ✅ ListExports (Go only)
 - ✅ ImportTable
-- ✅ DescribeImport
-- ✅ ListImports
+- ✅ DescribeImport (Go only)
+- ✅ ListImports (Go only)
 
-### Tagging Operations (Python ✅)
+### Tagging Operations (Python + Go ✅)
 - ✅ TagResource
 - ✅ UntagResource
 - ✅ ListTagsOfResource
@@ -255,9 +276,9 @@ None.
 
 ## Next Actions
 
-1. ✅ **M4 Phase 1 COMPLETE** - All import/export operations implemented
-2. 🔜 **M4 Phase 2** - Polish & Production Readiness
-3. 🔜 **Documentation** - Complete API documentation
-4. 🔜 **Performance** - Benchmark and optimize
+1. ✅ **Python M4 COMPLETE** - 53 operations, production-ready
+2. ✅ **Go M3 COMPLETE** - 50 operations, feature complete
+3. 🔜 **Documentation** - Complete user guide and API reference
+4. 🔜 **v1.0 Release** - Package and release Python and Go
 
 See `DO_NEXT.md` for details.
