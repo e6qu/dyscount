@@ -586,3 +586,50 @@ Implemented pagination support for ListTables operation - essential for accounts
 - Or: Implement PartiQL support
 
 ---
+
+## 2026-03-03: Go M3 Phase 2.8 - DescribeBackup Operation
+
+**Branch**: `feature/GO-describe-backup`
+
+### Summary
+
+Implemented DescribeBackup operation to complete the backup operations set.
+
+### Changes Made
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added `DescribeBackupRequest` model
+   - Added `DescribeBackupResponse` model
+
+2. **`go/src/internal/storage/table_manager.go`**
+   - Added `DescribeBackup(backupArn)` method
+   - Retrieves backup details by ARN from metadata
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added `case "DescribeBackup"` to operation router
+   - Added `handleDescribeBackup()` handler
+   - Proper error handling for ResourceNotFoundException
+
+4. **`go/src/internal/storage/backup_test.go`**
+   - Added test for successful DescribeBackup
+   - Added test for non-existent backup error
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| DescribeBackup | ✅ | Get backup details by ARN |
+
+### Tests
+
+- 2 DescribeBackup tests added
+- Total: 150 Go tests passing
+
+### Next Steps
+
+- Go M3 Phase 3: Point-in-Time Recovery (PITR) operations
+- Or: Implement PartiQL support
+
+---

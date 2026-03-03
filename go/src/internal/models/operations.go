@@ -477,6 +477,16 @@ type CreateBackupResponse struct {
 	BackupDescription BackupDescription `json:"BackupDescription,omitempty"`
 }
 
+// DescribeBackupRequest represents a DescribeBackup request.
+type DescribeBackupRequest struct {
+	BackupArn string `json:"BackupArn" binding:"required"`
+}
+
+// DescribeBackupResponse represents a DescribeBackup response.
+type DescribeBackupResponse struct {
+	BackupDescription BackupDescription `json:"BackupDescription,omitempty"`
+}
+
 // DeleteBackupRequest represents a DeleteBackup request.
 type DeleteBackupRequest struct {
 	BackupArn string `json:"BackupArn" binding:"required"`

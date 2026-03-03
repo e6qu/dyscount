@@ -110,6 +110,8 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleDescribeTimeToLive(c)
 	case "CreateBackup":
 		h.handleCreateBackup(c)
+	case "DescribeBackup":
+		h.handleDescribeBackup(c)
 	case "DeleteBackup":
 		h.handleDeleteBackup(c)
 	case "ListBackups":
@@ -997,6 +999,47 @@ func (h *DynamoDBHandler) handleCreateBackup(c *gin.Context) {
 	}
 
 	resp := models.CreateBackupResponse{
+		BackupDescription: *backupDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeBackup handles DescribeBackup requests.
+func (h *DynamoDBHandler) handleDescribeBackup(c *gin.Context) {
+	var req models.DescribeBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.BackupArn == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "BackupArn is required",
+		})
+		return
+	}
+
+	backupDesc, err := h.tableManager.DescribeBackup(req.BackupArn)
+	if err != nil {
+		if strings.Contains(err.Error(), "backup not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeBackupResponse{
 		BackupDescription: *backupDesc,
 	}
 	c.JSON(http.StatusOK, resp)
