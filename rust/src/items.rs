@@ -1,5 +1,6 @@
 //! Item storage and operations for DynamoDB items
 
+use crate::expression::{parse_condition_expression, ExpressionEvaluator};
 use crate::models::*;
 use crate::storage::{StorageError, TableManager};
 use rusqlite::{params, Connection};
@@ -17,12 +18,16 @@ pub enum ItemError {
     InvalidKey(String),
     #[error("Invalid update expression: {0}")]
     InvalidUpdateExpression(String),
+    #[error("Condition check failed: {0}")]
+    ConditionCheckFailed(String),
     #[error("Storage error: {0}")]
     Storage(#[from] StorageError),
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("Expression error: {0}")]
+    Expression(String),
 }
 
 /// Manages DynamoDB items in SQLite
@@ -168,6 +173,9 @@ impl ItemManager {
         table_name: &str,
         item: &Item,
         return_old: bool,
+        condition_expression: Option<&str>,
+        expression_names: Option<&HashMap<String, String>>,
+        expression_values: Option<&HashMap<String, AttributeValue>>,
     ) -> Result<Option<Item>, ItemError> {
         let conn = self.get_connection(table_name)?;
 
@@ -179,13 +187,34 @@ impl ItemManager {
 
         debug!("Putting item: pk={}, sk={:?}", pk, sk);
 
-        // Get old item if requested
-        let old_item = if return_old {
-            let key = self.build_key_item(&metadata.key_schema, &pk, sk.as_deref())?;
-            self.get_item(table_name, &key, true)?
-        } else {
-            None
-        };
+        // Get existing item for condition check and return_old
+        let key = self.build_key_item(&metadata.key_schema, &pk, sk.as_deref())?;
+        let existing_item = self.get_item(table_name, &key, true)?;
+
+        // Evaluate condition expression if provided
+        if let Some(cond_expr) = condition_expression {
+            let empty_names = HashMap::new();
+            let empty_values = HashMap::new();
+            let names = expression_names.unwrap_or(&empty_names);
+            let values = expression_values.unwrap_or(&empty_values);
+
+            let evaluator = ExpressionEvaluator::new(names, values);
+            let condition = parse_condition_expression(cond_expr)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            // For conditional puts, evaluate against existing item (or empty if new)
+            let empty_item = Item::new();
+            let item_to_check = existing_item.as_ref().unwrap_or(&empty_item);
+            let result = evaluator
+                .evaluate_condition(&condition, item_to_check)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            if !result {
+                return Err(ItemError::ConditionCheckFailed(
+                    "The conditional request failed".to_string(),
+                ));
+            }
+        }
 
         // Serialize the item
         let data = serde_json::to_vec(item)?;
@@ -200,7 +229,7 @@ impl ItemManager {
             params![pk, sk, data, now, now],
         )?;
 
-        Ok(old_item)
+        Ok(if return_old { existing_item } else { None })
     }
 
     /// Delete an item by its primary key
@@ -209,6 +238,9 @@ impl ItemManager {
         table_name: &str,
         key: &Item,
         return_old: bool,
+        condition_expression: Option<&str>,
+        expression_names: Option<&HashMap<String, String>>,
+        expression_values: Option<&HashMap<String, AttributeValue>>,
     ) -> Result<Option<Item>, ItemError> {
         let conn = self.get_connection(table_name)?;
 
@@ -220,12 +252,40 @@ impl ItemManager {
 
         debug!("Deleting item: pk={}, sk={:?}", pk, sk);
 
-        // Get old item if requested
-        let old_item = if return_old {
-            self.get_item(table_name, key, true)?
-        } else {
-            None
-        };
+        // Get existing item for condition check
+        let existing_item = self.get_item(table_name, key, true)?;
+
+        // Evaluate condition expression if provided
+        if let Some(cond_expr) = condition_expression {
+            let empty_names = HashMap::new();
+            let empty_values = HashMap::new();
+            let names = expression_names.unwrap_or(&empty_names);
+            let values = expression_values.unwrap_or(&empty_values);
+
+            let evaluator = ExpressionEvaluator::new(names, values);
+            let condition = parse_condition_expression(cond_expr)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            // For conditional deletes, evaluate against existing item (or fail if not exists)
+            let item_to_check = match &existing_item {
+                Some(item) => item,
+                None => {
+                    return Err(ItemError::ConditionCheckFailed(
+                        "The conditional request failed".to_string(),
+                    ));
+                }
+            };
+
+            let result = evaluator
+                .evaluate_condition(&condition, item_to_check)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            if !result {
+                return Err(ItemError::ConditionCheckFailed(
+                    "The conditional request failed".to_string(),
+                ));
+            }
+        }
 
         // Delete the item
         if let Some(sk_val) = sk {
@@ -240,7 +300,7 @@ impl ItemManager {
             )?;
         }
 
-        Ok(old_item)
+        Ok(if return_old { existing_item } else { None })
     }
 
     /// Update an item using update expressions
@@ -251,6 +311,8 @@ impl ItemManager {
         update_expression: Option<&str>,
         expression_values: Option<&HashMap<String, AttributeValue>>,
         return_values: &str,
+        condition_expression: Option<&str>,
+        expression_names: Option<&HashMap<String, String>>,
     ) -> Result<(Option<Item>, Option<Item>), ItemError> {
         let conn = self.get_connection(table_name)?;
 
@@ -276,6 +338,29 @@ impl ItemManager {
                 new_item
             }
         };
+
+        // Evaluate condition expression if provided
+        if let Some(cond_expr) = condition_expression {
+            let empty_names = HashMap::new();
+            let empty_values = HashMap::new();
+            let names = expression_names.unwrap_or(&empty_names);
+            let values = expression_values.unwrap_or(&empty_values);
+
+            let evaluator = ExpressionEvaluator::new(names, values);
+            let condition = parse_condition_expression(cond_expr)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            // Evaluate against current item
+            let result = evaluator
+                .evaluate_condition(&condition, &current_item)
+                .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+            if !result {
+                return Err(ItemError::ConditionCheckFailed(
+                    "The conditional request failed".to_string(),
+                ));
+            }
+        }
 
         // Store old item for return
         let old_item = if return_values == "ALL_OLD" {
@@ -665,9 +750,9 @@ impl ItemManager {
 
         for write_req in write_requests {
             let success = if let Some(ref put) = write_req.put_request {
-                self.put_item(table_name, &put.item, false).is_ok()
+                self.put_item(table_name, &put.item, false, None, None, None).is_ok()
             } else if let Some(ref del) = write_req.delete_request {
-                self.delete_item(table_name, &del.key, false).is_ok()
+                self.delete_item(table_name, &del.key, false, None, None, None).is_ok()
             } else {
                 false
             };
@@ -801,9 +886,9 @@ impl ItemManager {
     /// Execute a transact write operation
     fn execute_transact_write(&self, item: &TransactWriteItem) -> Result<(), ItemError> {
         if let Some(ref put) = item.put {
-            self.put_item(&put.table_name, &put.item, false)?;
+            self.put_item(&put.table_name, &put.item, false, None, None, None)?;
         } else if let Some(ref delete) = item.delete {
-            self.delete_item(&delete.table_name, &delete.key, false)?;
+            self.delete_item(&delete.table_name, &delete.key, false, None, None, None)?;
         }
         // Update and ConditionCheck are simplified for now
         Ok(())
@@ -813,6 +898,8 @@ impl ItemManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::{parse_condition_expression, ExpressionEvaluator};
+    use std::collections::HashMap;
     use tempfile::TempDir;
 
     fn setup_test_manager() -> (ItemManager, Arc<TableManager>, TempDir) {
@@ -856,7 +943,7 @@ mod tests {
         };
 
         // Put item
-        let old = im.put_item("TestTable", &item, false).unwrap();
+        let old = im.put_item("TestTable", &item, false, None, None, None).unwrap();
         assert!(old.is_none());
 
         // Get item
@@ -887,7 +974,7 @@ mod tests {
             i.insert("name".to_string(), AttributeValue::s("John"));
             i
         };
-        im.put_item("TestTable", &item, false).unwrap();
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
 
         // Update item
         let key = {
@@ -909,6 +996,8 @@ mod tests {
             Some("SET name = :newName"),
             Some(&expr_values),
             "ALL_NEW",
+            None,
+            None,
         ).unwrap();
 
         assert!(new_item.is_some());
@@ -928,7 +1017,7 @@ mod tests {
             i.insert("data".to_string(), AttributeValue::s("value"));
             i
         };
-        im.put_item("TestTable", &item, false).unwrap();
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
 
         // Delete item
         let key = {
@@ -938,7 +1027,7 @@ mod tests {
             k
         };
 
-        let old = im.delete_item("TestTable", &key, true).unwrap();
+        let old = im.delete_item("TestTable", &key, true, None, None, None).unwrap();
         assert!(old.is_some());
 
         // Verify deletion
@@ -960,7 +1049,7 @@ mod tests {
                 item.insert("data".to_string(), AttributeValue::s(&format!("data{}", i)));
                 item
             };
-            im.put_item("TestTable", &item, false).unwrap();
+            im.put_item("TestTable", &item, false, None, None, None).unwrap();
         }
 
         // Query items
@@ -991,7 +1080,7 @@ mod tests {
                 item.insert("data".to_string(), AttributeValue::s(&format!("data{}", i)));
                 item
             };
-            im.put_item("TestTable", &item, false).unwrap();
+            im.put_item("TestTable", &item, false, None, None, None).unwrap();
         }
 
         // Scan items
@@ -999,6 +1088,370 @@ mod tests {
 
         assert_eq!(items.len(), 3);
         assert!(last_key.is_some());
+    }
+
+    #[test]
+    fn test_put_item_with_condition_success() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        // Conditional put with condition that should pass
+        let new_item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("updated"));
+            i
+        };
+
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("val".to_string(), AttributeValue::s("active"));
+            m
+        };
+
+        let result = im.put_item(
+            "TestTable",
+            &new_item,
+            true,
+            Some("status = :val"),
+            None,
+            Some(&expr_values),
+        );
+        assert!(result.is_ok());
+        // Should return old item
+        assert_eq!(result.unwrap().unwrap().get("status").unwrap().as_s(), Some("active"));
+    }
+
+    #[test]
+    fn test_put_item_with_condition_failure() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        // Conditional put with condition that should fail
+        let new_item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("updated"));
+            i
+        };
+
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("val".to_string(), AttributeValue::s("inactive"));
+            m
+        };
+
+        let result = im.put_item(
+            "TestTable",
+            &new_item,
+            false,
+            Some("status = :val"),
+            None,
+            Some(&expr_values),
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ItemError::ConditionCheckFailed(_) => {}
+            _ => panic!("Expected ConditionCheckFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_update_item_with_condition_success() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i.insert("count".to_string(), AttributeValue::n("5"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("newStatus".to_string(), AttributeValue::s("updated"));
+            m.insert("val".to_string(), AttributeValue::n("3"));
+            m
+        };
+
+        // Update with condition that count > 3
+        let result = im.update_item(
+            "TestTable",
+            &key,
+            Some("SET status = :newStatus"),
+            Some(&expr_values),
+            "ALL_NEW",
+            Some("count > :val"),
+            None,
+        );
+        assert!(result.is_ok());
+        let (new_item, _) = result.unwrap();
+        assert_eq!(new_item.unwrap().get("status").unwrap().as_s(), Some("updated"));
+    }
+
+    #[test]
+    fn test_update_item_with_condition_failure() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("count".to_string(), AttributeValue::n("5"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("newStatus".to_string(), AttributeValue::s("updated"));
+            m.insert("val".to_string(), AttributeValue::n("10"));
+            m
+        };
+
+        // Update with condition that count > 10 (should fail)
+        let result = im.update_item(
+            "TestTable",
+            &key,
+            Some("SET status = :newStatus"),
+            Some(&expr_values),
+            "NONE",
+            Some("count > :val"),
+            None,
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ItemError::ConditionCheckFailed(_) => {}
+            _ => panic!("Expected ConditionCheckFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_delete_item_with_condition_success() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("deleted"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("val".to_string(), AttributeValue::s("deleted"));
+            m
+        };
+
+        // Delete with condition that status = "deleted"
+        let result = im.delete_item(
+            "TestTable",
+            &key,
+            false,
+            Some("status = :val"),
+            None,
+            Some(&expr_values),
+        );
+        assert!(result.is_ok());
+
+        // Verify deletion
+        let retrieved = im.get_item("TestTable", &key, true).unwrap();
+        assert!(retrieved.is_none());
+    }
+
+    #[test]
+    fn test_delete_item_with_condition_failure() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("val".to_string(), AttributeValue::s("deleted"));
+            m
+        };
+
+        // Delete with condition that status = "deleted" (should fail)
+        let result = im.delete_item(
+            "TestTable",
+            &key,
+            false,
+            Some("status = :val"),
+            None,
+            Some(&expr_values),
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ItemError::ConditionCheckFailed(_) => {}
+            _ => panic!("Expected ConditionCheckFailed error"),
+        }
+
+        // Verify item still exists
+        let retrieved = im.get_item("TestTable", &key, true).unwrap();
+        assert!(retrieved.is_some());
+    }
+
+    #[test]
+    fn test_attribute_exists_condition() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item with 'name' attribute
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("name".to_string(), AttributeValue::s("John"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        // Update with condition attribute_exists(name) - should succeed
+        let result = im.update_item(
+            "TestTable",
+            &key,
+            Some("SET age = :age"),
+            Some(&[("age".to_string(), AttributeValue::n("25"))].into_iter().collect()),
+            "NONE",
+            Some("attribute_exists(name)"),
+            None,
+        );
+        assert!(result.is_ok());
+
+        // Update with condition attribute_exists(nonexistent) - should fail
+        let result = im.update_item(
+            "TestTable",
+            &key,
+            Some("SET age = :age"),
+            Some(&[("age".to_string(), AttributeValue::n("30"))].into_iter().collect()),
+            "NONE",
+            Some("attribute_exists(nonexistent)"),
+            None,
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ItemError::ConditionCheckFailed(_) => {}
+            _ => panic!("Expected ConditionCheckFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_attribute_not_exists_condition() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item without 'nickname' attribute
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("name".to_string(), AttributeValue::s("John"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        // Conditional put with attribute_not_exists(nickname) - should succeed
+        let new_item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("name".to_string(), AttributeValue::s("Jane"));
+            i
+        };
+
+        let result = im.put_item(
+            "TestTable",
+            &new_item,
+            false,
+            Some("attribute_not_exists(nickname)"),
+            None,
+            None,
+        );
+        assert!(result.is_ok());
     }
 }
 

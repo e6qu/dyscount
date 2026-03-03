@@ -318,6 +318,228 @@ impl TableManager {
 
         Ok(Connection::open(&db_path)?)
     }
+
+    /// Update a table
+    pub fn update_table(&self, req: &UpdateTableRequest) -> Result<TableMetadata, StorageError> {
+        let table_name = &req.table_name;
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.clone()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+        
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+        let mut metadata = self.load_metadata(conn, table_name)?;
+
+        // Check table status - only allow updates on ACTIVE tables
+        if metadata.table_status != "ACTIVE" {
+            return Err(StorageError::InvalidKey(format!(
+                "Table {} is not in ACTIVE state",
+                table_name
+            )));
+        }
+
+        // Update provisioned throughput
+        if let Some(throughput) = &req.provisioned_throughput {
+            metadata.provisioned_throughput = Some(throughput.clone());
+        }
+
+        // Update billing mode
+        if let Some(billing_mode) = &req.billing_mode {
+            let now = Utc::now();
+            metadata.billing_mode_summary = Some(BillingModeSummary {
+                billing_mode: billing_mode.clone(),
+                last_update_to_pay_per_request_date_time: if billing_mode == "PAY_PER_REQUEST" {
+                    Some(now)
+                } else {
+                    None
+                },
+            });
+
+            // Clear provisioned throughput if switching to PAY_PER_REQUEST
+            if billing_mode == "PAY_PER_REQUEST" {
+                metadata.provisioned_throughput = None;
+            }
+        }
+
+        // Update global secondary indexes
+        if let Some(gsi_updates) = &req.global_secondary_index_updates {
+            let mut gsis = metadata.global_secondary_indexes.unwrap_or_default();
+
+            for update in gsi_updates {
+                // Handle Create
+                if let Some(create) = &update.create {
+                    // Check for duplicate index name
+                    if gsis.iter().any(|g| g.index_name == create.index_name) {
+                        return Err(StorageError::InvalidKey(format!(
+                            "Global secondary index {} already exists",
+                            create.index_name
+                        )));
+                    }
+
+                    let new_gsi = GlobalSecondaryIndex {
+                        index_name: create.index_name.clone(),
+                        key_schema: create.key_schema.clone(),
+                        projection: create.projection.clone(),
+                        provisioned_throughput: create.provisioned_throughput.clone(),
+                    };
+                    gsis.push(new_gsi);
+                }
+
+                // Handle Update (throughput changes)
+                if let Some(update_gsi) = &update.update {
+                    if let Some(gsi) = gsis.iter_mut().find(|g| g.index_name == update_gsi.index_name) {
+                        if let Some(throughput) = &update_gsi.provisioned_throughput {
+                            gsi.provisioned_throughput = Some(throughput.clone());
+                        }
+                    } else {
+                        return Err(StorageError::InvalidKey(format!(
+                            "Global secondary index {} not found",
+                            update_gsi.index_name
+                        )));
+                    }
+                }
+
+                // Handle Delete
+                if let Some(delete) = &update.delete {
+                    let original_len = gsis.len();
+                    gsis.retain(|g| g.index_name != delete.index_name);
+                    if gsis.len() == original_len {
+                        return Err(StorageError::InvalidKey(format!(
+                            "Global secondary index {} not found",
+                            delete.index_name
+                        )));
+                    }
+                }
+            }
+
+            metadata.global_secondary_indexes = if gsis.is_empty() { None } else { Some(gsis) };
+        }
+
+        // Update attribute definitions if provided
+        if let Some(attr_defs) = &req.attribute_definitions {
+            metadata.attribute_definitions = attr_defs.clone();
+        }
+
+        // Store updated metadata
+        self.store_metadata(conn, &metadata)?;
+
+        // Release connection lock before returning
+        drop(connections);
+
+        Ok(metadata)
+    }
+
+    /// Update time to live settings for a table
+    pub fn update_time_to_live(
+        &self,
+        table_name: &str,
+        ttl_spec: &TimeToLiveSpecification,
+    ) -> Result<TimeToLiveDescription, StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Store TTL configuration in metadata table
+        let ttl_config_json = serde_json::to_vec(ttl_spec).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+        })?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?1, ?2)",
+            params!["ttl_config", ttl_config_json],
+        )?;
+
+        // Build and return the description
+        let status = if ttl_spec.enabled {
+            "ENABLED".to_string()
+        } else {
+            "DISABLED".to_string()
+        };
+
+        let description = TimeToLiveDescription {
+            time_to_live_status: status,
+            attribute_name: Some(ttl_spec.attribute_name.clone()),
+        };
+
+        drop(connections);
+
+        Ok(description)
+    }
+
+    /// Get time to live settings for a table
+    pub fn describe_time_to_live(
+        &self,
+        table_name: &str,
+    ) -> Result<TimeToLiveDescription, StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Load TTL configuration from metadata table
+        let ttl_config: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT value FROM __table_metadata WHERE key = ?",
+                ["ttl_config"],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let description = if let Some(config_json) = ttl_config {
+            let spec: TimeToLiveSpecification = serde_json::from_slice(&config_json)?;
+            let status = if spec.enabled {
+                "ENABLED".to_string()
+            } else {
+                "DISABLED".to_string()
+            };
+            TimeToLiveDescription {
+                time_to_live_status: status,
+                attribute_name: Some(spec.attribute_name),
+            }
+        } else {
+            // No TTL configuration found - return DISABLED status
+            TimeToLiveDescription {
+                time_to_live_status: "DISABLED".to_string(),
+                attribute_name: None,
+            }
+        };
+
+        drop(connections);
+
+        Ok(description)
+    }
 }
 
 #[cfg(test)]
@@ -458,6 +680,290 @@ mod tests {
         
         let metadata = manager.create_table(&req).unwrap();
         assert_eq!(metadata.global_secondary_indexes.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_update_table_throughput() {
+        let (manager, _temp) = setup_test_manager();
+        
+        // Create table with initial throughput
+        let create_req = DynamoDBRequest {
+            table_name: Some("TestTable".to_string()),
+            key_schema: Some(vec![
+                KeySchemaElement::hash("pk"),
+            ]),
+            attribute_definitions: Some(vec![
+                AttributeDefinition::s("pk"),
+            ]),
+            billing_mode: Some("PROVISIONED".to_string()),
+            provisioned_throughput: Some(ProvisionedThroughput {
+                read_capacity_units: 5,
+                write_capacity_units: 5,
+            }),
+            ..Default::default()
+        };
+        manager.create_table(&create_req).unwrap();
+
+        // Update throughput
+        let update_req = UpdateTableRequest {
+            table_name: "TestTable".to_string(),
+            attribute_definitions: None,
+            billing_mode: None,
+            global_secondary_index_updates: None,
+            provisioned_throughput: Some(ProvisionedThroughput {
+                read_capacity_units: 10,
+                write_capacity_units: 10,
+            }),
+        };
+
+        let metadata = manager.update_table(&update_req).unwrap();
+        assert_eq!(metadata.provisioned_throughput.as_ref().unwrap().read_capacity_units, 10);
+        assert_eq!(metadata.provisioned_throughput.as_ref().unwrap().write_capacity_units, 10);
+    }
+
+    #[test]
+    fn test_update_table_billing_mode() {
+        let (manager, _temp) = setup_test_manager();
+        
+        // Create table with PROVISIONED billing
+        let create_req = DynamoDBRequest {
+            table_name: Some("TestTable".to_string()),
+            key_schema: Some(vec![
+                KeySchemaElement::hash("pk"),
+            ]),
+            attribute_definitions: Some(vec![
+                AttributeDefinition::s("pk"),
+            ]),
+            billing_mode: Some("PROVISIONED".to_string()),
+            provisioned_throughput: Some(ProvisionedThroughput {
+                read_capacity_units: 5,
+                write_capacity_units: 5,
+            }),
+            ..Default::default()
+        };
+        manager.create_table(&create_req).unwrap();
+
+        // Switch to PAY_PER_REQUEST
+        let update_req = UpdateTableRequest {
+            table_name: "TestTable".to_string(),
+            attribute_definitions: None,
+            billing_mode: Some("PAY_PER_REQUEST".to_string()),
+            global_secondary_index_updates: None,
+            provisioned_throughput: None,
+        };
+
+        let metadata = manager.update_table(&update_req).unwrap();
+        assert_eq!(metadata.billing_mode_summary.as_ref().unwrap().billing_mode, "PAY_PER_REQUEST");
+        assert!(metadata.provisioned_throughput.is_none());
+    }
+
+    #[test]
+    fn test_update_table_gsi_operations() {
+        let (manager, _temp) = setup_test_manager();
+        
+        // Create table with one GSI
+        let create_req = DynamoDBRequest {
+            table_name: Some("TestTable".to_string()),
+            key_schema: Some(vec![
+                KeySchemaElement::hash("pk"),
+            ]),
+            attribute_definitions: Some(vec![
+                AttributeDefinition::s("pk"),
+                AttributeDefinition::s("gsi1_pk"),
+            ]),
+            global_secondary_indexes: Some(vec![
+                GlobalSecondaryIndex {
+                    index_name: "GSI1".to_string(),
+                    key_schema: vec![
+                        KeySchemaElement::hash("gsi1_pk"),
+                    ],
+                    projection: Projection {
+                        projection_type: "ALL".to_string(),
+                        non_key_attributes: None,
+                    },
+                    provisioned_throughput: Some(ProvisionedThroughput {
+                        read_capacity_units: 5,
+                        write_capacity_units: 5,
+                    }),
+                },
+            ]),
+            ..Default::default()
+        };
+        manager.create_table(&create_req).unwrap();
+
+        // Test adding a new GSI
+        let update_req = UpdateTableRequest {
+            table_name: "TestTable".to_string(),
+            attribute_definitions: None,
+            billing_mode: None,
+            global_secondary_index_updates: Some(vec![
+                GlobalSecondaryIndexUpdate {
+                    create: Some(CreateGlobalSecondaryIndexAction {
+                        index_name: "GSI2".to_string(),
+                        key_schema: vec![
+                            KeySchemaElement::hash("pk"),
+                        ],
+                        projection: Projection {
+                            projection_type: "KEYS_ONLY".to_string(),
+                            non_key_attributes: None,
+                        },
+                        provisioned_throughput: Some(ProvisionedThroughput {
+                            read_capacity_units: 3,
+                            write_capacity_units: 3,
+                        }),
+                    }),
+                    update: None,
+                    delete: None,
+                },
+            ]),
+            provisioned_throughput: None,
+        };
+
+        let metadata = manager.update_table(&update_req).unwrap();
+        let gsis = metadata.global_secondary_indexes.unwrap();
+        assert_eq!(gsis.len(), 2);
+        assert!(gsis.iter().any(|g| g.index_name == "GSI2"));
+
+        // Test updating GSI throughput
+        let update_throughput_req = UpdateTableRequest {
+            table_name: "TestTable".to_string(),
+            attribute_definitions: None,
+            billing_mode: None,
+            global_secondary_index_updates: Some(vec![
+                GlobalSecondaryIndexUpdate {
+                    create: None,
+                    update: Some(UpdateGlobalSecondaryIndexAction {
+                        index_name: "GSI1".to_string(),
+                        provisioned_throughput: Some(ProvisionedThroughput {
+                            read_capacity_units: 10,
+                            write_capacity_units: 10,
+                        }),
+                    }),
+                    delete: None,
+                },
+            ]),
+            provisioned_throughput: None,
+        };
+
+        let metadata = manager.update_table(&update_throughput_req).unwrap();
+        let gsis = metadata.global_secondary_indexes.unwrap();
+        let gsi1 = gsis.iter().find(|g| g.index_name == "GSI1").unwrap();
+        assert_eq!(gsi1.provisioned_throughput.as_ref().unwrap().read_capacity_units, 10);
+
+        // Test deleting a GSI
+        let delete_gsi_req = UpdateTableRequest {
+            table_name: "TestTable".to_string(),
+            attribute_definitions: None,
+            billing_mode: None,
+            global_secondary_index_updates: Some(vec![
+                GlobalSecondaryIndexUpdate {
+                    create: None,
+                    update: None,
+                    delete: Some(DeleteGlobalSecondaryIndexAction {
+                        index_name: "GSI2".to_string(),
+                    }),
+                },
+            ]),
+            provisioned_throughput: None,
+        };
+
+        let metadata = manager.update_table(&delete_gsi_req).unwrap();
+        let gsis = metadata.global_secondary_indexes.unwrap();
+        assert_eq!(gsis.len(), 1);
+        assert!(!gsis.iter().any(|g| g.index_name == "GSI2"));
+    }
+
+    #[test]
+    fn test_update_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let update_req = UpdateTableRequest {
+            table_name: "NonExistent".to_string(),
+            attribute_definitions: None,
+            billing_mode: None,
+            global_secondary_index_updates: None,
+            provisioned_throughput: Some(ProvisionedThroughput {
+                read_capacity_units: 10,
+                write_capacity_units: 10,
+            }),
+        };
+
+        let result = manager.update_table(&update_req);
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_update_time_to_live() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Enable TTL
+        let ttl_spec = TimeToLiveSpecification {
+            enabled: true,
+            attribute_name: "expires_at".to_string(),
+        };
+        
+        let description = manager.update_time_to_live("TestTable", &ttl_spec).unwrap();
+        assert_eq!(description.time_to_live_status, "ENABLED");
+        assert_eq!(description.attribute_name, Some("expires_at".to_string()));
+        
+        // Disable TTL
+        let ttl_spec_disabled = TimeToLiveSpecification {
+            enabled: false,
+            attribute_name: "expires_at".to_string(),
+        };
+        
+        let description = manager.update_time_to_live("TestTable", &ttl_spec_disabled).unwrap();
+        assert_eq!(description.time_to_live_status, "DISABLED");
+        assert_eq!(description.attribute_name, Some("expires_at".to_string()));
+    }
+
+    #[test]
+    fn test_describe_time_to_live() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Before setting TTL - should return DISABLED
+        let description = manager.describe_time_to_live("TestTable").unwrap();
+        assert_eq!(description.time_to_live_status, "DISABLED");
+        assert_eq!(description.attribute_name, None);
+        
+        // Enable TTL
+        let ttl_spec = TimeToLiveSpecification {
+            enabled: true,
+            attribute_name: "ttl".to_string(),
+        };
+        manager.update_time_to_live("TestTable", &ttl_spec).unwrap();
+        
+        // After enabling TTL
+        let description = manager.describe_time_to_live("TestTable").unwrap();
+        assert_eq!(description.time_to_live_status, "ENABLED");
+        assert_eq!(description.attribute_name, Some("ttl".to_string()));
+    }
+
+    #[test]
+    fn test_update_time_to_live_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let ttl_spec = TimeToLiveSpecification {
+            enabled: true,
+            attribute_name: "ttl".to_string(),
+        };
+        
+        let result = manager.update_time_to_live("NonExistent", &ttl_spec);
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_describe_time_to_live_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.describe_time_to_live("NonExistent");
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
     }
 }
 

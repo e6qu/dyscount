@@ -60,6 +60,18 @@ impl<'a> ExpressionEvaluator<'a> {
                 let attr_name = self.resolve_path(path);
                 Ok(!item.contains_key(&attr_name))
             }
+            Condition::BeginsWith { path, value } => {
+                let attr_name = self.resolve_path(path);
+                let attr_value = item.get(&attr_name);
+                let prefix_value = self.resolve_value(value)?;
+                Ok(self.check_begins_with(attr_value, &prefix_value))
+            }
+            Condition::Contains { path, value } => {
+                let attr_name = self.resolve_path(path);
+                let attr_value = item.get(&attr_name);
+                let contains_value = self.resolve_value(value)?;
+                Ok(self.check_contains(attr_value, &contains_value))
+            }
             Condition::And(left, right) => {
                 Ok(self.evaluate_condition(left, item)? && self.evaluate_condition(right, item)?)
             }
@@ -211,6 +223,48 @@ impl<'a> ExpressionEvaluator<'a> {
             _ => None,
         }
     }
+
+    /// Check if attribute value begins with prefix
+    fn check_begins_with(&self, attr: Option<&AttributeValue>, prefix: &AttributeValue) -> bool {
+        match (attr, prefix) {
+            (Some(AttributeValue::S { s: attr_val }), AttributeValue::S { s: prefix_val }) => {
+                attr_val.starts_with(prefix_val)
+            }
+            (Some(AttributeValue::B { b: attr_val }), AttributeValue::B { b: prefix_val }) => {
+                attr_val.starts_with(prefix_val)
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if attribute value contains the given value
+    fn check_contains(&self, attr: Option<&AttributeValue>, value: &AttributeValue) -> bool {
+        match (attr, value) {
+            // String contains substring
+            (Some(AttributeValue::S { s: attr_val }), AttributeValue::S { s: sub_val }) => {
+                attr_val.contains(sub_val)
+            }
+            // Binary contains sub-binary
+            (Some(AttributeValue::B { b: attr_val }), AttributeValue::B { b: sub_val }) => {
+                attr_val.contains(sub_val)
+            }
+            // Set contains element
+            (Some(AttributeValue::SS { ss: attr_val }), AttributeValue::S { s: elem }) => {
+                attr_val.contains(elem)
+            }
+            (Some(AttributeValue::NS { ns: attr_val }), AttributeValue::N { n: elem }) => {
+                attr_val.contains(elem)
+            }
+            (Some(AttributeValue::BS { bs: attr_val }), AttributeValue::B { b: elem }) => {
+                attr_val.contains(elem)
+            }
+            // List contains element (shallow comparison)
+            (Some(AttributeValue::L { l: attr_val }), elem) => {
+                attr_val.iter().any(|item| self.values_equal(Some(item), elem))
+            }
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -262,5 +316,116 @@ mod tests {
 
         evaluator.apply_update(&update, &mut item).unwrap();
         assert_eq!(item.get("name").unwrap().as_s(), Some("John"));
+    }
+
+    #[test]
+    fn test_evaluate_begins_with() {
+        let mut item = Item::new();
+        item.insert("name".to_string(), AttributeValue::S { s: "JohnDoe".to_string() });
+
+        let values: HashMap<String, AttributeValue> = [
+            ("prefix".to_string(), AttributeValue::S { s: "John".to_string() })
+        ].into_iter().collect();
+
+        let empty_names = HashMap::new();
+        let evaluator = ExpressionEvaluator::new(&empty_names, &values);
+        
+        let condition = Condition::BeginsWith {
+            path: "name".to_string(),
+            value: ValueReference::ExpressionValue("prefix".to_string()),
+        };
+
+        assert!(evaluator.evaluate_condition(&condition, &item).unwrap());
+
+        // Non-matching prefix
+        let values2: HashMap<String, AttributeValue> = [
+            ("prefix".to_string(), AttributeValue::S { s: "Jane".to_string() })
+        ].into_iter().collect();
+        let evaluator2 = ExpressionEvaluator::new(&empty_names, &values2);
+        assert!(!evaluator2.evaluate_condition(&condition, &item).unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_contains_string() {
+        let mut item = Item::new();
+        item.insert("description".to_string(), AttributeValue::S { s: "Hello World".to_string() });
+
+        let values: HashMap<String, AttributeValue> = [
+            ("substr".to_string(), AttributeValue::S { s: "World".to_string() })
+        ].into_iter().collect();
+
+        let empty_names = HashMap::new();
+        let evaluator = ExpressionEvaluator::new(&empty_names, &values);
+        
+        let condition = Condition::Contains {
+            path: "description".to_string(),
+            value: ValueReference::ExpressionValue("substr".to_string()),
+        };
+
+        assert!(evaluator.evaluate_condition(&condition, &item).unwrap());
+
+        // Non-matching substring
+        let values2: HashMap<String, AttributeValue> = [
+            ("substr".to_string(), AttributeValue::S { s: "Foo".to_string() })
+        ].into_iter().collect();
+        let evaluator2 = ExpressionEvaluator::new(&empty_names, &values2);
+        assert!(!evaluator2.evaluate_condition(&condition, &item).unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_contains_set() {
+        let mut item = Item::new();
+        item.insert("tags".to_string(), AttributeValue::SS { ss: vec!["a".to_string(), "b".to_string(), "c".to_string()] });
+
+        let values: HashMap<String, AttributeValue> = [
+            ("tag".to_string(), AttributeValue::S { s: "b".to_string() })
+        ].into_iter().collect();
+
+        let empty_names = HashMap::new();
+        let evaluator = ExpressionEvaluator::new(&empty_names, &values);
+        
+        let condition = Condition::Contains {
+            path: "tags".to_string(),
+            value: ValueReference::ExpressionValue("tag".to_string()),
+        };
+
+        assert!(evaluator.evaluate_condition(&condition, &item).unwrap());
+
+        // Non-existent element
+        let values2: HashMap<String, AttributeValue> = [
+            ("tag".to_string(), AttributeValue::S { s: "z".to_string() })
+        ].into_iter().collect();
+        let evaluator2 = ExpressionEvaluator::new(&empty_names, &values2);
+        assert!(!evaluator2.evaluate_condition(&condition, &item).unwrap());
+    }
+
+    #[test]
+    fn test_evaluate_contains_list() {
+        let mut item = Item::new();
+        item.insert("items".to_string(), AttributeValue::L { l: vec![
+            AttributeValue::S { s: "apple".to_string() },
+            AttributeValue::S { s: "banana".to_string() },
+        ]});
+
+        let values: HashMap<String, AttributeValue> = [
+            ("item".to_string(), AttributeValue::S { s: "banana".to_string() })
+        ].into_iter().collect();
+
+        let empty_names = HashMap::new();
+        let evaluator = ExpressionEvaluator::new(&empty_names, &values);
+        
+        let condition = Condition::Contains {
+            path: "items".to_string(),
+            value: ValueReference::ExpressionValue("item".to_string()),
+        };
+
+        assert!(evaluator.evaluate_condition(&condition, &item).unwrap());
+
+        // Non-existent element
+        let values2: HashMap<String, AttributeValue> = [
+            ("item".to_string(), AttributeValue::S { s: "orange".to_string() })
+        ].into_iter().collect();
+        let evaluator2 = ExpressionEvaluator::new(&empty_names, &values2);
+        assert!(!evaluator2.evaluate_condition(&condition, &item).unwrap());
     }
 }

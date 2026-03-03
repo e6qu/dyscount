@@ -37,7 +37,7 @@ pub fn parse_condition_expression(expr: &str) -> Result<Condition> {
         return Ok(Condition::Not(Box::new(parse_condition_expression(inner)?)));
     }
     
-    // Handle attribute_exists / attribute_not_exists
+    // Handle attribute_exists / attribute_not_exists / begins_with / contains
     let upper = expr.to_uppercase();
     if upper.starts_with("ATTRIBUTE_EXISTS(") {
         let path = extract_function_arg(expr, "attribute_exists")?;
@@ -47,6 +47,30 @@ pub fn parse_condition_expression(expr: &str) -> Result<Condition> {
     if upper.starts_with("ATTRIBUTE_NOT_EXISTS(") {
         let path = extract_function_arg(expr, "attribute_not_exists")?;
         return Ok(Condition::AttributeNotExists { path });
+    }
+
+    if upper.starts_with("BEGINS_WITH(") {
+        let args = extract_function_args(expr, "begins_with")?;
+        if args.len() != 2 {
+            return Err(ExpressionError::ParseError(
+                "begins_with requires exactly 2 arguments".to_string()
+            ));
+        }
+        let path = args[0].trim().to_string();
+        let value = parse_value_reference(&args[1])?;
+        return Ok(Condition::BeginsWith { path, value });
+    }
+
+    if upper.starts_with("CONTAINS(") {
+        let args = extract_function_args(expr, "contains")?;
+        if args.len() != 2 {
+            return Err(ExpressionError::ParseError(
+                "contains requires exactly 2 arguments".to_string()
+            ));
+        }
+        let path = args[0].trim().to_string();
+        let value = parse_value_reference(&args[1])?;
+        return Ok(Condition::Contains { path, value });
     }
     
     // Handle BETWEEN
@@ -268,6 +292,29 @@ fn extract_function_arg(expr: &str, func_name: &str) -> Result<String> {
     ))
 }
 
+/// Extract arguments from function call with multiple args
+fn extract_function_args(expr: &str, func_name: &str) -> Result<Vec<String>> {
+    let prefix = format!("{}(", func_name.to_lowercase());
+    let lower_expr = expr.to_lowercase();
+    
+    if let Some(start) = lower_expr.find(&prefix) {
+        let arg_start = start + prefix.len();
+        if let Some(end) = expr[arg_start..].rfind(')') {
+            let args_str = &expr[arg_start..arg_start + end];
+            // Split by comma
+            let args: Vec<String> = args_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
+            return Ok(args);
+        }
+    }
+    
+    Err(ExpressionError::ParseError(
+        format!("Invalid function call: {}", expr)
+    ))
+}
+
 /// Find position of logical operator at top level
 fn find_logical_op(expr: &str, op: &str) -> Option<usize> {
     let upper = expr.to_uppercase();
@@ -360,5 +407,49 @@ mod tests {
         let expr = parse_update_expression("REMOVE name, age").unwrap();
         assert_eq!(expr.actions.len(), 2);
         assert_eq!(expr.actions[0].action, UpdateActionType::Remove);
+    }
+
+    #[test]
+    fn test_parse_begins_with() {
+        let cond = parse_condition_expression("begins_with(name, :prefix)").unwrap();
+        match cond {
+            Condition::BeginsWith { path, .. } => {
+                assert_eq!(path, "name");
+            }
+            _ => panic!("Expected BeginsWith condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_contains() {
+        let cond = parse_condition_expression("contains(tags, :tag)").unwrap();
+        match cond {
+            Condition::Contains { path, .. } => {
+                assert_eq!(path, "tags");
+            }
+            _ => panic!("Expected Contains condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_attribute_exists() {
+        let cond = parse_condition_expression("attribute_exists(name)").unwrap();
+        match cond {
+            Condition::AttributeExists { path } => {
+                assert_eq!(path, "name");
+            }
+            _ => panic!("Expected AttributeExists condition"),
+        }
+    }
+
+    #[test]
+    fn test_parse_attribute_not_exists() {
+        let cond = parse_condition_expression("attribute_not_exists(age)").unwrap();
+        match cond {
+            Condition::AttributeNotExists { path } => {
+                assert_eq!(path, "age");
+            }
+            _ => panic!("Expected AttributeNotExists condition"),
+        }
     }
 }
