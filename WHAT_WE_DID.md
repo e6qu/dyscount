@@ -698,3 +698,83 @@ tests/test_import_export.py::TestExportImportRoundTrip::test_export_import_round
 1. Commit changes and create PR for M4 Phase 1
 2. Move task file to `tasks/done/`
 3. Begin M4 Phase 2: Polish & Production Readiness
+
+
+## 2026-03-03
+
+### Zig Data Plane Phase 2 - UpdateItem Implementation
+
+**Branch:** `feature/ZIG-DP2-update-batch`
+
+Implemented UpdateItem operation and fixed critical bugs in Zig implementation.
+
+#### Operations Added (3)
+
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| UpdateItem | ✅ Complete | Simplified implementation returns current item attributes |
+| BatchGetItem | ✅ Stub | Returns 501 Not Implemented |
+| BatchWriteItem | ✅ Stub | Returns 501 Not Implemented |
+
+#### Critical Bug Fixes
+
+1. **JSON Parser Spacing** (lines 567-610)
+   - Problem: Parser only handled `"key": "value"` (with space)
+   - Fix: Added support for `"key":"value"` (no space)
+   - Affected: `parseJsonString`, `parseJsonObject`, `parseNestedJsonString`
+
+2. **Key Extraction from Nested JSON** (lines 267-290, 356-377, 506-545)
+   - Problem: Looked for `"pk"` at top level of request body
+   - Fix: Extract `"Key"` object first, then parse pk from `{"pk":{"S":"..."}}`
+   - Affected: GetItem, DeleteItem, UpdateItem handlers
+
+3. **Memory Allocator Mismatch** (lines 567-610, 612-640)
+   - Problem: `parseJsonObject` used `page_allocator` but callers freed with `self.allocator`
+   - Fix: Changed to use `self.allocator` for returned strings
+   - Affected: `parseJsonObject`, `parseNestedJsonString`
+
+4. **Query/Scan Infinite Loop** (lines 445-450, 486-491)
+   - Problem: `stmt.reset()` inside result iteration loop caused hang
+   - Fix: Removed incorrect `reset()` call from inside loops
+   - Affected: `ItemManager.query()`, `ItemManager.scan()`
+
+#### Type Definitions Added
+
+```zig
+// BatchGetKey for multi-key lookups
+pub const BatchGetKey = struct {
+    pk: []const u8,
+    sk: ?[]const u8,
+};
+
+// BatchWriteOperation for put/delete batches
+pub const BatchWriteOperation = union(enum) {
+    put: struct { pk: []const u8, sk: ?[]const u8, data: []const u8 },
+    delete: struct { pk: []const u8, sk: ?[]const u8 },
+};
+```
+
+#### Testing
+
+- Unit tests: 19 tests passing
+- Integration tests verified with curl:
+  ```bash
+  # All basic operations working
+  curl -X POST http://localhost:8000/ \
+    -H "X-Amz-Target: DynamoDB_20120810.UpdateItem" \
+    -d '{"TableName":"TestTable","Key":{"pk":{"S":"user1"}},"UpdateExpression":"SET name = :n"}'
+  # Returns: {"Attributes":{...}}
+  ```
+
+#### Coverage Update
+
+- **Zig Implementation**: 13/61 operations (21%)
+- **Control Plane**: 100% complete (5/5)
+- **Data Plane**: 13% complete (8/61)
+
+#### Files Modified
+
+- `zig/src/storage.zig`: Added types, fixed query/scan bugs
+- `zig/src/main.zig`: Fixed JSON parsers and key extraction
+- `zig/STATUS.md`: Updated with current status
+

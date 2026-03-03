@@ -57,6 +57,12 @@ pub const Server = struct {
             try self.handleQuery(request, writer);
         } else if (std.mem.eql(u8, operation, "Scan")) {
             try self.handleScan(request, writer);
+        } else if (std.mem.eql(u8, operation, "UpdateItem")) {
+            try self.handleUpdateItem(request, writer);
+        } else if (std.mem.eql(u8, operation, "BatchGetItem")) {
+            try self.writeErrorResponse(writer, 501, "BatchGetItem not yet implemented");
+        } else if (std.mem.eql(u8, operation, "BatchWriteItem")) {
+            try self.writeErrorResponse(writer, 501, "BatchWriteItem not yet implemented");
         } else {
             try self.writeErrorResponse(writer, 400, "Unknown operation");
         }
@@ -87,12 +93,24 @@ pub const Server = struct {
 
     fn parseJsonString(self: Server, json: []const u8, key: []const u8) ?[]const u8 {
         _ = self;
-        // Simple JSON string parser - look for "key": "value"
-        const pattern = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": \"", .{key}) catch return null;
-        defer std.heap.page_allocator.free(pattern);
+        // Simple JSON string parser - look for "key": "value" or "key":"value"
+        // Try with space first
+        const pattern_space = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": \"", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern_space);
 
-        if (std.mem.indexOf(u8, json, pattern)) |start| {
-            const value_start = start + pattern.len;
+        if (std.mem.indexOf(u8, json, pattern_space)) |start| {
+            const value_start = start + pattern_space.len;
+            if (std.mem.indexOf(u8, json[value_start..], "\"")) |end| {
+                return json[value_start .. value_start + end];
+            }
+        }
+
+        // Try without space
+        const pattern_nospace = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\":\"", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern_nospace);
+
+        if (std.mem.indexOf(u8, json, pattern_nospace)) |start| {
+            const value_start = start + pattern_nospace.len;
             if (std.mem.indexOf(u8, json[value_start..], "\"")) |end| {
                 return json[value_start .. value_start + end];
             }
@@ -248,15 +266,22 @@ pub const Server = struct {
             return;
         }
 
-        // Parse key from request (simplified - expects pk and sk)
-        const pk = self.parseJsonString(body, "pk"); // This is simplified, real impl would parse nested JSON
-        if (pk == null) {
+        // Parse key from request - extract Key object first, then pk from inside
+        const key_obj = self.parseJsonObject(body, "Key");
+        if (key_obj == null) {
             try self.writeErrorResponse(writer, 400, "Key is required");
             return;
         }
+        defer self.allocator.free(key_obj.?);
+        
+        const pk = self.parseNestedJsonString(key_obj.?, "pk") orelse {
+            try self.writeErrorResponse(writer, 400, "Primary key is required");
+            return;
+        };
+        defer self.allocator.free(pk);
 
         var im = self.getItemManager();
-        const item = im.getItem(table_name.?, pk.?, null) catch |err| {
+        const item = im.getItem(table_name.?, pk, null) catch |err| {
             switch (err) {
                 storage.StorageError.TableNotFound => {
                     try self.writeErrorResponse(writer, 400, "Table not found");
@@ -343,14 +368,22 @@ pub const Server = struct {
             return;
         }
 
-        const pk = self.parseJsonString(body, "pk");
-        if (pk == null) {
+        // Parse key from request - extract Key object first, then pk from inside
+        const key_obj = self.parseJsonObject(body, "Key");
+        if (key_obj == null) {
             try self.writeErrorResponse(writer, 400, "Key is required");
             return;
         }
+        defer self.allocator.free(key_obj.?);
+        
+        const pk = self.parseNestedJsonString(key_obj.?, "pk") orelse {
+            try self.writeErrorResponse(writer, 400, "Primary key is required");
+            return;
+        };
+        defer self.allocator.free(pk);
 
         var im = self.getItemManager();
-        _ = im.deleteItem(table_name.?, pk.?, null) catch |err| {
+        _ = im.deleteItem(table_name.?, pk, null) catch |err| {
             switch (err) {
                 storage.StorageError.TableNotFound => {
                     try self.writeErrorResponse(writer, 400, "Table not found");
@@ -470,14 +503,75 @@ pub const Server = struct {
         try writer.print("],\"Count\":{d},\"ScannedCount\":{d}}}\n", .{items.len, items.len});
     }
 
-    fn parseJsonObject(self: Server, json: []const u8, key: []const u8) ?[]const u8 {
-        _ = self;
-        // Simple JSON object parser - look for "key": { ... }
-        const pattern = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": {{", .{key}) catch return null;
-        defer std.heap.page_allocator.free(pattern);
+    fn handleUpdateItem(self: *Server, request: []const u8, writer: anytype) !void {
+        const body_start = std.mem.indexOf(u8, request, "\r\n\r\n");
+        if (body_start == null) {
+            try self.writeErrorResponse(writer, 400, "Missing request body");
+            return;
+        }
 
-        if (std.mem.indexOf(u8, json, pattern)) |start| {
-            const value_start = start + pattern.len - 1; // Include the {
+        const body = request[body_start.? + 4 ..];
+        const table_name = self.parseJsonString(body, "TableName");
+        
+        if (table_name == null) {
+            try self.writeErrorResponse(writer, 400, "Table name is required");
+            return;
+        }
+
+        // Parse key from request - extract Key object first, then pk from inside
+        const key_obj = self.parseJsonObject(body, "Key");
+        if (key_obj == null) {
+            try self.writeErrorResponse(writer, 400, "Key is required");
+            return;
+        }
+        defer self.allocator.free(key_obj.?);
+        
+        const pk = self.parseNestedJsonString(key_obj.?, "pk") orelse {
+            try self.writeErrorResponse(writer, 400, "Primary key is required");
+            return;
+        };
+        defer self.allocator.free(pk);
+
+        const update_expression = self.parseJsonString(body, "UpdateExpression");
+        if (update_expression == null) {
+            try self.writeErrorResponse(writer, 400, "UpdateExpression is required");
+            return;
+        }
+
+        var im = self.getItemManager();
+        const updated_item = im.updateItem(table_name.?, pk, null, update_expression.?) catch |err| {
+            switch (err) {
+                storage.StorageError.TableNotFound => {
+                    try self.writeErrorResponse(writer, 400, "Table not found");
+                    return;
+                },
+                else => {
+                    try self.writeErrorResponse(writer, 500, "Internal server error");
+                    return;
+                },
+            }
+        };
+        defer if (updated_item) |data| self.allocator.free(data);
+
+        try writer.writeAll("HTTP/1.1 200 OK\r\n");
+        try writer.writeAll("Content-Type: application/json\r\n");
+        try writer.writeAll("\r\n");
+        
+        if (updated_item) |data| {
+            try writer.print("{{\"Attributes\":{s}}}\n", .{data});
+        } else {
+            try self.writeErrorResponse(writer, 400, "Item not found");
+        }
+    }
+
+    fn parseJsonObject(self: Server, json: []const u8, key: []const u8) ?[]const u8 {
+        // Simple JSON object parser - look for "key": { ... } or "key":{...}
+        // Try with space first
+        const pattern_space = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": {{", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern_space);
+
+        if (std.mem.indexOf(u8, json, pattern_space)) |start| {
+            const value_start = start + pattern_space.len - 1; // Include the {
             
             // Find matching closing brace
             var brace_count: i32 = 1;
@@ -488,22 +582,53 @@ pub const Server = struct {
             }
             
             if (brace_count == 0) {
-                return std.heap.page_allocator.dupe(u8, json[value_start..i]) catch return null;
+                return self.allocator.dupe(u8, json[value_start..i]) catch return null;
+            }
+        }
+
+        // Try without space
+        const pattern_nospace = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\":{{",  .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern_nospace);
+
+        if (std.mem.indexOf(u8, json, pattern_nospace)) |start| {
+            const value_start = start + pattern_nospace.len - 1; // Include the {
+            
+            // Find matching closing brace
+            var brace_count: i32 = 1;
+            var i = value_start + 1;
+            while (i < json.len and brace_count > 0) : (i += 1) {
+                if (json[i] == '{') brace_count += 1;
+                if (json[i] == '}') brace_count -= 1;
+            }
+            
+            if (brace_count == 0) {
+                return self.allocator.dupe(u8, json[value_start..i]) catch return null;
             }
         }
         return null;
     }
 
     fn parseNestedJsonString(self: Server, json: []const u8, key: []const u8) ?[]const u8 {
-        _ = self;
-        // Parse nested JSON like {"S": "value"}
-        const pattern = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": {{\"S\": \"", .{key}) catch return null;
-        defer std.heap.page_allocator.free(pattern);
+        // Parse nested JSON like {"S": "value"} or {"S":"value"}
+        // Try with space
+        const pattern_space = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\": {{\"S\": \"", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern_space);
 
-        if (std.mem.indexOf(u8, json, pattern)) |start| {
-            const value_start = start + pattern.len;
+        if (std.mem.indexOf(u8, json, pattern_space)) |start| {
+            const value_start = start + pattern_space.len;
             if (std.mem.indexOf(u8, json[value_start..], "\"")) |end| {
-                return std.heap.page_allocator.dupe(u8, json[value_start..value_start + end]) catch return null;
+                return self.allocator.dupe(u8, json[value_start..value_start + end]) catch return null;
+            }
+        }
+
+        // Try without space
+        const pattern_nospace = std.fmt.allocPrint(std.heap.page_allocator, "\"{s}\":{{\"S\":\"", .{key}) catch return null;
+        defer std.heap.page_allocator.free(pattern_nospace);
+
+        if (std.mem.indexOf(u8, json, pattern_nospace)) |start| {
+            const value_start = start + pattern_nospace.len;
+            if (std.mem.indexOf(u8, json[value_start..], "\"")) |end| {
+                return self.allocator.dupe(u8, json[value_start..value_start + end]) catch return null;
             }
         }
         return null;
