@@ -303,7 +303,7 @@ func (tm *TableManager) UpdateTable(req *models.UpdateTableRequest) (*models.Tab
 			}
 		}
 		if gsiUpdate.Update != nil {
-			if err := tm.updateGSI(db, gsiUpdate.Update); err != nil {
+			if err := tm.updateGSI(db, metadata, gsiUpdate.Update); err != nil {
 				return nil, fmt.Errorf("failed to update GSI: %w", err)
 			}
 		}
@@ -390,7 +390,7 @@ func (tm *TableManager) createGSI(db *sql.DB, metadata *models.TableMetadata, cr
 }
 
 // updateGSI updates an existing Global Secondary Index.
-func (tm *TableManager) updateGSI(db *sql.DB, update *models.UpdateGlobalSecondaryIndexAction) error {
+func (tm *TableManager) updateGSI(db *sql.DB, metadata *models.TableMetadata, update *models.UpdateGlobalSecondaryIndexAction) error {
 	// Update provisioned throughput in index metadata
 	provisionedThroughputJSON, _ := json.Marshal(update.ProvisionedThroughput)
 	_, err := db.Exec(`
@@ -401,6 +401,14 @@ func (tm *TableManager) updateGSI(db *sql.DB, update *models.UpdateGlobalSeconda
 
 	if err != nil {
 		return fmt.Errorf("failed to update GSI: %w", err)
+	}
+
+	// Update in-memory metadata
+	for i, gsi := range metadata.GlobalSecondaryIndexes {
+		if gsi.IndexName == update.IndexName {
+			metadata.GlobalSecondaryIndexes[i].ProvisionedThroughput = update.ProvisionedThroughput
+			break
+		}
 	}
 
 	return nil

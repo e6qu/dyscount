@@ -19,7 +19,7 @@ Go implementation using Gin framework with SQLite backend.
 | TagResource | ⚠️ | Stub only |
 | UntagResource | ⚠️ | Stub only |
 | ListTagsOfResource | ⚠️ | Stub only |
-| UpdateTable | ❌ | Not implemented |
+| UpdateTable | ✅ | Full implementation with GSI support |
 
 ### Data Plane (6 operations) ✅
 | Operation | Status | Notes |
@@ -91,14 +91,16 @@ Go implementation using Gin framework with SQLite backend.
 
 ## Metrics
 
-- **Lines of Code**: ~3,900 (+100)
-- **Test Count**: 103 (+8 UpdateExpression tests)
-- **Test Coverage**: ~72%
+- **Lines of Code**: ~4,000 (+100)
+- **Test Count**: 111 (+8 UpdateTable GSI tests)
+- **Test Coverage**: ~75%
 - **Operations**: 20/61 (33%)
-- **Condition Expressions**: ✅ Complete
-- **Batch Operations**: ✅ Complete
-- **Transactions**: ✅ Complete
-- **UpdateExpression**: ✅ Complete
+- **M2 Feature Parity**: ✅ COMPLETE
+  - Condition Expressions: ✅
+  - Batch Operations: ✅
+  - Transactions: ✅
+  - UpdateExpression: ✅
+  - UpdateTable GSI: ✅
 
 ## Next Phase: M2 Feature Parity
 

@@ -165,8 +165,54 @@ The UpdateExpression implementation was already comprehensive:
 - DELETE: Set element removal
 - Multiple actions in single expression
 
+## 2026-03-03: M2 Phase 5 - UpdateTable GSI Support
+
+**Branch**: `feature/GO-M2-update-table-gsi`
+
+### Summary
+
+Added comprehensive tests for UpdateTable GSI operations and fixed a bug in GSI throughput updates.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/update_table_gsi_test.go`**
+   - Tests for CreateGSI via UpdateTable
+   - Tests for DeleteGSI via UpdateTable
+   - Tests for UpdateGSI throughput
+   - Tests for mixed GSI operations
+   - Tests for duplicate GSI creation (error case)
+   - Tests for table throughput updates
+   - Tests for billing mode updates
+   - Tests for non-existent table (error case)
+
+#### Bug Fix
+
+1. **`go/src/internal/storage/table_manager.go`**
+   - Fixed `updateGSI` to also update in-memory metadata
+   - This ensures the returned metadata reflects the updated throughput
+
+### Features Verified
+
+| Feature | Status | Tests |
+|---------|--------|-------|
+| Create GSI | ✅ | Create new GSI via UpdateTable |
+| Delete GSI | ✅ | Delete GSI via UpdateTable |
+| Update GSI Throughput | ✅ | Update GSI provisioned throughput |
+| Mixed Operations | ✅ | Create/Delete/Update in single call |
+| Table Throughput | ✅ | Update table provisioned throughput |
+| Billing Mode | ✅ | Update billing mode (PROVISIONED/PAY_PER_REQUEST) |
+| Error Handling | ✅ | Duplicate GSI, non-existent table |
+
+### Tests
+
+- 8 UpdateTable GSI tests added
+- All 111 Go tests passing
+
 ### Next Steps
 
-- Phase 5: UpdateTable GSI support
+- Go M2 parity is complete! 🎉
+- Consider moving to M3 (TTL, Backup, PITR) or improving test coverage
 
 ---
