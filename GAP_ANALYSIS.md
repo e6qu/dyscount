@@ -11,7 +11,7 @@
 |---------------|------------|---------------|--------|
 | **Python** | 53/61 (87%) | 372 tests | ✅ Production-ready |
 | **Go** | 50/61 (82%) | 183 tests | ✅ Feature Complete |
-| **Rust** | 18/61 (30%) | 50 tests | 🚧 M2 Phase 1 Complete |
+| **Rust** | 28/61 (46%) | 69 tests | 🚧 M3 Complete |
 | **Zig** | 16/61 (26%) | 19 tests | ⚠️ Basic Data Plane |
 
 **Total API Coverage**: 53/61 DynamoDB operations (87%)
@@ -137,23 +137,28 @@
 
 ## 3. Rust Implementation Analysis
 
-### ✅ Implemented (18 operations)
+### ✅ Implemented (28 operations)
 
 | Category | Operations |
 |----------|------------|
 | Control Plane | CreateTable, DeleteTable, ListTables, DescribeTable, UpdateTable, TagResource*, UntagResource*, ListTagsOfResource*, DescribeEndpoints |
 | Data Plane | GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan |
 | Batch | BatchGetItem, BatchWriteItem |
+| Transactions | TransactGetItems, TransactWriteItems |
+| Condition Expressions | Full support |
 | TTL | UpdateTimeToLive, DescribeTimeToLive |
-| ConditionExpressions | Full support |
+| Backup/Restore | CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup |
+| PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime |
 
 *Tagging operations are stubs
 
-### 🚫 Missing (43 operations)
+### 🚫 Missing (33 operations)
 
 Critical gaps:
-1. ❌ **No transactions** - TransactGetItems, TransactWriteItems
-2. ❌ **No advanced features** (Backup, PITR, PartiQL, Import/Export, Streams)
+1. ❌ **PartiQL** - ExecuteStatement, BatchExecuteStatement
+2. ❌ **Import/Export** - 6 operations
+3. ❌ **Streams** - ListStreams, DescribeStream, GetShardIterator, GetRecords
+4. ❌ **Global Tables** - 8 operations
 
 ---
 
@@ -202,16 +207,16 @@ Critical gaps:
 | BatchGetItem | ✅ | ✅ | ✅ | ⚠️ |
 | BatchWriteItem | ✅ | ✅ | ✅ | ⚠️ |
 | **Transactions** |
-| TransactGetItems | ✅ | ✅ | ❌ | ❌ |
-| TransactWriteItems | ✅ | ✅ | ❌ | ❌ |
+| TransactGetItems | ✅ | ✅ | ✅ | ❌ |
+| TransactWriteItems | ✅ | ✅ | ✅ | ❌ |
 | **Condition Expressions** |
 | ConditionExpression | ✅ | ✅ | ✅ | ❌ |
 | FilterExpression | ✅ | ✅ | ⚠️ | ❌ |
 | KeyConditionExpression | ✅ | ✅ | ⚠️ | ⚠️ |
 | **Advanced Features** |
 | TTL (2 ops) | ✅ | ✅ | ✅ | ❌ |
-| Backup/Restore (5 ops) | ✅ | ✅ | ❌ | ❌ |
-| PITR (3 ops) | ✅ | ✅ | ❌ | ❌ |
+| Backup/Restore (5 ops) | ✅ | ✅ | ✅ | ❌ |
+| PITR (3 ops) | ✅ | ✅ | ✅ | ❌ |
 | PartiQL (2 ops) | ✅ | ✅ | ❌ | ❌ |
 | Import/Export (6 ops) | ✅ | ✅ | ❌ | ❌ |
 | Streams (4 ops) | ✅ | ✅ | ❌ | ❌ |
