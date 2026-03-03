@@ -11,7 +11,7 @@
 |---------------|------------|---------------|--------|
 | **Python** | 53/61 (87%) | 372 tests | ✅ Production-ready |
 | **Go** | 50/61 (82%) | 183 tests | ✅ Feature Complete |
-| **Rust** | 28/61 (46%) | 69 tests | 🚧 M3 Complete |
+| **Rust** | 37/61 (61%) | 88 tests | 🚧 M3 Phase 2 |
 | **Zig** | 16/61 (26%) | 19 tests | ⚠️ Basic Data Plane |
 
 **Total API Coverage**: 53/61 DynamoDB operations (87%)
@@ -137,7 +137,7 @@
 
 ## 3. Rust Implementation Analysis
 
-### ✅ Implemented (28 operations)
+### ✅ Implemented (37 operations)
 
 | Category | Operations |
 |----------|------------|
@@ -146,19 +146,21 @@
 | Batch | BatchGetItem, BatchWriteItem |
 | Transactions | TransactGetItems, TransactWriteItems |
 | Condition Expressions | Full support |
+| FilterExpression | Query, Scan |
 | TTL | UpdateTimeToLive, DescribeTimeToLive |
 | Backup/Restore | CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup |
 | PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime |
+| PartiQL | ExecuteStatement, BatchExecuteStatement |
+| Import/Export | ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports |
 
 *Tagging operations are stubs
 
-### 🚫 Missing (33 operations)
+### 🚫 Missing (24 operations)
 
 Critical gaps:
-1. ❌ **PartiQL** - ExecuteStatement, BatchExecuteStatement
-2. ❌ **Import/Export** - 6 operations
-3. ❌ **Streams** - ListStreams, DescribeStream, GetShardIterator, GetRecords
-4. ❌ **Global Tables** - 8 operations
+1. ❌ **Streams** - ListStreams, DescribeStream, GetShardIterator, GetRecords (4)
+2. ❌ **Global Tables** - CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, DeleteGlobalTable, UpdateGlobalTableSettings, DescribeGlobalTableSettings, UpdateReplication (8)
+3. ❌ **Misc** - ConditionCheck (standalone), Kinesis streaming (4), Contributor Insights (2), Resource Policies (3) - not needed for local
 
 ---
 
@@ -217,8 +219,8 @@ Critical gaps:
 | TTL (2 ops) | ✅ | ✅ | ✅ | ❌ |
 | Backup/Restore (5 ops) | ✅ | ✅ | ✅ | ❌ |
 | PITR (3 ops) | ✅ | ✅ | ✅ | ❌ |
-| PartiQL (2 ops) | ✅ | ✅ | ❌ | ❌ |
-| Import/Export (6 ops) | ✅ | ✅ | ❌ | ❌ |
+| PartiQL (2 ops) | ✅ | ✅ | ✅ | ❌ |
+| Import/Export (6 ops) | ✅ | ✅ | ✅ | ❌ |
 | Streams (4 ops) | ✅ | ✅ | ❌ | ❌ |
 | Global Tables (6 ops) | ❌ | ✅ | ❌ | ❌ |
 

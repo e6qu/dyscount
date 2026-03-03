@@ -8,15 +8,15 @@ Rust implementation using Axum framework with SQLite backend.
 
 ## Summary
 
-- **Operations**: 28/61 (46%)
-- **Tests**: 69 passing
+- **Operations**: 34/61 (56%)
+- **Tests**: 85 passing
 - **M1 Foundation**: ✅ Complete
 - **M2 Phase 1**: ✅ Complete (UpdateTable, Batch, TTL, ConditionExpressions)
 - **M2 Phase 2**: ✅ Complete (Transactions)
 - **M3 Phase 1**: ✅ Complete (Backup/Restore)
 - **M3 Phase 2**: ✅ Complete (PITR)
 
-## Implemented Operations (18/61)
+## Implemented Operations (34/61)
 
 ### Control Plane (9 operations)
 | Operation | Status | Notes |
@@ -62,6 +62,29 @@ Rust implementation using Axum framework with SQLite backend.
 | BETWEEN | ✅ |
 | IN | ✅ |
 
+### FilterExpression ✅
+| Feature | Status |
+|---------|--------|
+| Query filtering | ✅ |
+| Scan filtering | ✅ |
+| Response counts (count/scanned_count) | ✅ |
+
+### PartiQL (2/2) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| ExecuteStatement | ✅ | SELECT, INSERT, UPDATE, DELETE |
+| BatchExecuteStatement | ✅ | Up to 25 statements |
+
+### Import/Export (6/6) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| ExportTableToPointInTime | ✅ | DynamoDB JSON format |
+| DescribeExport | ✅ | Get export details |
+| ListExports | ✅ | List all exports |
+| ImportTable | ✅ | From DynamoDB JSON |
+| DescribeImport | ✅ | Get import details |
+| ListImports | ✅ | List all imports |
+
 ### Transactions (2/2) ✅
 | Operation | Status | Notes |
 |-----------|--------|-------|
@@ -76,6 +99,16 @@ Rust implementation using Axum framework with SQLite backend.
 | ListBackups | ✅ | List all backups |
 | DeleteBackup | ✅ | Delete backup |
 | RestoreTableFromBackup | ✅ | Restore from backup |
+
+### Import/Export (6/6) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| ExportTableToPointInTime | ✅ | DynamoDB JSON format to local directory |
+| DescribeExport | ✅ | Get export task details |
+| ListExports | ✅ | List all export tasks |
+| ImportTable | ✅ | Import from DynamoDB JSON format |
+| DescribeImport | ✅ | Get import task details |
+| ListImports | ✅ | List all import tasks |
 
 ### PITR (3/3) ✅
 | Operation | Status | Notes |
@@ -94,20 +127,34 @@ Rust implementation using Axum framework with SQLite backend.
 | Handlers | 6 |
 | Integration | 3 |
 | Expression | 5 |
-| **Total** | **69** |
+| **Total** | **88** |
 
-## Recent Additions (Batch 2)
+## Recent Additions (Import/Export)
 
-1. **TransactGetItems** - Atomic reads (up to 100 items)
-2. **TransactWriteItems** - Atomic writes (up to 25 items)
-3. **CreateBackup** - On-demand table backups
-4. **DescribeBackup** - Get backup details
-5. **ListBackups** - List all backups
-6. **DeleteBackup** - Delete backups
-7. **RestoreTableFromBackup** - Restore from backup
-8. **UpdateContinuousBackups** - Enable/disable PITR
-9. **DescribeContinuousBackups** - Get PITR configuration
-10. **RestoreTableToPointInTime** - Point-in-time recovery
+1. **ExportTableToPointInTime** - Export table to DynamoDB JSON format
+2. **DescribeExport** - Get export task details
+3. **ListExports** - List all export tasks
+4. **ImportTable** - Import table from DynamoDB JSON format
+5. **DescribeImport** - Get import task details
+6. **ListImports** - List all import tasks
+
+## Recent Additions (Batch 3)
+
+### PartiQL (2 operations)
+1. **ExecuteStatement** - Execute PartiQL queries (SELECT, INSERT, UPDATE, DELETE)
+2. **BatchExecuteStatement** - Execute multiple PartiQL statements
+
+### Import/Export (6 operations)
+3. **ExportTableToPointInTime** - Export table to DynamoDB JSON format
+4. **DescribeExport** - Get export task details
+5. **ListExports** - List all export tasks
+6. **ImportTable** - Import table from DynamoDB JSON format
+7. **DescribeImport** - Get import task details
+8. **ListImports** - List all import tasks
+
+### FilterExpression
+9. **Query with FilterExpression** - Server-side filtering for queries
+10. **Scan with FilterExpression** - Server-side filtering for scans
 
 ## Remaining Work
 
@@ -116,11 +163,11 @@ Rust implementation using Axum framework with SQLite backend.
 - TransactWriteItems (full implementation)
 
 ### M3 Advanced
-- Backup/Restore (5 operations)
-- PITR (3 operations)
+- ✅ Backup/Restore (5 operations) - Complete
+- ✅ PITR (3 operations) - Complete
 - PartiQL (2 operations)
 - Streams (4 operations)
-- Import/Export (6 operations)
+- ✅ Import/Export (6 operations) - Complete
 
 ## See Also
 

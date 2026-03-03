@@ -475,7 +475,7 @@ impl ItemManager {
         result
     }
 
-    /// Query items by partition key
+    /// Query items by partition key with optional filter expression
     pub fn query(
         &self,
         table_name: &str,
@@ -484,7 +484,10 @@ impl ItemManager {
         _key_conditions: Option<&HashMap<String, crate::models::Condition>>,
         scan_index_forward: bool,
         limit: Option<i32>,
-    ) -> Result<(Vec<Item>, Option<Item>), ItemError> {
+        filter_expression: Option<&str>,
+        expression_names: Option<&HashMap<String, String>>,
+        expression_values: Option<&HashMap<String, AttributeValue>>,
+    ) -> Result<(Vec<Item>, Option<Item>, i32, i32), ItemError> {
         let conn = self.get_connection(table_name)?;
 
         // Get table metadata
@@ -533,32 +536,77 @@ impl ItemManager {
             });
         }
 
-        // Apply limit
-        let last_evaluated_key = if let Some(limit_val) = limit {
-            let limit = limit_val as usize;
-            if items.len() > limit {
-                let last_item = &items[limit - 1];
-                let last_key = self.extract_key_from_item(last_item, &key_schema)?;
-                items.truncate(limit);
-                Some(last_key)
-            } else {
-                None
-            }
+        // Track scanned count before filtering
+        let scanned_count = items.len() as i32;
+
+        // Apply filter expression if provided
+        let filtered_items = if let Some(filter_expr) = filter_expression {
+            self.apply_filter_expression(items, filter_expr, expression_names, expression_values)?
         } else {
-            None
+            items
         };
 
-        Ok((items, last_evaluated_key))
+        // Apply limit after filtering
+        let (final_items, last_evaluated_key) = if let Some(limit_val) = limit {
+            let limit = limit_val as usize;
+            if filtered_items.len() > limit {
+                let last_item = &filtered_items[limit - 1];
+                let last_key = self.extract_key_from_item(last_item, &key_schema)?;
+                let mut truncated = filtered_items;
+                truncated.truncate(limit);
+                (truncated, Some(last_key))
+            } else {
+                (filtered_items, None)
+            }
+        } else {
+            (filtered_items, None)
+        };
+
+        let count = final_items.len() as i32;
+
+        Ok((final_items, last_evaluated_key, count, scanned_count))
     }
 
-    /// Scan all items in a table
+    /// Apply filter expression to a list of items
+    fn apply_filter_expression(
+        &self,
+        items: Vec<Item>,
+        filter_expression: &str,
+        expression_names: Option<&HashMap<String, String>>,
+        expression_values: Option<&HashMap<String, AttributeValue>>,
+    ) -> Result<Vec<Item>, ItemError> {
+        let empty_names = HashMap::new();
+        let empty_values = HashMap::new();
+        let names = expression_names.unwrap_or(&empty_names);
+        let values = expression_values.unwrap_or(&empty_values);
+
+        let evaluator = ExpressionEvaluator::new(names, values);
+        let condition = parse_condition_expression(filter_expression)
+            .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+        let mut filtered = Vec::new();
+        for item in items {
+            match evaluator.evaluate_condition(&condition, &item) {
+                Ok(true) => filtered.push(item),
+                Ok(false) => (), // Item filtered out
+                Err(e) => return Err(ItemError::Expression(e.to_string())),
+            }
+        }
+
+        Ok(filtered)
+    }
+
+    /// Scan all items in a table with optional filter expression
     pub fn scan(
         &self,
         table_name: &str,
         _index_name: Option<&str>,
         limit: Option<i32>,
         _exclusive_start_key: Option<&Item>,
-    ) -> Result<(Vec<Item>, Option<Item>), ItemError> {
+        filter_expression: Option<&str>,
+        expression_names: Option<&HashMap<String, String>>,
+        expression_values: Option<&HashMap<String, AttributeValue>>,
+    ) -> Result<(Vec<Item>, Option<Item>, i32, i32), ItemError> {
         let conn = self.get_connection(table_name)?;
 
         // Get table metadata
@@ -581,22 +629,35 @@ impl ItemManager {
             }
         }
 
-        // Apply limit
-        let last_evaluated_key = if let Some(limit_val) = limit {
-            let limit = limit_val as usize;
-            if items.len() > limit {
-                let last_item = &items[limit - 1];
-                let last_key = self.extract_key_from_item(last_item, &metadata.key_schema)?;
-                items.truncate(limit);
-                Some(last_key)
-            } else {
-                None
-            }
+        // Track scanned count before filtering
+        let scanned_count = items.len() as i32;
+
+        // Apply filter expression if provided
+        let filtered_items = if let Some(filter_expr) = filter_expression {
+            self.apply_filter_expression(items, filter_expr, expression_names, expression_values)?
         } else {
-            None
+            items
         };
 
-        Ok((items, last_evaluated_key))
+        // Apply limit after filtering
+        let (final_items, last_evaluated_key) = if let Some(limit_val) = limit {
+            let limit = limit_val as usize;
+            if filtered_items.len() > limit {
+                let last_item = &filtered_items[limit - 1];
+                let last_key = self.extract_key_from_item(last_item, &metadata.key_schema)?;
+                let mut truncated = filtered_items;
+                truncated.truncate(limit);
+                (truncated, Some(last_key))
+            } else {
+                (filtered_items, None)
+            }
+        } else {
+            (filtered_items, None)
+        };
+
+        let count = final_items.len() as i32;
+
+        Ok((final_items, last_evaluated_key, count, scanned_count))
     }
 
     /// Build a key item from pk/sk values
@@ -1116,17 +1177,86 @@ mod tests {
         }
 
         // Query items
-        let (items, last_key) = im.query(
+        let (items, last_key, count, scanned_count) = im.query(
             "TestTable",
             None,
             "user1",
             None,
             true,
             Some(3),
+            None,
+            None,
+            None,
         ).unwrap();
 
         assert_eq!(items.len(), 3);
+        assert_eq!(count, 3);
+        assert_eq!(scanned_count, 5);
         assert!(last_key.is_some()); // Pagination key present
+    }
+
+    #[test]
+    fn test_query_with_filter_expression() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put multiple items with different statuses
+        for i in 0..5 {
+            let item = {
+                let mut item = Item::new();
+                item.insert("pk".to_string(), AttributeValue::s("user1"));
+                item.insert("sk".to_string(), AttributeValue::s(&format!("item{}", i)));
+                item.insert("status".to_string(), AttributeValue::s(if i % 2 == 0 { "active" } else { "inactive" }));
+                item.insert("age".to_string(), AttributeValue::n(&format!("{}", 20 + i)));
+                item
+            };
+            im.put_item("TestTable", &item, false, None, None, None).unwrap();
+        }
+
+        // Query with filter expression for active status
+        let expr_values: HashMap<String, AttributeValue> = [
+            ("statusVal".to_string(), AttributeValue::s("active".to_string())),
+        ].into_iter().collect();
+
+        let (items, last_key, count, scanned_count) = im.query(
+            "TestTable",
+            None,
+            "user1",
+            None,
+            true,
+            None,
+            Some("status = :statusVal"),
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Should return only 3 items (item0, item2, item4 have status=active)
+        assert_eq!(items.len(), 3);
+        assert_eq!(count, 3);
+        assert_eq!(scanned_count, 5); // All 5 items were scanned
+        assert!(last_key.is_none());
+
+        // Query with filter expression for age > 22
+        let expr_values: HashMap<String, AttributeValue> = [
+            ("ageVal".to_string(), AttributeValue::n("22".to_string())),
+        ].into_iter().collect();
+
+        let (items, _, count, scanned_count) = im.query(
+            "TestTable",
+            None,
+            "user1",
+            None,
+            true,
+            None,
+            Some("age > :ageVal"),
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Should return 2 items (item3=23, item4=24 have age > 22)
+        assert_eq!(items.len(), 2);
+        assert_eq!(count, 2);
+        assert_eq!(scanned_count, 5);
     }
 
     #[test]
@@ -1147,10 +1277,164 @@ mod tests {
         }
 
         // Scan items
-        let (items, last_key) = im.scan("TestTable", None, Some(3), None).unwrap();
+        let (items, last_key, count, scanned_count) = im.scan("TestTable", None, Some(3), None, None, None, None).unwrap();
 
         assert_eq!(items.len(), 3);
+        assert_eq!(count, 3);
+        assert_eq!(scanned_count, 5);
         assert!(last_key.is_some());
+    }
+
+    #[test]
+    fn test_scan_with_filter_expression() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put multiple items with different categories
+        for i in 0..5 {
+            let item = {
+                let mut item = Item::new();
+                item.insert("pk".to_string(), AttributeValue::s(&format!("user{}", i)));
+                item.insert("sk".to_string(), AttributeValue::s("profile"));
+                item.insert("category".to_string(), AttributeValue::s(if i < 3 { "A" } else { "B" }));
+                item.insert("score".to_string(), AttributeValue::n(&format!("{}", i * 10)));
+                item
+            };
+            im.put_item("TestTable", &item, false, None, None, None).unwrap();
+        }
+
+        // Scan with filter expression for category = A
+        let expr_values: HashMap<String, AttributeValue> = [
+            ("catVal".to_string(), AttributeValue::s("A".to_string())),
+        ].into_iter().collect();
+
+        let (items, _, count, scanned_count) = im.scan(
+            "TestTable",
+            None,
+            None,
+            None,
+            Some("category = :catVal"),
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Should return 3 items (user0, user1, user2 have category=A)
+        assert_eq!(items.len(), 3);
+        assert_eq!(count, 3);
+        assert_eq!(scanned_count, 5); // All 5 items were scanned
+
+        // Scan with filter expression for score >= 20
+        let expr_values: HashMap<String, AttributeValue> = [
+            ("scoreVal".to_string(), AttributeValue::n("20".to_string())),
+        ].into_iter().collect();
+
+        let (items, _, count, scanned_count) = im.scan(
+            "TestTable",
+            None,
+            None,
+            None,
+            Some("score >= :scoreVal"),
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Should return 3 items (user2=20, user3=30, user4=40 have score >= 20)
+        assert_eq!(items.len(), 3);
+        assert_eq!(count, 3);
+        assert_eq!(scanned_count, 5);
+    }
+
+    #[test]
+    fn test_filter_expression_with_functions() {
+        let (im, tm, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put items with different attributes
+        let item1 = {
+            let mut item = Item::new();
+            item.insert("pk".to_string(), AttributeValue::s("user1"));
+            item.insert("sk".to_string(), AttributeValue::s("profile"));
+            item.insert("name".to_string(), AttributeValue::s("John Doe"));
+            item.insert("email".to_string(), AttributeValue::s("john@example.com"));
+            item
+        };
+        im.put_item("TestTable", &item1, false, None, None, None).unwrap();
+
+        let item2 = {
+            let mut item = Item::new();
+            item.insert("pk".to_string(), AttributeValue::s("user2"));
+            item.insert("sk".to_string(), AttributeValue::s("profile"));
+            item.insert("name".to_string(), AttributeValue::s("Jane Smith"));
+            // No email attribute
+            item
+        };
+        im.put_item("TestTable", &item2, false, None, None, None).unwrap();
+
+        let item3 = {
+            let mut item = Item::new();
+            item.insert("pk".to_string(), AttributeValue::s("user3"));
+            item.insert("sk".to_string(), AttributeValue::s("profile"));
+            item.insert("name".to_string(), AttributeValue::s("Bob Johnson"));
+            item.insert("email".to_string(), AttributeValue::s("bob@test.org"));
+            item
+        };
+        im.put_item("TestTable", &item3, false, None, None, None).unwrap();
+
+        // Scan with attribute_exists filter
+        let (items, _, count, scanned_count) = im.scan(
+            "TestTable",
+            None,
+            None,
+            None,
+            Some("attribute_exists(email)"),
+            None,
+            None,
+        ).unwrap();
+
+        // Should return 2 items (user1 and user3 have email)
+        assert_eq!(items.len(), 2);
+        assert_eq!(count, 2);
+        assert_eq!(scanned_count, 3);
+
+        // Scan with begins_with filter
+        let expr_values: HashMap<String, AttributeValue> = [
+            ("prefix".to_string(), AttributeValue::s("John".to_string())),
+        ].into_iter().collect();
+
+        let (items, _, count, _) = im.scan(
+            "TestTable",
+            None,
+            None,
+            None,
+            Some("begins_with(name, :prefix)"),
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Should return 1 item (only John Doe begins with "John")
+        assert_eq!(items.len(), 1);
+        assert_eq!(count, 1);
+        assert_eq!(items[0].get("pk").unwrap().as_s(), Some("user1"));
+
+        // Scan with contains filter
+        let expr_values: HashMap<String, AttributeValue> = [
+            ("domain".to_string(), AttributeValue::s("example.com".to_string())),
+        ].into_iter().collect();
+
+        let (items, _, count, _) = im.scan(
+            "TestTable",
+            None,
+            None,
+            None,
+            Some("contains(email, :domain)"),
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Should return 1 item (john@example.com)
+        assert_eq!(items.len(), 1);
+        assert_eq!(count, 1);
+        assert_eq!(items[0].get("pk").unwrap().as_s(), Some("user1"));
     }
 
     #[test]

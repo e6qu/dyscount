@@ -2,6 +2,7 @@
 
 use crate::items::{ItemError, ItemManager};
 use crate::models::*;
+use crate::partiql::{ExecutionResult, PartiQLEngine, PartiQLError};
 use crate::storage::{StorageError, TableManager};
 use axum::{
     body::Bytes,
@@ -48,6 +49,31 @@ pub async fn dynamodb_handler(
 
     // Parse body based on operation type
     match operation {
+        // PartiQL operations
+        "ExecuteStatement" => {
+            let request: ExecuteStatementRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_execute_statement(state, request).await
+        }
+        "BatchExecuteStatement" => {
+            let request: BatchExecuteStatementRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_batch_execute_statement(state, request).await
+        }
         // PITR operations
         "UpdateContinuousBackups" => {
             let request: UpdateContinuousBackupsRequest = serde_json::from_slice(&body).map_err(|e| {
@@ -84,6 +110,79 @@ pub async fn dynamodb_handler(
                 )
             })?;
             handle_restore_table_to_point_in_time(state, request).await
+        }
+        // Import/Export operations
+        "ExportTableToPointInTime" => {
+            let request: ExportTableToPointInTimeRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_export_table_to_point_in_time(state, request).await
+        }
+        "DescribeExport" => {
+            let request: DescribeExportRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_export(state, request).await
+        }
+        "ListExports" => {
+            let request: ListExportsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_list_exports(state, request).await
+        }
+        "ImportTable" => {
+            let request: ImportTableRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_import_table(state, request).await
+        }
+        "DescribeImport" => {
+            let request: DescribeImportRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_import(state, request).await
+        }
+        "ListImports" => {
+            let request: ListImportsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_list_imports(state, request).await
         }
         // Backup/Restore operations
         "CreateBackup" => {
@@ -930,6 +1029,9 @@ async fn handle_query(
     let index_name = request.index_name.as_deref();
     let scan_index_forward = request.scan_index_forward.unwrap_or(true);
     let limit = request.limit;
+    let filter_expression = request.filter_expression.as_deref();
+    let expression_names = request.expression_attribute_names.as_ref();
+    let expression_values = request.expression_attribute_values.as_ref();
 
     match state.item_manager.query(
         &table_name,
@@ -938,12 +1040,15 @@ async fn handle_query(
         None, // key_conditions - simplified
         scan_index_forward,
         limit,
+        filter_expression,
+        expression_names,
+        expression_values,
     ) {
-        Ok((items, last_key)) => {
+        Ok((items, last_key, count, scanned_count)) => {
             Ok(Json(DynamoDBResponse {
                 items: Some(items),
-                count: Some(request.limit.unwrap_or(0)),
-                scanned_count: Some(request.limit.unwrap_or(0)),
+                count: Some(count),
+                scanned_count: Some(scanned_count),
                 last_evaluated_key: last_key,
                 ..Default::default()
             }))
@@ -954,6 +1059,15 @@ async fn handle_query(
                 Json(ErrorResponse::resource_not_found(format!(
                     "Table not found: {}",
                     table_name
+                ))),
+            ))
+        }
+        Err(ItemError::Expression(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Invalid filter expression: {}",
+                    msg
                 ))),
             ))
         }
@@ -982,14 +1096,16 @@ async fn handle_scan(
     let index_name = request.index_name.as_deref();
     let limit = request.limit;
     let exclusive_start_key = request.exclusive_start_key.as_ref();
+    let filter_expression = request.filter_expression.as_deref();
+    let expression_names = request.expression_attribute_names.as_ref();
+    let expression_values = request.expression_attribute_values.as_ref();
 
-    match state.item_manager.scan(&table_name, index_name, limit, exclusive_start_key) {
-        Ok((items, last_key)) => {
-            let count = items.len() as i32;
+    match state.item_manager.scan(&table_name, index_name, limit, exclusive_start_key, filter_expression, expression_names, expression_values) {
+        Ok((items, last_key, count, scanned_count)) => {
             Ok(Json(DynamoDBResponse {
                 items: Some(items),
                 count: Some(count),
-                scanned_count: Some(count),
+                scanned_count: Some(scanned_count),
                 last_evaluated_key: last_key,
                 ..Default::default()
             }))
@@ -1000,6 +1116,15 @@ async fn handle_scan(
                 Json(ErrorResponse::resource_not_found(format!(
                     "Table not found: {}",
                     table_name
+                ))),
+            ))
+        }
+        Err(ItemError::Expression(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Invalid filter expression: {}",
+                    msg
                 ))),
             ))
         }
@@ -1537,6 +1662,364 @@ async fn handle_restore_table_to_point_in_time(
     }
 }
 
+// ==================== PartiQL Handlers ====================
+
+/// Handle ExecuteStatement operation
+async fn handle_execute_statement(
+    state: AppState,
+    request: ExecuteStatementRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Parse the PartiQL statement
+    let parsed = match PartiQLEngine::parse(&request.statement) {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Invalid PartiQL statement: {}",
+                    e
+                ))),
+            ));
+        }
+    };
+
+    // Execute the statement
+    let engine = PartiQLEngine::new();
+    let consistent_read = request.consistent_read.unwrap_or(false);
+
+    match engine.execute(
+        &parsed,
+        request.parameters.as_ref(),
+        &state.item_manager,
+        consistent_read,
+    ) {
+        Ok(result) => {
+            let response = match result {
+                ExecutionResult::Items(items) => ExecuteStatementResponse {
+                    items: Some(items),
+                    ..Default::default()
+                },
+                ExecutionResult::Item(item) => ExecuteStatementResponse {
+                    item,
+                    ..Default::default()
+                },
+                ExecutionResult::Empty => ExecuteStatementResponse::default(),
+            };
+
+            // Convert to DynamoDBResponse
+            Ok(Json(DynamoDBResponse {
+                items: response.items,
+                item: response.item,
+                ..Default::default()
+            }))
+        }
+        Err(PartiQLError::ItemError(ItemError::Storage(StorageError::TableNotFound(table)))) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to execute PartiQL statement: {}", e);
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Execution error: {}",
+                    e
+                ))),
+            ))
+        }
+    }
+}
+
+/// Handle BatchExecuteStatement operation
+async fn handle_batch_execute_statement(
+    state: AppState,
+    request: BatchExecuteStatementRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // DynamoDB limit: up to 25 statements per batch
+    if request.statements.len() > 25 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception(
+                "BatchExecuteStatement can execute up to 25 statements per operation",
+            )),
+        ));
+    }
+
+    let engine = PartiQLEngine::new();
+    let mut responses = Vec::new();
+
+    for statement in &request.statements {
+        // Parse the statement
+        let parsed = match PartiQLEngine::parse(&statement.statement) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                responses.push(PartiQLResponse {
+                    error: Some(crate::models::PartiQLError {
+                        code: "ValidationException".to_string(),
+                        message: format!("Invalid PartiQL statement: {}", e),
+                    }),
+                    ..Default::default()
+                });
+                continue;
+            }
+        };
+
+        // Execute the statement
+        let consistent_read = statement.consistent_read.unwrap_or(false);
+
+        let result = engine.execute(
+            &parsed,
+            statement.parameters.as_ref(),
+            &state.item_manager,
+            consistent_read,
+        );
+
+        match result {
+            Ok(ExecutionResult::Items(items)) => {
+                responses.push(PartiQLResponse {
+                    items: Some(items),
+                    ..Default::default()
+                });
+            }
+            Ok(ExecutionResult::Item(item)) => {
+                responses.push(PartiQLResponse {
+                    item,
+                    ..Default::default()
+                });
+            }
+            Ok(ExecutionResult::Empty) => {
+                responses.push(PartiQLResponse::default());
+            }
+            Err(PartiQLError::ItemError(ItemError::Storage(StorageError::TableNotFound(table)))) => {
+                responses.push(PartiQLResponse {
+                    error: Some(crate::models::PartiQLError {
+                        code: "ResourceNotFoundException".to_string(),
+                        message: format!("Table not found: {}", table),
+                    }),
+                    ..Default::default()
+                });
+            }
+            Err(e) => {
+                responses.push(PartiQLResponse {
+                    error: Some(crate::models::PartiQLError {
+                        code: "ExecutionException".to_string(),
+                        message: format!("Execution error: {}", e),
+                    }),
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
+    // Convert to DynamoDBResponse (wrap in a wrapper that includes the responses)
+    Ok(Json(DynamoDBResponse {
+        item_responses: Some(
+            responses
+                .into_iter()
+                .map(|r| ItemResponse { item: r.item })
+                .collect(),
+        ),
+        ..Default::default()
+    }))
+}
+
+
+// ==================== Import/Export Handlers ====================
+
+/// Handle ExportTableToPointInTime operation
+async fn handle_export_table_to_point_in_time(
+    state: AppState,
+    request: ExportTableToPointInTimeRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.export_table_to_point_in_time(
+        &request.table_arn,
+        &request.s3_bucket,
+        request.s3_prefix,
+        request.export_format,
+    ) {
+        Ok(export_description) => {
+            info!(
+                "Exported table {} to bucket {}",
+                export_description.table_arn.as_ref().unwrap_or(&"unknown".to_string()),
+                export_description.s3_bucket
+            );
+            Ok(Json(DynamoDBResponse {
+                export_description: Some(export_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(table)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to export table: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeExport operation
+async fn handle_describe_export(
+    state: AppState,
+    request: DescribeExportRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.describe_export(&request.export_arn) {
+        Ok(export_description) => {
+            info!("Described export: {}", export_description.export_arn);
+            Ok(Json(DynamoDBResponse {
+                export_description: Some(export_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Export not found: {}",
+                    request.export_arn
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe export: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle ListExports operation
+async fn handle_list_exports(
+    state: AppState,
+    request: ListExportsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.list_exports(request.table_arn.as_deref()) {
+        Ok(export_summaries) => {
+            info!("Listed {} exports", export_summaries.len());
+            Ok(Json(DynamoDBResponse {
+                export_summaries: Some(export_summaries),
+                ..Default::default()
+            }))
+        }
+        Err(e) => {
+            error!("Failed to list exports: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle ImportTable operation
+async fn handle_import_table(
+    state: AppState,
+    request: ImportTableRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.import_table(
+        &request.table_name,
+        &request.s3_bucket_source,
+        request.input_format,
+        request.key_schema,
+        request.attribute_definitions,
+    ) {
+        Ok(import_description) => {
+            info!(
+                "Imported table {} from bucket {}",
+                request.table_name,
+                request.s3_bucket_source.s3_bucket
+            );
+            Ok(Json(DynamoDBResponse {
+                import_description: Some(import_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(msg)),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to import table: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeImport operation
+async fn handle_describe_import(
+    state: AppState,
+    request: DescribeImportRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.describe_import(&request.import_arn) {
+        Ok(import_description) => {
+            info!("Described import: {}", import_description.import_arn);
+            Ok(Json(DynamoDBResponse {
+                import_description: Some(import_description),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Import not found: {}",
+                    request.import_arn
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe import: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle ListImports operation
+async fn handle_list_imports(
+    state: AppState,
+    request: ListImportsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.table_manager.list_imports(request.table_arn.as_deref()) {
+        Ok(import_summaries) => {
+            info!("Listed {} imports", import_summaries.len());
+            Ok(Json(DynamoDBResponse {
+                import_summaries: Some(import_summaries),
+                ..Default::default()
+            }))
+        }
+        Err(e) => {
+            error!("Failed to list imports: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
