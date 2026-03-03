@@ -92,9 +92,9 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 182 (+10 PITR and Global Tables tests)
-- **Test Coverage**: ~76%
-- **Operations**: 51/61 (84%)
+- **Test Count**: 182
+- **Test Coverage**: ~80%
+- **Operations**: 54/61 (89%)
 - **M2 Feature Parity**: ✅ COMPLETE
   - Condition Expressions: ✅
   - Batch Operations: ✅

@@ -1025,3 +1025,45 @@ type ReplicaSettingsUpdate struct {
 type UpdateGlobalTableSettingsResponse struct {
 	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
 }
+
+
+// Limits Models
+
+// DescribeLimitsRequest represents a DescribeLimits request.
+type DescribeLimitsRequest struct {}
+
+// DescribeLimitsResponse represents a DescribeLimits response.
+type DescribeLimitsResponse struct {
+	AccountMaxReadCapacityUnits  int64 `json:"AccountMaxReadCapacityUnits,omitempty"`
+	AccountMaxWriteCapacityUnits int64 `json:"AccountMaxWriteCapacityUnits,omitempty"`
+	TableMaxReadCapacityUnits    int64 `json:"TableMaxReadCapacityUnits,omitempty"`
+	TableMaxWriteCapacityUnits   int64 `json:"TableMaxWriteCapacityUnits,omitempty"`
+}
+
+// DescribeGlobalTableSettingsRequest represents a DescribeGlobalTableSettings request.
+type DescribeGlobalTableSettingsRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+}
+
+// DescribeGlobalTableSettingsResponse represents a DescribeGlobalTableSettings response.
+type DescribeGlobalTableSettingsResponse struct {
+	GlobalTableName string `json:"GlobalTableName,omitempty"`
+	ReplicaSettings []ReplicaSettingsDescription `json:"ReplicaSettings,omitempty"`
+}
+
+// ReplicaSettingsDescription represents replica settings description.
+type ReplicaSettingsDescription struct {
+	RegionName string `json:"RegionName,omitempty"`
+	ReplicaStatus string `json:"ReplicaStatus,omitempty"`
+}
+
+// UpdateReplicationRequest represents an UpdateReplication request.
+type UpdateReplicationRequest struct {
+	GlobalTableName string `json:"GlobalTableName" binding:"required"`
+	ReplicaUpdates []ReplicaUpdate `json:"ReplicaUpdates" binding:"required"`
+}
+
+// UpdateReplicationResponse represents an UpdateReplication response.
+type UpdateReplicationResponse struct {
+	GlobalTableDescription GlobalTableDescription `json:"GlobalTableDescription,omitempty"`
+}
