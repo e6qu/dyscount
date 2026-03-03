@@ -155,6 +155,8 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 	// Global Tables operations
 	case "CreateGlobalTable":
 		h.handleCreateGlobalTable(c)
+	case "DeleteGlobalTable":
+		h.handleDeleteGlobalTable(c)
 	case "UpdateGlobalTable":
 		h.handleUpdateGlobalTable(c)
 	case "DescribeGlobalTable":
@@ -2045,6 +2047,51 @@ func (h *DynamoDBHandler) handleUpdateReplication(c *gin.Context) {
 	}
 
 	resp := models.UpdateReplicationResponse{
+		GlobalTableDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleDeleteGlobalTable handles DeleteGlobalTable requests.
+func (h *DynamoDBHandler) handleDeleteGlobalTable(c *gin.Context) {
+	var req models.DeleteGlobalTableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := gtm.DeleteGlobalTable(req.GlobalTableName)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DeleteGlobalTableResponse{
 		GlobalTableDescription: *desc,
 	}
 	c.JSON(http.StatusOK, resp)

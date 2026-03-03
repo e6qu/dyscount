@@ -172,3 +172,27 @@ func (gtm *GlobalTableManager) UpdateGlobalTableSettings(req *models.UpdateGloba
 
 	return desc, nil
 }
+
+// DeleteGlobalTable deletes a global table.
+func (gtm *GlobalTableManager) DeleteGlobalTable(globalTableName string) (*models.GlobalTableDescription, error) {
+	gtm.mu.Lock()
+	defer gtm.mu.Unlock()
+
+	desc, exists := gtm.globalTables[globalTableName]
+	if !exists {
+		return nil, fmt.Errorf("global table not found: %s", globalTableName)
+	}
+
+	// Update status to deleting
+	desc.GlobalTableStatus = models.GlobalTableStatusDeleting
+
+	// Simulate deletion (remove from map after a brief delay)
+	go func(name string) {
+		time.Sleep(500 * time.Millisecond)
+		gtm.mu.Lock()
+		defer gtm.mu.Unlock()
+		delete(gtm.globalTables, name)
+	}(globalTableName)
+
+	return desc, nil
+}
