@@ -145,6 +145,24 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleGetShardIterator(c)
 	case "GetRecords":
 		h.handleGetRecords(c)
+	// PITR operations
+	case "UpdateContinuousBackups":
+		h.handleUpdateContinuousBackups(c)
+	case "DescribeContinuousBackups":
+		h.handleDescribeContinuousBackups(c)
+	case "RestoreTableToPointInTime":
+		h.handleRestoreTableToPointInTime(c)
+	// Global Tables operations
+	case "CreateGlobalTable":
+		h.handleCreateGlobalTable(c)
+	case "UpdateGlobalTable":
+		h.handleUpdateGlobalTable(c)
+	case "DescribeGlobalTable":
+		h.handleDescribeGlobalTable(c)
+	case "ListGlobalTables":
+		h.handleListGlobalTables(c)
+	case "UpdateGlobalTableSettings":
+		h.handleUpdateGlobalTableSettings(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -1574,6 +1592,337 @@ func (h *DynamoDBHandler) handleGetRecords(c *gin.Context) {
 	resp := models.GetRecordsResponse{
 		Records:           records,
 		NextShardIterator: nextIterator,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleUpdateContinuousBackups handles UpdateContinuousBackups requests.
+func (h *DynamoDBHandler) handleUpdateContinuousBackups(c *gin.Context) {
+	var req models.UpdateContinuousBackupsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.TableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TableName is required",
+		})
+		return
+	}
+
+	enabled := false
+	if req.PointInTimeRecoverySpecification != nil {
+		enabled = req.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled
+	}
+
+	// Create PITR manager
+	pitrManager := storage.NewPITRManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := pitrManager.UpdateContinuousBackups(req.TableName, enabled)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.UpdateContinuousBackupsResponse{
+		ContinuousBackupsDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeContinuousBackups handles DescribeContinuousBackups requests.
+func (h *DynamoDBHandler) handleDescribeContinuousBackups(c *gin.Context) {
+	var req models.DescribeContinuousBackupsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.TableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "TableName is required",
+		})
+		return
+	}
+
+	// Create PITR manager
+	pitrManager := storage.NewPITRManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := pitrManager.DescribeContinuousBackups(req.TableName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeContinuousBackupsResponse{
+		ContinuousBackupsDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleRestoreTableToPointInTime handles RestoreTableToPointInTime requests.
+func (h *DynamoDBHandler) handleRestoreTableToPointInTime(c *gin.Context) {
+	var req models.RestoreTableToPointInTimeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.SourceTableName == "" || req.TargetTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "SourceTableName and TargetTableName are required",
+		})
+		return
+	}
+
+	metadata, err := h.tableManager.RestoreTableToPointInTime(&req)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceInUseException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.RestoreTableToPointInTimeResponse{
+		TableDescription: *metadata,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleCreateGlobalTable handles CreateGlobalTable requests.
+func (h *DynamoDBHandler) handleCreateGlobalTable(c *gin.Context) {
+	var req models.CreateGlobalTableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := gtm.CreateGlobalTable(&req)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceInUseException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.CreateGlobalTableResponse{
+		GlobalTableDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleUpdateGlobalTable handles UpdateGlobalTable requests.
+func (h *DynamoDBHandler) handleUpdateGlobalTable(c *gin.Context) {
+	var req models.UpdateGlobalTableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := gtm.UpdateGlobalTable(&req)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.UpdateGlobalTableResponse{
+		GlobalTableDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeGlobalTable handles DescribeGlobalTable requests.
+func (h *DynamoDBHandler) handleDescribeGlobalTable(c *gin.Context) {
+	var req models.DescribeGlobalTableRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := gtm.DescribeGlobalTable(req.GlobalTableName)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeGlobalTableResponse{
+		GlobalTableDescription: *desc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleListGlobalTables handles ListGlobalTables requests.
+func (h *DynamoDBHandler) handleListGlobalTables(c *gin.Context) {
+	var req models.ListGlobalTablesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Empty body is allowed
+		req = models.ListGlobalTablesRequest{}
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	tables, lastEvaluatedName, err := gtm.ListGlobalTables(req.Limit, req.ExclusiveStartGlobalTableName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.ListGlobalTablesResponse{
+		GlobalTables:                 tables,
+		LastEvaluatedGlobalTableName: lastEvaluatedName,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleUpdateGlobalTableSettings handles UpdateGlobalTableSettings requests.
+func (h *DynamoDBHandler) handleUpdateGlobalTableSettings(c *gin.Context) {
+	var req models.UpdateGlobalTableSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.GlobalTableName == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "GlobalTableName is required",
+		})
+		return
+	}
+
+	// Create global table manager
+	gtm := storage.NewGlobalTableManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	desc, err := gtm.UpdateGlobalTableSettings(&req)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.UpdateGlobalTableSettingsResponse{
+		GlobalTableDescription: *desc,
 	}
 	c.JSON(http.StatusOK, resp)
 }

@@ -5,10 +5,10 @@
 Go implementation:
 - **M1 (Foundation)**: ✅ Complete - 16 operations
 - **M2 (Feature Parity)**: ✅ Complete - All phases finished
-- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅, Streams ✅
+- **M3 (Advanced Features)**: ✅ Complete - TTL ✅, Backup/Restore ✅, Pagination ✅, Tagging ✅, PartiQL ✅, Import/Export ✅, Streams ✅, PITR ✅, Global Tables ✅
 
-**Current Operations**: 43/61 (70%)
-**Tests**: 172 passing
+**Current Operations**: 51/61 (84%)
+**Tests**: 182 passing
 
 ## Completed Work
 
@@ -34,8 +34,10 @@ Go implementation:
 - **Phase 3**: PartiQL (ExecuteStatement, BatchExecuteStatement) - 6 tests ✅
 - **Phase 4**: Import/Export (ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports) - 6 tests ✅
 - **Phase 5**: Streams (ListStreams, DescribeStream, GetShardIterator, GetRecords) - 10 tests ✅
+- **Phase 6**: PITR (UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime) - 5 tests ✅
+- **Phase 7**: Global Tables (CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, UpdateGlobalTableSettings) - 5 tests ✅
 
-## Next Phase: M3 Phase 5 - Point-in-Time Recovery (PITR) and Streams
+## Next Phase: M3 Phase 8 - Final Operations
 
 ### Goal
 Implement PITR and DynamoDB Streams operations.

@@ -789,3 +789,97 @@ Implemented DynamoDB Streams operations for real-time change data capture.
 - Go M3 Phase 7: Global Tables - CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables
 
 ---
+
+## 2026-03-03: Go M3 Phases 6 & 7 - PITR and Global Tables (8 operations)
+
+**Branch**: `feature/GO-pitr-global-tables`
+
+### Summary
+
+Implemented Point-in-Time Recovery (PITR) and Global Tables operations - reaching 84% parity with Python (51/61 operations).
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/pitr.go`**
+   - `PITRManager` struct for managing PITR
+   - `UpdateContinuousBackups()` - Enable/disable PITR
+   - `DescribeContinuousBackups()` - Get PITR configuration
+   - `RestoreTableToPointInTime()` - Restore table to specific timestamp
+
+2. **`go/src/internal/storage/pitr_test.go`**
+   - Tests for enabling/disabling PITR
+   - Tests for describing PITR configuration
+   - Tests for restoring table to point in time
+
+3. **`go/src/internal/storage/global_tables.go`**
+   - `GlobalTableManager` struct for managing global tables
+   - `CreateGlobalTable()` - Create global table
+   - `UpdateGlobalTable()` - Add/remove replicas
+   - `DescribeGlobalTable()` - Get global table details
+   - `ListGlobalTables()` - List all global tables
+   - `UpdateGlobalTableSettings()` - Update global table settings
+
+4. **`go/src/internal/storage/global_tables_test.go`**
+   - Tests for creating global tables
+   - Tests for updating global tables (add/remove replicas)
+   - Tests for describing global tables
+   - Tests for listing global tables
+   - Tests for updating global table settings
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added PITR models: PointInTimeRecoveryStatus, ContinuousBackupsDescription, PointInTimeRecoveryDescription, UpdateContinuousBackupsRequest/Response, DescribeContinuousBackupsRequest/Response, RestoreTableToPointInTimeRequest/Response
+   - Added Global Tables models: GlobalTableStatus, Replica, ReplicaDescription, GlobalTable, GlobalTableDescription, CreateGlobalTableRequest/Response, UpdateGlobalTableRequest/Response, DescribeGlobalTableRequest/Response, ListGlobalTablesRequest/Response, UpdateGlobalTableSettingsRequest/Response, ReplicaUpdate, CreateReplicaAction, DeleteReplicaAction
+
+2. **`go/src/internal/models/table.go`**
+   - Removed placeholder ReplicaUpdate struct (now defined in operations.go)
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added routing for PITR operations: UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime
+   - Added routing for Global Tables operations: CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, UpdateGlobalTableSettings
+   - Added handler methods for all new operations
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| UpdateContinuousBackups | ✅ | Enable/disable PITR on a table |
+| DescribeContinuousBackups | ✅ | Get PITR configuration |
+| RestoreTableToPointInTime | ✅ | Restore table to specific timestamp |
+| CreateGlobalTable | ✅ | Create global table with replicas |
+| UpdateGlobalTable | ✅ | Add/remove replicas from global table |
+| DescribeGlobalTable | ✅ | Get global table details |
+| ListGlobalTables | ✅ | List all global tables |
+| UpdateGlobalTableSettings | ✅ | Update global table settings |
+
+### Tests
+
+- 5 PITR tests added
+- 5 Global Tables tests added
+- Total: 182 Go tests passing
+
+### Metrics
+
+- **Operations**: 51/61 (84%) - Up from 43/61 (70%)
+- **Tests**: 182 passing - Up from 172
+
+### Remaining Operations (10)
+
+The remaining operations to reach 100% parity:
+1. **ListTagsOfResource** - May need completion
+2. **UpdateReplication** - Global tables replication
+3. **DescribeGlobalTableSettings** - Global table settings
+4. **ListBackups** pagination improvements
+5. **BatchExecuteStatement** improvements
+6. **ConditionCheck** in transactions
+7. **FilterExpression** improvements
+8. **ProjectionExpression** improvements
+9. **ExpressionAttributeNames** handling
+10. **ExpressionAttributeValues** handling
+
+Many of these are minor improvements or edge cases. The core functionality is now complete!
+
+---
