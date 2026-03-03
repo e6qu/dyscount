@@ -26,10 +26,10 @@ Go implementation using Gin framework with SQLite backend.
 |-----------|--------|-------|
 | GetItem | ✅ | |
 | PutItem | ✅ | Basic implementation |
-| UpdateItem | ⚠️ | Limited UpdateExpression support |
+| UpdateItem | ✅ | Full UpdateExpression support |
 | DeleteItem | ✅ | |
-| Query | ✅ | Basic implementation |
-| Scan | ✅ | Basic implementation |
+| Query | ✅ | With pagination (Limit, ExclusiveStartKey, LastEvaluatedKey) |
+| Scan | ✅ | With pagination (Limit, ExclusiveStartKey, LastEvaluatedKey) |
 
 ### Batch Operations (2/2) ✅
 | Operation | Status | Priority |
@@ -92,7 +92,7 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 126 (+9 backup tests)
+- **Test Count**: 135 (+9 pagination tests, bugfix)
 - **Test Coverage**: ~76%
 - **Operations**: 22/61 (36%)
 - **M2 Feature Parity**: ✅ COMPLETE
@@ -104,6 +104,7 @@ Go implementation using Gin framework with SQLite backend.
 - **M3 In Progress**:
   - TTL: ✅ Complete
   - Backup/Restore: ✅ Complete
+  - Pagination: ✅ Complete (Query/Scan with LastEvaluatedKey)
 
 ## Next Phase: M3 Advanced Features
 

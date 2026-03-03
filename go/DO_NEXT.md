@@ -5,10 +5,10 @@
 Go implementation:
 - **M1 (Foundation)**: ✅ Complete - 16 operations
 - **M2 (Feature Parity)**: ✅ Complete - All phases finished
-- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅
+- **M3 (Advanced Features)**: 🚧 In Progress - TTL ✅, Backup/Restore ✅, Pagination ✅
 
 **Current Operations**: 26/61 (43%)
-**Tests**: 126 passing
+**Tests**: 135 passing
 
 ## Completed Work
 
@@ -27,6 +27,7 @@ Go implementation:
 ### M3 Advanced Features 🚧
 - **Phase 1**: TTL (UpdateTimeToLive, DescribeTimeToLive) - 6 tests ✅
 - **Phase 2**: Backup/Restore (CreateBackup, DescribeBackup, ListBackups, DeleteBackup, RestoreTableFromBackup) - 9 tests ✅
+- **Phase 2.5**: Pagination (Query/Scan with LastEvaluatedKey) - 9 tests ✅
 
 ## Next Phase: M3 Phase 3 - Point-in-Time Recovery (PITR)
 
