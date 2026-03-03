@@ -1,9 +1,11 @@
 //! HTTP handlers for DynamoDB API operations
 
+use crate::global_tables::{GlobalTableError, GlobalTableManager};
 use crate::items::{ItemError, ItemManager};
 use crate::models::*;
 use crate::partiql::{ExecutionResult, PartiQLEngine, PartiQLError};
 use crate::storage::{StorageError, TableManager};
+use crate::stream_manager::{StreamError, StreamManager};
 use axum::{
     body::Bytes,
     extract::State,
@@ -18,6 +20,8 @@ use tracing::{error, info, warn};
 pub struct AppState {
     pub table_manager: Arc<TableManager>,
     pub item_manager: Arc<ItemManager>,
+    pub stream_manager: Arc<StreamManager>,
+    pub global_table_manager: Arc<GlobalTableManager>,
 }
 
 /// Main DynamoDB API handler
@@ -245,6 +249,79 @@ pub async fn dynamodb_handler(
             })?;
             handle_restore_table_from_backup(state, request).await
         }
+        // Global Tables operations
+        "CreateGlobalTable" => {
+            let request: CreateGlobalTableRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_create_global_table(state, request).await
+        }
+        "UpdateGlobalTable" => {
+            let request: UpdateGlobalTableRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_update_global_table(state, request).await
+        }
+        "DescribeGlobalTable" => {
+            let request: DescribeGlobalTableRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_global_table(state, request).await
+        }
+        "ListGlobalTables" => {
+            let request: ListGlobalTablesRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_list_global_tables(state, request).await
+        }
+        "DeleteGlobalTable" => {
+            let request: DeleteGlobalTableRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_delete_global_table(state, request).await
+        }
+        "UpdateGlobalTableSettings" => {
+            let request: UpdateGlobalTableSettingsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_update_global_table_settings(state, request).await
+        }
         // TTL operations
         "UpdateTimeToLive" => {
             let request: UpdateTimeToLiveRequest = serde_json::from_slice(&body).map_err(|e| {
@@ -269,6 +346,55 @@ pub async fn dynamodb_handler(
                 )
             })?;
             handle_describe_time_to_live(state, request).await
+        }
+        // Streams operations
+        "ListStreams" => {
+            let request: ListStreamsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_list_streams(state, request).await
+        }
+        "DescribeStream" => {
+            let request: DescribeStreamRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_stream(state, request).await
+        }
+        "GetShardIterator" => {
+            let request: GetShardIteratorRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_get_shard_iterator(state, request).await
+        }
+        "GetRecords" => {
+            let request: GetRecordsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_get_records(state, request).await
         }
         // Batch operations need special parsing
         "BatchGetItem" => {
@@ -2020,6 +2146,374 @@ async fn handle_list_imports(
         }
     }
 }
+
+// ==================== Streams Handlers ====================
+
+/// Handle ListStreams operation
+async fn handle_list_streams(
+    state: AppState,
+    request: ListStreamsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.stream_manager.list_streams(
+        request.table_name.as_deref(),
+        request.exclusive_start_stream_arn.as_deref(),
+        request.limit,
+    ) {
+        Ok((streams, last_evaluated)) => {
+            info!("Listed {} streams", streams.len());
+            Ok(Json(DynamoDBResponse {
+                streams: Some(streams),
+                last_evaluated_key: last_evaluated.map(|arn| {
+                    let mut key = Item::new();
+                    key.insert("LastEvaluatedStreamArn".to_string(), AttributeValue::s(arn));
+                    key
+                }),
+                ..Default::default()
+            }))
+        }
+        Err(e) => {
+            error!("Failed to list streams: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeStream operation
+async fn handle_describe_stream(
+    state: AppState,
+    request: DescribeStreamRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.stream_manager.describe_stream(
+        &request.stream_arn,
+        request.exclusive_start_shard_id.as_deref(),
+        request.limit,
+    ) {
+        Ok(stream_description) => {
+            info!("Described stream: {}", stream_description.stream_arn);
+            Ok(Json(DynamoDBResponse {
+                stream_description: Some(stream_description),
+                ..Default::default()
+            }))
+        }
+        Err(StreamError::StreamNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Stream not found: {}",
+                    request.stream_arn
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe stream: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle GetShardIterator operation
+async fn handle_get_shard_iterator(
+    state: AppState,
+    request: GetShardIteratorRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.stream_manager.get_shard_iterator(
+        &request.stream_arn,
+        &request.shard_id,
+        request.shard_iterator_type.clone(),
+        request.sequence_number.as_deref(),
+        request.timestamp,
+    ) {
+        Ok(shard_iterator) => {
+            info!("Created shard iterator for stream: {}", request.stream_arn);
+            Ok(Json(DynamoDBResponse {
+                shard_iterator: Some(shard_iterator),
+                ..Default::default()
+            }))
+        }
+        Err(StreamError::StreamNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Stream not found: {}",
+                    request.stream_arn
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to get shard iterator: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle GetRecords operation
+async fn handle_get_records(
+    state: AppState,
+    request: GetRecordsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.stream_manager.get_records(
+        &request.shard_iterator,
+        request.limit,
+    ) {
+        Ok((records, next_shard_iterator)) => {
+            info!("Retrieved {} records from stream", records.len());
+            Ok(Json(DynamoDBResponse {
+                records: Some(records),
+                shard_iterator: next_shard_iterator,
+                ..Default::default()
+            }))
+        }
+        Err(StreamError::InvalidIterator(msg)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Invalid shard iterator: {}",
+                    msg
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to get records: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+// ==================== Global Tables Handlers ====================
+
+/// Handle CreateGlobalTable operation
+async fn handle_create_global_table(
+    state: AppState,
+    request: CreateGlobalTableRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.create_global_table(&request) {
+        Ok(global_table_description) => {
+            info!(
+                "Created global table: {} with {} replicas",
+                global_table_description.global_table_name,
+                global_table_description.replication_group.len()
+            );
+            Ok(Json(DynamoDBResponse {
+                global_table_description: Some(global_table_description),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableAlreadyExists(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_in_use(format!(
+                    "Global table already exists: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to create global table: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle UpdateGlobalTable operation
+async fn handle_update_global_table(
+    state: AppState,
+    request: UpdateGlobalTableRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.update_global_table(&request) {
+        Ok(global_table_description) => {
+            info!(
+                "Updated global table: {}",
+                global_table_description.global_table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                global_table_description: Some(global_table_description),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableNotFound(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Global table not found: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(GlobalTableError::ReplicaAlreadyExists(region)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Replica already exists in region: {}",
+                    region
+                ))),
+            ))
+        }
+        Err(GlobalTableError::ReplicaNotFound(region)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Replica not found in region: {}",
+                    region
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to update global table: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeGlobalTable operation
+async fn handle_describe_global_table(
+    state: AppState,
+    request: DescribeGlobalTableRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.describe_global_table(&request.global_table_name) {
+        Ok(global_table_description) => {
+            info!(
+                "Described global table: {}",
+                global_table_description.global_table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                global_table_description: Some(global_table_description),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableNotFound(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Global table not found: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe global table: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle ListGlobalTables operation
+async fn handle_list_global_tables(
+    state: AppState,
+    request: ListGlobalTablesRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.list_global_tables(
+        request.exclusive_start_global_table_name.as_deref(),
+        request.limit,
+    ) {
+        Ok((global_tables, last_evaluated)) => {
+            info!("Listed {} global tables", global_tables.len());
+            Ok(Json(DynamoDBResponse {
+                global_tables: Some(global_tables),
+                last_evaluated_global_table_name: last_evaluated,
+                ..Default::default()
+            }))
+        }
+        Err(e) => {
+            error!("Failed to list global tables: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DeleteGlobalTable operation
+async fn handle_delete_global_table(
+    state: AppState,
+    request: DeleteGlobalTableRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.delete_global_table(&request.global_table_name) {
+        Ok(global_table_description) => {
+            info!(
+                "Deleted global table: {}",
+                global_table_description.global_table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                global_table_description: Some(global_table_description),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableNotFound(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Global table not found: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to delete global table: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle UpdateGlobalTableSettings operation
+async fn handle_update_global_table_settings(
+    state: AppState,
+    request: UpdateGlobalTableSettingsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.update_global_table_settings(&request) {
+        Ok(global_table_description) => {
+            info!(
+                "Updated global table settings: {}",
+                global_table_description.global_table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                global_table_description: Some(global_table_description),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableNotFound(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Global table not found: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to update global table settings: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

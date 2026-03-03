@@ -628,15 +628,17 @@ mod tests {
     use crate::storage::TableManager;
     use std::sync::Arc;
     use tempfile::TempDir;
+    use crate::stream_manager::StreamManager;
 
-    fn setup_test() -> (PartiQLEngine, Arc<ItemManager>, Arc<TableManager>, TempDir) {
+    fn setup_test() -> (PartiQLEngine, Arc<ItemManager>, Arc<TableManager>, Arc<StreamManager>, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let table_manager = Arc::new(
             TableManager::new(temp_dir.path(), "test").unwrap()
         );
-        let item_manager = Arc::new(ItemManager::new(table_manager.clone()));
+        let stream_manager = Arc::new(StreamManager::new(temp_dir.path(), "test"));
+        let item_manager = Arc::new(ItemManager::new(table_manager.clone(), stream_manager.clone()));
         let engine = PartiQLEngine::new();
-        (engine, item_manager, table_manager, temp_dir)
+        (engine, item_manager, table_manager, stream_manager, temp_dir)
     }
 
     fn create_test_table(tm: &TableManager, name: &str) {
@@ -752,7 +754,7 @@ mod tests {
 
     #[test]
     fn test_execute_insert_and_select() {
-        let (engine, item_manager, table_manager, _temp) = setup_test();
+        let (engine, item_manager, table_manager, _stream_manager, _temp) = setup_test();
         create_test_table(&table_manager, "TestTable");
 
         // Insert an item
@@ -784,7 +786,7 @@ mod tests {
 
     #[test]
     fn test_execute_delete() {
-        let (engine, item_manager, table_manager, _temp) = setup_test();
+        let (engine, item_manager, table_manager, _stream_manager, _temp) = setup_test();
         create_test_table(&table_manager, "TestTable");
 
         // Insert an item
@@ -818,7 +820,7 @@ mod tests {
 
     #[test]
     fn test_execute_select_with_projection() {
-        let (engine, item_manager, table_manager, _temp) = setup_test();
+        let (engine, item_manager, table_manager, _stream_manager, _temp) = setup_test();
         create_test_table(&table_manager, "TestTable");
 
         // Insert an item

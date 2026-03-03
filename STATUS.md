@@ -101,7 +101,7 @@ Status: ✅ **COMPLETE** - StreamManager, 4 stream operations, stream record wri
 |----------|--------|---------------|-------|-------|
 | Python | ✅ Complete | M4P2 Complete | FastAPI, uvicorn, async | 376 |
 | Go | ✅ Complete | M3 Complete | Gin, SQLite | 183 |
-| Rust | 🚧 In Progress | M3 Phase 2 | Axum, SQLite | 88 |
+| Rust | 🚧 In Progress | M3 Phase 3 | Axum, SQLite | 99 |
 | Zig | 🚧 In Progress | DP Phase 2 Complete | Raw TCP, SQLite C | 19 |
 | **Total** | | | | **595** |
 
@@ -193,8 +193,10 @@ Status: ✅ **COMPLETE** - StreamManager, 4 stream operations, stream record wri
 | expression::tests | 5 | ✅ All passing |
 | partiql::tests | 6 | ✅ All passing |
 | import_export::tests | 6 | ✅ All passing |
+| stream_manager::tests | 3 | ✅ All passing |
+| global_tables::tests | 8 | ✅ All passing |
 | integration_tests | 3 | ✅ All passing |
-| **Rust Total** | **88** | **✅ 88 tests passing** |
+| **Rust Total** | **99** | **✅ 99 tests passing** |
 
 ### Zig Tests
 

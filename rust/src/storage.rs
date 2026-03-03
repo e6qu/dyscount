@@ -163,6 +163,11 @@ impl TableManager {
             }
         }
 
+        // Store stream specification if provided
+        if let Some(stream_spec) = &req.stream_specification {
+            self.store_stream_specification(&conn, stream_spec)?;
+        }
+
         // Store connection for reuse
         self.connections
             .lock()
@@ -170,6 +175,65 @@ impl TableManager {
             .insert(table_name.clone(), conn);
 
         Ok(metadata)
+    }
+
+    /// Store stream specification in table metadata
+    fn store_stream_specification(
+        &self,
+        conn: &Connection,
+        stream_spec: &StreamSpecification,
+    ) -> SqliteResult<()> {
+        let spec_json = serde_json::to_vec(stream_spec).map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+        })?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO __table_metadata (key, value) VALUES (?1, ?2)",
+            params!["stream_specification", spec_json],
+        )?;
+
+        Ok(())
+    }
+
+    /// Get stream specification for a table
+    pub fn get_stream_specification(
+        &self,
+        table_name: &str,
+    ) -> Result<Option<StreamSpecification>, StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Load stream specification from metadata table
+        let spec_json: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT value FROM __table_metadata WHERE key = ?",
+                ["stream_specification"],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let spec = if let Some(json) = spec_json {
+            Some(serde_json::from_slice(&json)?)
+        } else {
+            None
+        };
+
+        drop(connections);
+
+        Ok(spec)
     }
 
     /// Delete a table
@@ -2571,6 +2635,7 @@ impl Default for DynamoDBRequest {
             select: None,
             update_expression: None,
             condition_expression: None,
+            stream_specification: None,
         }
     }
 }
