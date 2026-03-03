@@ -108,6 +108,14 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleUpdateTimeToLive(c)
 	case "DescribeTimeToLive":
 		h.handleDescribeTimeToLive(c)
+	case "CreateBackup":
+		h.handleCreateBackup(c)
+	case "DeleteBackup":
+		h.handleDeleteBackup(c)
+	case "ListBackups":
+		h.handleListBackups(c)
+	case "RestoreTableFromBackup":
+		h.handleRestoreTableFromBackup(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -908,6 +916,108 @@ func (h *DynamoDBHandler) handleDescribeTimeToLive(c *gin.Context) {
 
 	resp := models.DescribeTimeToLiveResponse{
 		TimeToLiveDescription: *ttlDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleCreateBackup handles CreateBackup requests.
+func (h *DynamoDBHandler) handleCreateBackup(c *gin.Context) {
+	var req models.CreateBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	backupDesc, err := h.tableManager.CreateBackup(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.CreateBackupResponse{
+		BackupDescription: *backupDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDeleteBackup handles DeleteBackup requests.
+func (h *DynamoDBHandler) handleDeleteBackup(c *gin.Context) {
+	var req models.DeleteBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	backupDesc, err := h.tableManager.DeleteBackup(req.BackupArn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DeleteBackupResponse{
+		BackupDescription: *backupDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleListBackups handles ListBackups requests.
+func (h *DynamoDBHandler) handleListBackups(c *gin.Context) {
+	var req models.ListBackupsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Empty body is allowed
+		req = models.ListBackupsRequest{}
+	}
+
+	backups, err := h.tableManager.ListBackups(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.ListBackupsResponse{
+		BackupSummaries: backups,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleRestoreTableFromBackup handles RestoreTableFromBackup requests.
+func (h *DynamoDBHandler) handleRestoreTableFromBackup(c *gin.Context) {
+	var req models.RestoreTableFromBackupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	metadata, err := h.tableManager.RestoreTableFromBackup(&req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.RestoreTableFromBackupResponse{
+		TableDescription: *metadata,
 	}
 	c.JSON(http.StatusOK, resp)
 }

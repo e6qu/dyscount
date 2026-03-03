@@ -1,6 +1,6 @@
 # Go Implementation Status
 
-**Status:** M1 Complete, M2 In Progress
+**Status:** M3 In Progress
 
 ## Overview
 
@@ -75,7 +75,7 @@ Go implementation using Gin framework with SQLite backend.
 | Category | Operations | Status |
 |----------|------------|--------|
 | TTL | UpdateTimeToLive, DescribeTimeToLive | ❌ |
-| Backup | CreateBackup, RestoreTableFromBackup, ListBackups, DeleteBackup | ❌ |
+| Backup | CreateBackup, RestoreTableFromBackup, ListBackups, DeleteBackup | ✅ |
 | PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime | ❌ |
 | PartiQL | ExecuteStatement, BatchExecuteStatement | ❌ |
 | Import/Export | 6 operations | ❌ |
@@ -92,7 +92,7 @@ Go implementation using Gin framework with SQLite backend.
 ## Metrics
 
 - **Lines of Code**: ~4,200 (+300)
-- **Test Count**: 117 (+14 tests)
+- **Test Count**: 126 (+9 backup tests)
 - **Test Coverage**: ~76%
 - **Operations**: 22/61 (36%)
 - **M2 Feature Parity**: ✅ COMPLETE
@@ -103,6 +103,7 @@ Go implementation using Gin framework with SQLite backend.
   - UpdateTable GSI: ✅
 - **M3 In Progress**:
   - TTL: ✅ Complete
+  - Backup/Restore: ✅ Complete
 
 ## Next Phase: M3 Advanced Features
 

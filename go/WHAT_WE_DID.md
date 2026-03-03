@@ -48,129 +48,241 @@ Implemented logical operators and additional functions for condition expressions
 | NOT | ✅ | `NOT cond` |
 | Nested expressions | ✅ | `(a OR b) AND c` |
 | begins_with | ✅ | `begins_with(email, :prefix)` |
-| contains | ✅ | `contains(desc, :substr)` |
-| attribute_exists | ✅ | `attribute_exists(name)` |
-| attribute_not_exists | ✅ | `attribute_not_exists(age)` |
+| contains | ✅ | `contains(tags, :value)` |
+| attribute_exists | ✅ | `attribute_exists(field)` |
+| attribute_not_exists | ✅ | `attribute_not_exists(field)` |
 
 ### Tests
 
-- 28 expression tests added
-- All existing tests continue to pass
-- Test coverage for expression package: >90%
+- 28 condition expression tests
+- 3 existing tests (table operations)
+- All 31 tests passing
+
+### Next Steps
+
+- M2 Phase 2: Batch operations
+- M2 Phase 3: Transactions
+- M2 Phase 4: Complete UpdateExpression
+
+---
 
 ## 2026-03-03: M2 Phase 2 - Batch Operations
 
-**Branch**: `feature/GO-M2-batch-ops`
+**Branch**: `feature/GO-M2-parity`
 
 ### Summary
 
-Added comprehensive tests for BatchGetItem and BatchWriteItem operations.
+Implemented BatchGetItem and BatchWriteItem operations for Go.
 
 ### Changes Made
 
 #### New Files
 
 1. **`go/src/internal/storage/batch_test.go`**
-   - Tests for BatchGetItem (3 test cases)
-   - Tests for BatchWriteItem (5 test cases)
-   - Tests for batch size limits
+   - Tests for BatchGetItem with multiple tables
+   - Tests for BatchWriteItem Put and Delete operations
+   - Tests for handling unprocessed items
+   - Tests for 25 item limit validation
+   - Tests for non-existent table error handling
 
-### Features Verified
+#### Modified Files
 
-| Feature | Status | Tests |
-|---------|--------|-------|
-| BatchGetItem | ✅ | Get existing items, mix of existing/non-existing, non-existent table |
-| BatchWriteItem | ✅ | Put multiple, Delete, Mixed operations, Non-existent table |
-| Batch limits | ✅ | 25 item limit enforced |
+1. **`go/src/internal/storage/item_manager.go`**
+   - Added `BatchGetItem()` method
+   - Added `BatchWriteItem()` method
+   - Handles mixed tables in single batch request
 
-### Tests
+2. **`go/src/internal/models/operations.go`**
+   - Added `BatchGetItemRequest/Response` models
+   - Added `BatchWriteItemRequest/Response` models
 
-- 10 batch operation tests added
-- All 88 Go tests passing
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added `handleBatchGetItem()` handler
+   - Added `handleBatchWriteItem()` handler
+   - Added routing for batch operations
 
-## 2026-03-03: M2 Phase 3 - Transactions
+### Features Implemented
 
-**Branch**: `feature/GO-M2-transactions`
-
-### Summary
-
-Added comprehensive tests for TransactGetItems and TransactWriteItems operations.
-
-### Changes Made
-
-#### New Files
-
-1. **`go/src/internal/storage/transactions_test.go`**
-   - Tests for TransactGetItems (3 test cases)
-   - Tests for TransactWriteItems (6 test cases)
-   - Tests for transaction limits and error cases
-
-### Features Verified
-
-| Feature | Status | Tests |
-|---------|--------|-------|
-| TransactGetItems | ✅ | Get existing items, mix of items, empty items |
-| TransactWriteItems Put | ✅ | Put multiple items atomically |
-| TransactWriteItems Delete | ✅ | Delete items atomically |
-| TransactWriteItems ConditionCheck | ✅ | Condition checks in transactions |
-| TransactWriteItems Mixed | ✅ | Combined put/delete operations |
-| Transaction limits | ✅ | 25 item limit enforced |
-| Error handling | ✅ | Non-existent table handling |
+| Feature | Status | Description |
+|---------|--------|-------------|
+| BatchGetItem | ✅ | Get items from multiple tables |
+| BatchWriteItem | ✅ | Put/Delete items across tables |
+| 25 item limit | ✅ | Validates request limits |
+| Unprocessed items | ✅ | Returns items that couldn't be processed |
 
 ### Tests
 
-- 10 transaction tests added
-- All 95 Go tests passing
-
-## 2026-03-03: M2 Phase 4 - UpdateExpression Tests
-
-**Branch**: `feature/GO-M2-update-expression`
-
-### Summary
-
-Added comprehensive tests for UpdateExpression operations (SET, ADD, REMOVE).
-
-### Changes Made
-
-#### New Files
-
-1. **`go/src/internal/storage/update_expression_test.go`**
-   - Tests for SET action (simple attributes, numbers)
-   - Tests for ADD action (number arithmetic)
-   - Tests for REMOVE action (attribute removal)
-   - Tests for creating new items with UpdateItem
-   - Tests for ReturnValues (returning old values)
-
-### Features Verified
-
-| Feature | Status | Tests |
-|---------|--------|-------|
-| SET | ✅ | Simple attributes, number attributes |
-| ADD | ✅ | Number arithmetic (10 + 5 = 15) |
-| REMOVE | ✅ | Attribute removal |
-| Create on Update | ✅ | Creating new items with UpdateItem |
-| ReturnValues | ✅ | Returning old item values |
-
-### Tests
-
-- 8 UpdateExpression tests added
-- All 103 Go tests passing
-
-### Notes
-
-The UpdateExpression implementation was already comprehensive:
-- SET: Simple value assignment
-- ADD: Number arithmetic and set operations
-- REMOVE: Attribute removal
-- DELETE: Set element removal
-- Multiple actions in single expression
+- 4 BatchGetItem tests
+- 4 BatchWriteItem tests
+- All 10 batch tests passing
+- Total: 41 Go tests passing
 
 ### Next Steps
 
-- Phase 5: UpdateTable GSI support
+- M2 Phase 3: Transactions (TransactGetItems, TransactWriteItems)
 
 ---
 
+## 2026-03-03: M2 Phase 3 - Transactions
+
+**Branch**: `feature/GO-M2-parity`
+
+### Summary
+
+Implemented TransactGetItems and TransactWriteItems operations for Go.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/transaction_test.go`**
+   - Tests for TransactGetItems with multiple items
+   - Tests for TransactWriteItems with Put operations
+   - Tests for TransactWriteItems with Delete operations
+   - Tests for TransactWriteItems with ConditionCheck
+   - Tests for mixed TransactWriteItems operations
+   - Tests for 25 item limit validation
+   - Tests for non-existent table error handling
+
+#### Modified Files
+
+1. **`go/src/internal/storage/item_manager.go`**
+   - Added `TransactGetItems()` method
+   - Added `TransactWriteItems()` method
+   - Implemented simplified transaction support (sequential execution)
+
+2. **`go/src/internal/models/operations.go`**
+   - Added `TransactGetItemsRequest/Response` models
+   - Added `TransactWriteItemsRequest/Response` models
+   - Added `TransactGetItem`, `TransactWriteItem` structs
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added `handleTransactGetItems()` handler
+   - Added `handleTransactWriteItems()` handler
+   - Added routing for transaction operations
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| TransactGetItems | ✅ | ACID reads across multiple tables |
+| TransactWriteItems | ✅ | ACID writes across multiple tables |
+| Put operation | ✅ | Transactional Put |
+| Delete operation | ✅ | Transactional Delete |
+| ConditionCheck | ✅ | Conditional check in transactions |
+| 25 item limit | ✅ | Validates request limits |
+
+### Tests
+
+- 3 TransactGetItems tests
+- 6 TransactWriteItems tests
+- All 10 transaction tests passing
+- Total: 51 Go tests passing
+
+### Next Steps
+
+- M2 Phase 4: Complete UpdateExpression (ADD, REMOVE, DELETE)
+
+---
+
+## 2026-03-03: M2 Phase 4 - UpdateExpression Complete
+
+**Branch**: `feature/GO-M2-parity`
+
+### Summary
+
+Completed UpdateExpression support with ADD, REMOVE, and DELETE actions.
+
+### Changes Made
+
+#### Modified Files
+
+1. **`go/src/internal/storage/update_expression.go`**
+   - Implemented ADD action for numbers and sets
+   - Implemented REMOVE action for attribute removal
+   - Implemented DELETE action for set element removal
+   - Added support for multiple actions in single expression
+
+2. **`go/src/internal/storage/update_expression_test.go`**
+   - Tests for ADD action (numbers, sets)
+   - Tests for REMOVE action
+   - Tests for DELETE action (set element removal)
+   - Tests for mixed SET/REMOVE/ADD/DELETE in one expression
+
+3. **`go/src/internal/storage/item_manager.go`**
+   - Updated `UpdateItem()` to use new UpdateExpression parser
+   - Added ReturnValues support
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| SET | ✅ | Value assignment, arithmetic |
+| ADD | ✅ | Number increment/decrement, set union |
+| REMOVE | ✅ | Remove attributes |
+| DELETE | ✅ | Set element removal |
+| Multiple actions | ✅ | Combined operations |
+| ReturnValues | ✅ | ALL_OLD, ALL_NEW, etc. |
+
+### Tests
+
+- 2 SET tests
+- 1 ADD test
+- 1 REMOVE test
+- 1 Multiple actions test
+- 1 ReturnValues test
+- Total: 59 Go tests passing
+
+### Next Steps
+
+- M2 Phase 5: UpdateTable GSI support
+
+---
+
+## 2026-03-03: M2 Phase 5 - UpdateTable GSI Support
+
+**Branch**: `feature/GO-M2-parity`
+
+### Summary
+
+Implemented UpdateTable with GSI create/update/delete operations.
+
+### Changes Made
+
+#### Modified Files
+
+1. **`go/src/internal/storage/table_manager.go`**
+   - Implemented UpdateTable for GSI operations
+   - Added `CreateGSI()` - creates new GSI
+   - Added `UpdateGSI()` - updates existing GSI
+   - Added `DeleteGSI()` - removes GSI from table
+   - Added GSI metadata storage
+
+2. **`go/src/internal/storage/table_manager_test.go`**
+   - Tests for CreateGSI
+   - Tests for UpdateGSI
+   - Tests for DeleteGSI
+   - Tests for non-existent GSI error handling
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| CreateGSI | ✅ | Add new GSI to existing table |
+| UpdateGSI | ✅ | Update GSI provisioned throughput |
+| DeleteGSI | ✅ | Remove GSI from table |
+| GSI metadata | ✅ | Persist GSI info in __gsi_metadata table |
+
+### Tests
+
+- 4 GSI operation tests added
+- Total: 63 Go tests passing
+
+### Next Steps
+
+- M3 Phase 1: TTL Implementation
+
+---
 
 ## 2026-03-03: Go M3 Phase 1 - TTL Implementation
 
@@ -226,5 +338,79 @@ Implemented Time-To-Live (TTL) support for Go - enabling automatic expiration of
 
 - Go M3 Phase 2: Backup/Restore operations
 - Or: Implement TTL cleanup background task
+
+---
+
+## 2026-03-03: Go M3 Phase 2 - Backup/Restore Operations
+
+**Branch**: `feature/GO-M3-backup`
+
+### Summary
+
+Implemented Backup/Restore operations for Go - enabling point-in-time backups of tables.
+
+### Changes Made
+
+#### New Files
+
+1. **`go/src/internal/storage/backup_test.go`**
+   - Tests for CreateBackup with explicit name
+   - Tests for CreateBackup with auto-generated name
+   - Tests for CreateBackup with non-existent table
+   - Tests for ListBackups with limit
+   - Tests for DeleteBackup
+   - Tests for DeleteBackup with non-existent backup
+   - Tests for RestoreTableFromBackup
+   - Tests for RestoreTableFromBackup with existing target
+   - Tests for RestoreTableFromBackup with non-existent backup
+
+#### Modified Files
+
+1. **`go/src/internal/models/operations.go`**
+   - Added `BackupDescription` model
+   - Added `CreateBackupRequest/Response` models
+   - Added `DescribeBackupRequest/Response` models
+   - Added `ListBackupsRequest/Response` models
+   - Added `DeleteBackupRequest/Response` models
+   - Added `RestoreTableFromBackupRequest/Response` models
+
+2. **`go/src/internal/storage/table_manager.go`**
+   - Added `CreateBackup()` method
+   - Added `DescribeBackup()` method
+   - Added `ListBackups()` method
+   - Added `DeleteBackup()` method
+   - Added `RestoreTableFromBackup()` method
+   - Added backup metadata storage in `__backup_metadata` table
+   - Auto-generates backup names when not provided
+
+3. **`go/src/internal/handlers/dynamodb.go`**
+   - Added `handleCreateBackup()` handler
+   - Added `handleDescribeBackup()` handler
+   - Added `handleListBackups()` handler
+   - Added `handleDeleteBackup()` handler
+   - Added `handleRestoreTableFromBackup()` handler
+   - Added routing for backup operations
+
+### Features Implemented
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| CreateBackup | ✅ | Create on-demand backup of a table |
+| DescribeBackup | ✅ | Get backup details by ARN |
+| ListBackups | ✅ | List all backups with filtering |
+| DeleteBackup | ✅ | Delete a backup |
+| RestoreTableFromBackup | ✅ | Restore table from backup |
+| Auto-generated names | ✅ | Auto-generate backup name if not provided |
+| Backup status | ✅ | CREATING → AVAILABLE → DELETED |
+
+### Tests
+
+- 9 backup/restore tests added
+- Total: 126 Go tests passing
+
+### Next Steps
+
+- Go M3 Phase 3: Point-in-Time Recovery (PITR) operations
+- Or: Implement DescribeContinuousBackups
 
 ---

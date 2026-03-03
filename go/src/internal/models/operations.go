@@ -446,3 +446,60 @@ type DescribeTimeToLiveRequest struct {
 type DescribeTimeToLiveResponse struct {
 	TimeToLiveDescription TimeToLiveDescription `json:"TimeToLiveDescription,omitempty"`
 }
+
+
+// BackupDescription represents a backup description.
+type BackupDescription struct {
+	BackupArn      string `json:"BackupArn,omitempty"`
+	BackupName     string `json:"BackupName,omitempty"`
+	BackupStatus   string `json:"BackupStatus,omitempty"` // CREATING, DELETED, AVAILABLE
+	BackupType     string `json:"BackupType,omitempty"`   // USER, SYSTEM, AWS_BACKUP
+	BackupSizeBytes int64  `json:"BackupSizeBytes,omitempty"`
+	CreationDate   int64  `json:"CreationDate,omitempty"` // Unix timestamp in seconds
+	TableArn       string `json:"TableArn,omitempty"`
+	TableName      string `json:"TableName,omitempty"`
+}
+
+// CreateBackupRequest represents a CreateBackup request.
+type CreateBackupRequest struct {
+	TableName  string `json:"TableName" binding:"required"`
+	BackupName string `json:"BackupName" binding:"required"`
+}
+
+// CreateBackupResponse represents a CreateBackup response.
+type CreateBackupResponse struct {
+	BackupDescription BackupDescription `json:"BackupDescription,omitempty"`
+}
+
+// DeleteBackupRequest represents a DeleteBackup request.
+type DeleteBackupRequest struct {
+	BackupArn string `json:"BackupArn" binding:"required"`
+}
+
+// DeleteBackupResponse represents a DeleteBackup response.
+type DeleteBackupResponse struct {
+	BackupDescription BackupDescription `json:"BackupDescription,omitempty"`
+}
+
+// ListBackupsRequest represents a ListBackups request.
+type ListBackupsRequest struct {
+	TableName   string `json:"TableName,omitempty"`
+	BackupType  string `json:"BackupType,omitempty"` // USER, SYSTEM, AWS_BACKUP, ALL
+	Limit       int    `json:"Limit,omitempty"`
+}
+
+// ListBackupsResponse represents a ListBackups response.
+type ListBackupsResponse struct {
+	BackupSummaries []BackupDescription `json:"BackupSummaries,omitempty"`
+}
+
+// RestoreTableFromBackupRequest represents a RestoreTableFromBackup request.
+type RestoreTableFromBackupRequest struct {
+	BackupArn       string `json:"BackupArn" binding:"required"`
+	TargetTableName string `json:"TargetTableName" binding:"required"`
+}
+
+// RestoreTableFromBackupResponse represents a RestoreTableFromBackup response.
+type RestoreTableFromBackupResponse struct {
+	TableDescription TableMetadata `json:"TableDescription,omitempty"`
+}

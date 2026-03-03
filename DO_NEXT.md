@@ -41,13 +41,25 @@ See `GAP_ANALYSIS.md` for complete details.
 
 ---
 
-## 🚀 Strategic Options
+## 🚀 Current Focus: Go M2 Feature Parity
+
+**Status**: 🚧 In Progress
+
+Switching to Go implementation to bring it to feature parity with Python's core functionality.
+
+**Why Go?**
+- Go is 26% complete (16/61 operations)
+- Critical gaps: condition expressions, batch operations, transactions
+- Go has strong ecosystem for local development tools
+- Good opportunity to validate architecture across languages
+
+**Work Plan**: See `tasks/GO_M2_PARITY.md`
 
 ### Option A: Python-First (MinIO Model) ⭐ RECOMMENDED
 **Focus solely on Python**, make it the best local DynamoDB replacement.
 
 **Rationale**:
-- Python is already 87% complete and production-ready
+- Python is already 93% complete and production-ready
 - MinIO focuses on one excellent implementation
 - Most users need ONE reliable local DynamoDB, not 4 incomplete ones
 - Maintaining 4 implementations spreads resources thin
@@ -90,7 +102,30 @@ Python as primary, others as "community maintained".
 
 ---
 
-## 🎯 Recommended Path: Option A (Python-First)
+## 🎯 Current Work: Go M2 Feature Parity
+
+### Branch: `feature/GO-M2-parity`
+
+**Goal**: Implement critical missing features in Go
+
+**Phases**:
+
+| Phase | Feature | Effort | Status |
+|-------|---------|--------|--------|
+| 1 | Condition Expressions | 3-4 days | 🚧 Next |
+| 2 | Batch Operations | 2-3 days | ⏳ Planned |
+| 3 | Transactions | 2-3 days | ⏳ Planned |
+| 4 | UpdateExpression | 3-4 days | ⏳ Planned |
+| 5 | UpdateTable GSI | 2-3 days | ⏳ Planned |
+
+**Target Metrics**:
+- Operations: 16/61 → 26/61 (43%)
+- Tests: 50 → 100+
+- Coverage: 60% → 75%
+
+---
+
+## 🎯 Alternative Path: Option A (Python-First)
 
 ### Immediate Next Steps
 
