@@ -2,6 +2,7 @@
 //! 
 //! This is the main entry point for the Rust implementation of Dyscount.
 
+mod expression;
 mod handlers;
 mod items;
 mod models;
