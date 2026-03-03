@@ -682,3 +682,241 @@ func (im *ItemManager) updateItemCount(db *sql.DB, delta int) {
 	// This is a simplified version - in production, you'd track counts more accurately
 	// For now, we don't update the count in real-time to avoid complexity
 }
+
+// BatchGetItem retrieves multiple items from one or more tables.
+// Returns items grouped by table name and any unprocessed keys.
+func (im *ItemManager) BatchGetItem(requests map[string]models.KeysAndAttributes) (map[string][]models.Item, map[string]models.KeysAndAttributes, error) {
+	im.mu.RLock()
+	defer im.mu.RUnlock()
+
+	responses := make(map[string][]models.Item)
+	unprocessedKeys := make(map[string]models.KeysAndAttributes)
+
+	// Process each table
+	for tableName, keysAndAttrs := range requests {
+		items, err := im.batchGetItemsFromTable(tableName, keysAndAttrs)
+		if err != nil {
+			// If table not found, add to unprocessed
+			if strings.Contains(err.Error(), "table not found") {
+				unprocessedKeys[tableName] = keysAndAttrs
+				continue
+			}
+			return nil, nil, err
+		}
+		responses[tableName] = items
+	}
+
+	return responses, unprocessedKeys, nil
+}
+
+// batchGetItemsFromTable retrieves multiple items from a single table.
+func (im *ItemManager) batchGetItemsFromTable(tableName string, keysAndAttrs models.KeysAndAttributes) ([]models.Item, error) {
+	db, err := im.getDBForTable(tableName)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	// Get table metadata for key schema
+	metadata, err := im.tableManager.DescribeTable(tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []models.Item
+
+	// Process each key
+	for _, key := range keysAndAttrs.Keys {
+		// Extract pk and sk from the key
+		pk, sk, err := key.ExtractKey(metadata.KeySchema, metadata.AttributeDefinitions)
+		if err != nil {
+			continue // Skip invalid keys
+		}
+
+		// Query the database
+		var data []byte
+		if sk != "" {
+			err = db.QueryRow(
+				"SELECT data FROM items WHERE pk = ? AND sk = ?",
+				pk, sk,
+			).Scan(&data)
+		} else {
+			err = db.QueryRow(
+				"SELECT data FROM items WHERE pk = ? AND (sk IS NULL OR sk = '')",
+				pk,
+			).Scan(&data)
+		}
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue // Item not found, skip
+			}
+			return nil, fmt.Errorf("failed to get item: %w", err)
+		}
+
+		item, err := models.ItemFromJSON(data)
+		if err != nil {
+			continue
+		}
+
+		// Apply projection if specified
+		if keysAndAttrs.ProjectionExpression != "" {
+			item = im.applyProjection(item, keysAndAttrs.ProjectionExpression, keysAndAttrs.ExpressionAttributeNames)
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
+// applyProjection filters item attributes based on projection expression.
+func (im *ItemManager) applyProjection(item models.Item, projectionExpression string, expressionAttributeNames map[string]string) models.Item {
+	// Simple projection - split by comma and extract those attributes
+	// In production, this would parse the full projection expression grammar
+	attributes := strings.Split(projectionExpression, ",")
+	
+	projectedItem := make(models.Item)
+	for _, attr := range attributes {
+		attr = strings.TrimSpace(attr)
+		
+		// Handle expression attribute names (#name)
+		if strings.HasPrefix(attr, "#") {
+			if actualName, ok := expressionAttributeNames[attr]; ok {
+				attr = actualName
+			}
+		}
+		
+		if val, ok := item[attr]; ok {
+			projectedItem[attr] = val
+		}
+	}
+	
+	return projectedItem
+}
+
+// BatchWriteItem performs multiple PutItem and DeleteItem operations.
+// Returns any unprocessed items.
+func (im *ItemManager) BatchWriteItem(requests map[string][]models.WriteRequest) (map[string][]models.WriteRequest, error) {
+	im.mu.Lock()
+	defer im.mu.Unlock()
+
+	unprocessedItems := make(map[string][]models.WriteRequest)
+
+	// Process each table
+	for tableName, writeRequests := range requests {
+		unprocessed, err := im.batchWriteItemsToTable(tableName, writeRequests)
+		if err != nil {
+			return nil, err
+		}
+		if len(unprocessed) > 0 {
+			unprocessedItems[tableName] = unprocessed
+		}
+	}
+
+	return unprocessedItems, nil
+}
+
+// batchWriteItemsToTable performs write operations on a single table.
+// Returns any unprocessed items (if limit exceeded or errors occur).
+func (im *ItemManager) batchWriteItemsToTable(tableName string, writeRequests []models.WriteRequest) ([]models.WriteRequest, error) {
+	// DynamoDB limit: 25 items per batch
+	const maxBatchSize = 25
+	
+	if len(writeRequests) > maxBatchSize {
+		return writeRequests[maxBatchSize:], fmt.Errorf("batch size exceeds maximum of %d", maxBatchSize)
+	}
+
+	db, err := im.getDBForTable(tableName)
+	if err != nil {
+		// Return all items as unprocessed if table not found
+		if strings.Contains(err.Error(), "table not found") {
+			return writeRequests, nil
+		}
+		return nil, err
+	}
+	defer db.Close()
+
+	// Get table metadata for key schema
+	metadata, err := im.tableManager.DescribeTable(tableName)
+	if err != nil {
+		return writeRequests, nil
+	}
+
+	var unprocessed []models.WriteRequest
+
+	// Process each write request
+	for _, writeReq := range writeRequests {
+		success := false
+
+		if writeReq.PutRequest != nil {
+			err := im.putItemInternal(db, tableName, writeReq.PutRequest.Item, metadata.KeySchema, metadata.AttributeDefinitions)
+			if err == nil {
+				success = true
+			}
+		} else if writeReq.DeleteRequest != nil {
+			err := im.deleteItemInternal(db, writeReq.DeleteRequest.Key, metadata.KeySchema, metadata.AttributeDefinitions)
+			if err == nil {
+				success = true
+			}
+		}
+
+		if !success {
+			unprocessed = append(unprocessed, writeReq)
+		}
+	}
+
+	return unprocessed, nil
+}
+
+// putItemInternal performs a put item operation (internal use).
+func (im *ItemManager) putItemInternal(db *sql.DB, tableName string, item models.Item, keySchema []models.KeySchemaElement, attrDefs []models.AttributeDefinition) error {
+	pk, sk, err := item.ExtractKey(keySchema, attrDefs)
+	if err != nil {
+		return fmt.Errorf("invalid key: %w", err)
+	}
+
+	data, err := json.Marshal(item)
+	if err != nil {
+		return fmt.Errorf("failed to serialize item: %w", err)
+	}
+
+	now := time.Now().Unix()
+	_, err = db.Exec(
+		`INSERT INTO items (pk, sk, data, created_at, updated_at) 
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(pk, sk) DO UPDATE SET
+		 data = excluded.data, updated_at = excluded.updated_at`,
+		pk, sk, data, now, now,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to put item: %w", err)
+	}
+
+	return nil
+}
+
+// deleteItemInternal performs a delete item operation (internal use).
+func (im *ItemManager) deleteItemInternal(db *sql.DB, key models.Item, keySchema []models.KeySchemaElement, attrDefs []models.AttributeDefinition) error {
+	pk, sk, err := key.ExtractKey(keySchema, attrDefs)
+	if err != nil {
+		return fmt.Errorf("invalid key: %w", err)
+	}
+
+	var result sql.Result
+	if sk != "" {
+		result, err = db.Exec("DELETE FROM items WHERE pk = ? AND sk = ?", pk, sk)
+	} else {
+		result, err = db.Exec("DELETE FROM items WHERE pk = ? AND (sk IS NULL OR sk = '')", pk)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to delete item: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("item not found")
+	}
+
+	return nil
+}

@@ -94,6 +94,10 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleQuery(c, &req)
 	case "Scan":
 		h.handleScan(c, &req)
+	case "BatchGetItem":
+		h.handleBatchGetItem(c)
+	case "BatchWriteItem":
+		h.handleBatchWriteItem(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -607,4 +611,101 @@ func extractTableNameFromARN(arn string) string {
 	}
 
 	return parts[len(parts)-1]
+}
+
+// handleBatchGetItem handles BatchGetItem requests.
+func (h *DynamoDBHandler) handleBatchGetItem(c *gin.Context) {
+	var req models.BatchGetItemRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.RequestItems) == 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "RequestItems cannot be empty",
+		})
+		return
+	}
+
+	// Check total key count (max 100)
+	totalKeys := 0
+	for _, keysAndAttrs := range req.RequestItems {
+		totalKeys += len(keysAndAttrs.Keys)
+	}
+	if totalKeys > 100 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "BatchGetItem can retrieve up to 100 items",
+		})
+		return
+	}
+
+	responses, unprocessedKeys, err := h.itemManager.BatchGetItem(req.RequestItems)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.BatchGetItemResponse{
+		Responses:       responses,
+		UnprocessedKeys: unprocessedKeys,
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleBatchWriteItem handles BatchWriteItem requests.
+func (h *DynamoDBHandler) handleBatchWriteItem(c *gin.Context) {
+	var req models.BatchWriteItemRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if len(req.RequestItems) == 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "RequestItems cannot be empty",
+		})
+		return
+	}
+
+	// Check total item count (max 25)
+	totalItems := 0
+	for _, writeRequests := range req.RequestItems {
+		totalItems += len(writeRequests)
+	}
+	if totalItems > 25 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "BatchWriteItem can write up to 25 items",
+		})
+		return
+	}
+
+	unprocessedItems, err := h.itemManager.BatchWriteItem(req.RequestItems)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.BatchWriteItemResponse{
+		UnprocessedItems: unprocessedItems,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

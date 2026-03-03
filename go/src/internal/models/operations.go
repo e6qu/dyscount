@@ -267,3 +267,55 @@ func marshalJSONWithType(v interface{}, typeField, typeValue string) ([]byte, er
 	// This is a simplified version - in production, use proper reflection
 	return nil, nil
 }
+
+// BatchGetItemRequest represents a BatchGetItem request.
+type BatchGetItemRequest struct {
+	RequestItems                map[string]KeysAndAttributes `json:"RequestItems" binding:"required"`
+	ReturnConsumedCapacity      string                       `json:"ReturnConsumedCapacity,omitempty"`
+}
+
+// KeysAndAttributes represents keys and attributes for a table in BatchGetItem.
+type KeysAndAttributes struct {
+	Keys                     []Item              `json:"Keys" binding:"required"`
+	AttributesToGet          []string            `json:"AttributesToGet,omitempty"`
+	ConsistentRead           bool                `json:"ConsistentRead,omitempty"`
+	ExpressionAttributeNames map[string]string   `json:"ExpressionAttributeNames,omitempty"`
+	ProjectionExpression     string              `json:"ProjectionExpression,omitempty"`
+}
+
+// BatchGetItemResponse represents a BatchGetItem response.
+type BatchGetItemResponse struct {
+	Responses       map[string][]Item     `json:"Responses,omitempty"`
+	UnprocessedKeys map[string]KeysAndAttributes `json:"UnprocessedKeys,omitempty"`
+	ConsumedCapacity []ConsumedCapacity   `json:"ConsumedCapacity,omitempty"`
+}
+
+// BatchWriteItemRequest represents a BatchWriteItem request.
+type BatchWriteItemRequest struct {
+	RequestItems                map[string][]WriteRequest `json:"RequestItems" binding:"required"`
+	ReturnConsumedCapacity      string                    `json:"ReturnConsumedCapacity,omitempty"`
+	ReturnItemCollectionMetrics string                    `json:"ReturnItemCollectionMetrics,omitempty"`
+}
+
+// WriteRequest represents a single write request (Put or Delete).
+type WriteRequest struct {
+	PutRequest    *PutRequest    `json:"PutRequest,omitempty"`
+	DeleteRequest *DeleteRequest `json:"DeleteRequest,omitempty"`
+}
+
+// PutRequest represents a PutItem operation in a batch write.
+type PutRequest struct {
+	Item Item `json:"Item" binding:"required"`
+}
+
+// DeleteRequest represents a DeleteItem operation in a batch write.
+type DeleteRequest struct {
+	Key Item `json:"Key" binding:"required"`
+}
+
+// BatchWriteItemResponse represents a BatchWriteItem response.
+type BatchWriteItemResponse struct {
+	UnprocessedItems map[string][]WriteRequest `json:"UnprocessedItems,omitempty"`
+	ItemCollectionMetrics map[string]ItemCollectionMetrics `json:"ItemCollectionMetrics,omitempty"`
+	ConsumedCapacity []ConsumedCapacity `json:"ConsumedCapacity,omitempty"`
+}
