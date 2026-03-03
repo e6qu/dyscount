@@ -136,6 +136,15 @@ func (h *DynamoDBHandler) Handle(c *gin.Context) {
 		h.handleDescribeImport(c)
 	case "ListImports":
 		h.handleListImports(c)
+	// Streams operations
+	case "ListStreams":
+		h.handleListStreams(c)
+	case "DescribeStream":
+		h.handleDescribeStream(c)
+	case "GetShardIterator":
+		h.handleGetShardIterator(c)
+	case "GetRecords":
+		h.handleGetRecords(c)
 	default:
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
@@ -1412,5 +1421,159 @@ func (h *DynamoDBHandler) handleListImports(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, resp)
+}
+
+
+// handleListStreams handles ListStreams requests.
+func (h *DynamoDBHandler) handleListStreams(c *gin.Context) {
+	var req models.ListStreamsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Empty body is allowed
+		req = models.ListStreamsRequest{}
+	}
+
+	// Create stream manager
+	streamManager := storage.NewStreamManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	streams, lastEvaluatedArn, err := streamManager.ListStreams(req.TableName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.ListStreamsResponse{
+		Streams:                streams,
+		LastEvaluatedStreamArn: lastEvaluatedArn,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleDescribeStream handles DescribeStream requests.
+func (h *DynamoDBHandler) handleDescribeStream(c *gin.Context) {
+	var req models.DescribeStreamRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.StreamArn == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "StreamArn is required",
+		})
+		return
+	}
+
+	// Create stream manager
+	streamManager := storage.NewStreamManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	streamDesc, err := streamManager.DescribeStream(req.StreamArn)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.DescribeStreamResponse{
+		StreamDescription: *streamDesc,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleGetShardIterator handles GetShardIterator requests.
+func (h *DynamoDBHandler) handleGetShardIterator(c *gin.Context) {
+	var req models.GetShardIteratorRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.StreamArn == "" || req.ShardId == "" || req.ShardIteratorType == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "StreamArn, ShardId, and ShardIteratorType are required",
+		})
+		return
+	}
+
+	// Create stream manager
+	streamManager := storage.NewStreamManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	shardIterator, err := streamManager.GetShardIterator(req.StreamArn, req.ShardId, req.ShardIteratorType)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Type:    "com.amazonaws.dynamodb.v20120810#ResourceNotFoundException",
+				Message: err.Error(),
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.GetShardIteratorResponse{
+		ShardIterator: shardIterator,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// handleGetRecords handles GetRecords requests.
+func (h *DynamoDBHandler) handleGetRecords(c *gin.Context) {
+	var req models.GetRecordsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: fmt.Sprintf("Invalid request body: %v", err),
+		})
+		return
+	}
+
+	if req.ShardIterator == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#ValidationException",
+			Message: "ShardIterator is required",
+		})
+		return
+	}
+
+	// Create stream manager
+	streamManager := storage.NewStreamManager(h.tableManager.GetDataDirectory(), h.tableManager.GetNamespace())
+	
+	records, nextIterator, err := streamManager.GetRecords(req.ShardIterator, req.Limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Type:    "com.amazonaws.dynamodb.v20120810#InternalServerError",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	resp := models.GetRecordsResponse{
+		Records:           records,
+		NextShardIterator: nextIterator,
+	}
 	c.JSON(http.StatusOK, resp)
 }
