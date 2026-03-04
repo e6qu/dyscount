@@ -931,6 +931,51 @@ impl ItemManager {
 
     // ============== Transaction Operations ==============
 
+    /// ConditionCheck - verify item conditions without modifying
+    pub fn condition_check(
+        &self,
+        table_name: &str,
+        key: &Item,
+        condition_expression: &str,
+        expression_names: Option<&HashMap<String, String>>,
+        expression_values: Option<&HashMap<String, AttributeValue>>,
+    ) -> Result<(), ItemError> {
+        // Get existing item
+        let existing_item = self.get_item(table_name, key, true)?;
+
+        // If item doesn't exist, condition check fails
+        let item_to_check = match existing_item {
+            Some(item) => item,
+            None => {
+                return Err(ItemError::ConditionCheckFailed(
+                    "The conditional request failed".to_string(),
+                ));
+            }
+        };
+
+        // Evaluate condition expression
+        let empty_names: HashMap<String, String> = HashMap::new();
+        let empty_values: HashMap<String, AttributeValue> = HashMap::new();
+        let names = expression_names.unwrap_or(&empty_names);
+        let values = expression_values.unwrap_or(&empty_values);
+
+        let evaluator = ExpressionEvaluator::new(names, values);
+        let condition = parse_condition_expression(condition_expression)
+            .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+        let result = evaluator
+            .evaluate_condition(&condition, &item_to_check)
+            .map_err(|e| ItemError::Expression(e.to_string()))?;
+
+        if !result {
+            return Err(ItemError::ConditionCheckFailed(
+                "The conditional request failed".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Transact get items atomically
     pub fn transact_get_items(
         &self,
@@ -1904,6 +1949,163 @@ mod tests {
             None,
         );
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_check_success() {
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i.insert("version".to_string(), AttributeValue::n("1"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        // ConditionCheck with matching condition - should succeed
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("statusVal".to_string(), AttributeValue::s("active"));
+            m
+        };
+
+        let result = im.condition_check(
+            "TestTable",
+            &key,
+            "status = :statusVal",
+            None,
+            Some(&expr_values),
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_condition_check_failure() {
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        // ConditionCheck with non-matching condition - should fail
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("statusVal".to_string(), AttributeValue::s("inactive"));
+            m
+        };
+
+        let result = im.condition_check(
+            "TestTable",
+            &key,
+            "status = :statusVal",
+            None,
+            Some(&expr_values),
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ItemError::ConditionCheckFailed(_) => {}
+            _ => panic!("Expected ConditionCheckFailed error"),
+        }
+    }
+
+    #[test]
+    fn test_condition_check_item_not_found() {
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Key for non-existent item
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("nonexistent"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        // ConditionCheck on non-existent item - should fail
+        let result = im.condition_check(
+            "TestTable",
+            &key,
+            "attribute_exists(pk)",
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ItemError::ConditionCheckFailed(_) => {}
+            _ => panic!("Expected ConditionCheckFailed error for non-existent item"),
+        }
+    }
+
+    #[test]
+    fn test_condition_check_does_not_modify_item() {
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
+        create_test_table(&tm, "TestTable");
+
+        // Put initial item
+        let item = {
+            let mut i = Item::new();
+            i.insert("pk".to_string(), AttributeValue::s("user1"));
+            i.insert("sk".to_string(), AttributeValue::s("profile"));
+            i.insert("status".to_string(), AttributeValue::s("active"));
+            i.insert("counter".to_string(), AttributeValue::n("5"));
+            i
+        };
+        im.put_item("TestTable", &item, false, None, None, None).unwrap();
+
+        let key = {
+            let mut k = Item::new();
+            k.insert("pk".to_string(), AttributeValue::s("user1"));
+            k.insert("sk".to_string(), AttributeValue::s("profile"));
+            k
+        };
+
+        // ConditionCheck - should not modify the item
+        let expr_values = {
+            let mut m = HashMap::new();
+            m.insert("statusVal".to_string(), AttributeValue::s("active"));
+            m
+        };
+
+        im.condition_check(
+            "TestTable",
+            &key,
+            "status = :statusVal",
+            None,
+            Some(&expr_values),
+        ).unwrap();
+
+        // Verify item is unchanged
+        let retrieved = im.get_item("TestTable", &key, true).unwrap();
+        assert!(retrieved.is_some());
+        let retrieved = retrieved.unwrap();
+        assert_eq!(retrieved.get("status").unwrap().as_s(), Some("active"));
+        assert_eq!(retrieved.get("counter").unwrap().as_n(), Some("5"));
     }
 }
 

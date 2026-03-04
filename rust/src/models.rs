@@ -387,6 +387,18 @@ pub struct DynamoDBResponse {
     pub global_tables: Option<Vec<GlobalTableSummary>>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "LastEvaluatedGlobalTableName")]
     pub last_evaluated_global_table_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ReplicaSettings")]
+    pub replica_settings: Option<Vec<ReplicaSettingsDescription>>,
+
+    // Limits fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "AccountMaxReadCapacityUnits")]
+    pub account_max_read_capacity_units: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "AccountMaxWriteCapacityUnits")]
+    pub account_max_write_capacity_units: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "TableMaxReadCapacityUnits")]
+    pub table_max_read_capacity_units: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "TableMaxWriteCapacityUnits")]
+    pub table_max_write_capacity_units: Option<i64>,
 
     // Backup fields
     #[serde(skip_serializing_if = "Option::is_none", rename = "BackupDescription")]
@@ -615,6 +627,28 @@ pub struct TransactConditionCheck {
     pub key: Item,
     #[serde(rename = "ConditionExpression")]
     pub condition_expression: String,
+}
+
+// ============== Standalone ConditionCheck Operation ==============
+
+/// ConditionCheck request (standalone operation)
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConditionCheckRequest {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Key")]
+    pub key: Item,
+    #[serde(rename = "ConditionExpression")]
+    pub condition_expression: String,
+    #[serde(rename = "ExpressionAttributeNames", skip_serializing_if = "Option::is_none")]
+    pub expression_attribute_names: Option<HashMap<String, String>>,
+    #[serde(rename = "ExpressionAttributeValues", skip_serializing_if = "Option::is_none")]
+    pub expression_attribute_values: Option<HashMap<String, AttributeValue>>,
+}
+
+/// ConditionCheck response (empty on success)
+#[derive(Debug, Serialize, Default)]
+pub struct ConditionCheckResponse {
 }
 
 /// Transact write item (one of put, update, delete, condition check)
@@ -1884,6 +1918,101 @@ pub struct UpdateGlobalTableSettingsRequest {
 pub struct UpdateGlobalTableSettingsResponse {
     #[serde(rename = "GlobalTableDescription")]
     pub global_table_description: GlobalTableDescription,
+}
+
+/// Replica settings description for DescribeGlobalTableSettings
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReplicaSettingsDescription {
+    #[serde(rename = "RegionName")]
+    pub region_name: String,
+    #[serde(rename = "ReplicaStatus")]
+    pub replica_status: String,
+    #[serde(rename = "ReplicaBillingModeSummary", skip_serializing_if = "Option::is_none")]
+    pub replica_billing_mode_summary: Option<BillingModeSummary>,
+    #[serde(rename = "ReplicaProvisionedReadCapacityUnits", skip_serializing_if = "Option::is_none")]
+    pub replica_provisioned_read_capacity: Option<i64>,
+    #[serde(rename = "ReplicaProvisionedWriteCapacityUnits", skip_serializing_if = "Option::is_none")]
+    pub replica_provisioned_write_capacity: Option<i64>,
+}
+
+/// DescribeGlobalTableSettings request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeGlobalTableSettingsRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+}
+
+/// DescribeGlobalTableSettings response
+#[derive(Debug, Serialize)]
+pub struct DescribeGlobalTableSettingsResponse {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "ReplicaSettings")]
+    pub replica_settings: Vec<ReplicaSettingsDescription>,
+}
+
+/// Replica update for UpdateReplication
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReplicaUpdateForReplication {
+    #[serde(rename = "Create", skip_serializing_if = "Option::is_none")]
+    pub create: Option<CreateReplicaAction>,
+    #[serde(rename = "Delete", skip_serializing_if = "Option::is_none")]
+    pub delete: Option<DeleteReplicaAction>,
+    #[serde(rename = "Update", skip_serializing_if = "Option::is_none")]
+    pub update: Option<UpdateReplicaAction>,
+}
+
+/// Update replica action
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UpdateReplicaAction {
+    #[serde(rename = "RegionName")]
+    pub region_name: String,
+    #[serde(rename = "KMSMasterKeyId", skip_serializing_if = "Option::is_none")]
+    pub kms_master_key_id: Option<String>,
+}
+
+/// UpdateReplication request
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateReplicationRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "ReplicaUpdates")]
+    pub replica_updates: Vec<ReplicaUpdateForReplication>,
+}
+
+/// UpdateReplication response
+#[derive(Debug, Serialize)]
+pub struct UpdateReplicationResponse {
+    #[serde(rename = "GlobalTableDescription")]
+    pub global_table_description: GlobalTableDescription,
+}
+
+/// DescribeLimits request (empty - no parameters)
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeLimitsRequest {}
+
+/// DescribeLimits response
+#[derive(Debug, Serialize)]
+pub struct DescribeLimitsResponse {
+    #[serde(rename = "AccountMaxReadCapacityUnits")]
+    pub account_max_read_capacity_units: i64,
+    #[serde(rename = "AccountMaxWriteCapacityUnits")]
+    pub account_max_write_capacity_units: i64,
+    #[serde(rename = "TableMaxReadCapacityUnits")]
+    pub table_max_read_capacity_units: i64,
+    #[serde(rename = "TableMaxWriteCapacityUnits")]
+    pub table_max_write_capacity_units: i64,
+}
+
+impl Default for DescribeLimitsResponse {
+    fn default() -> Self {
+        Self {
+            account_max_read_capacity_units: 100000,
+            account_max_write_capacity_units: 100000,
+            table_max_read_capacity_units: 100000,
+            table_max_write_capacity_units: 100000,
+        }
+    }
 }
 
 /// Replica update for UpdateGlobalTable

@@ -97,6 +97,16 @@ impl TableManager {
             [],
         )?;
 
+        // Create tags table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS __tags (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
         // Create index metadata table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS __index_metadata (
@@ -1722,6 +1732,111 @@ impl TableManager {
     fn extract_table_name_from_arn(&self, arn: &str) -> Option<String> {
         arn.split('/').last().map(|s| s.to_string())
     }
+
+    // ============== Tagging Operations ==============
+
+    /// Add tags to a table
+    pub fn tag_resource(&self, table_name: &str, tags: Vec<Tag>) -> Result<(), StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Insert or replace tags
+        for tag in tags {
+            let now = Utc::now().timestamp();
+            conn.execute(
+                "INSERT OR REPLACE INTO __tags (key, value, created_at) VALUES (?1, ?2, ?3)",
+                params![tag.key, tag.value, now],
+            )?;
+        }
+
+        drop(connections);
+
+        Ok(())
+    }
+
+    /// Remove tags from a table
+    pub fn untag_resource(&self, table_name: &str, tag_keys: Vec<String>) -> Result<(), StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Delete tags
+        for key in tag_keys {
+            conn.execute(
+                "DELETE FROM __tags WHERE key = ?1",
+                params![key],
+            )?;
+        }
+
+        drop(connections);
+
+        Ok(())
+    }
+
+    /// List all tags on a table
+    pub fn list_tags_of_resource(&self, table_name: &str) -> Result<Vec<Tag>, StorageError> {
+        let db_path = self.get_db_path(table_name);
+
+        if !db_path.exists() {
+            return Err(StorageError::TableNotFound(table_name.to_string()));
+        }
+
+        // Get existing connection or create new one
+        let mut connections = self.connections.lock().unwrap();
+
+        if !connections.contains_key(table_name) {
+            let conn = Connection::open(&db_path)?;
+            connections.insert(table_name.to_string(), conn);
+        }
+
+        let conn = connections.get(table_name).unwrap();
+
+        // Query all tags - collect into a Vec first to release the borrow on conn
+        let mut stmt = conn.prepare("SELECT key, value FROM __tags")?;
+
+        let tags_result: Result<Vec<(String, String)>, rusqlite::Error> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .collect();
+
+        // Explicitly drop statement before dropping connections
+        drop(stmt);
+
+        let tags: Vec<Tag> = tags_result?
+            .into_iter()
+            .map(|(key, value)| Tag { key, value })
+            .collect();
+
+        drop(connections);
+
+        Ok(tags)
+    }
 }
 
 #[cfg(test)]
@@ -2601,6 +2716,142 @@ mod tests {
         
         let imports = manager.list_imports(None).unwrap();
         assert_eq!(imports.len(), 1);
+    }
+
+    // ============== Tagging Tests ==============
+
+    #[test]
+    fn test_tag_resource() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Add tags
+        let tags = vec![
+            Tag { key: "Environment".to_string(), value: "Test".to_string() },
+            Tag { key: "Owner".to_string(), value: "Team".to_string() },
+        ];
+        
+        manager.tag_resource("TestTable", tags).unwrap();
+        
+        // List tags to verify
+        let tags = manager.list_tags_of_resource("TestTable").unwrap();
+        assert_eq!(tags.len(), 2);
+        assert!(tags.iter().any(|t| t.key == "Environment" && t.value == "Test"));
+        assert!(tags.iter().any(|t| t.key == "Owner" && t.value == "Team"));
+    }
+
+    #[test]
+    fn test_tag_resource_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let tags = vec![
+            Tag { key: "Environment".to_string(), value: "Test".to_string() },
+        ];
+        
+        let result = manager.tag_resource("NonExistent", tags);
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_untag_resource() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Add tags
+        let tags = vec![
+            Tag { key: "Environment".to_string(), value: "Test".to_string() },
+            Tag { key: "Owner".to_string(), value: "Team".to_string() },
+        ];
+        manager.tag_resource("TestTable", tags).unwrap();
+        
+        // Remove one tag
+        manager.untag_resource("TestTable", vec!["Environment".to_string()]).unwrap();
+        
+        // List tags to verify
+        let tags = manager.list_tags_of_resource("TestTable").unwrap();
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].key, "Owner");
+        assert_eq!(tags[0].value, "Team");
+    }
+
+    #[test]
+    fn test_untag_resource_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.untag_resource("NonExistent", vec!["Environment".to_string()]);
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_list_tags_of_resource_empty() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // List tags on table with no tags
+        let tags = manager.list_tags_of_resource("TestTable").unwrap();
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn test_list_tags_of_resource_nonexistent_table() {
+        let (manager, _temp) = setup_test_manager();
+        
+        let result = manager.list_tags_of_resource("NonExistent");
+        assert!(matches!(result, Err(StorageError::TableNotFound(_))));
+    }
+
+    #[test]
+    fn test_update_existing_tag() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Add initial tag
+        let tags = vec![
+            Tag { key: "Environment".to_string(), value: "Test".to_string() },
+        ];
+        manager.tag_resource("TestTable", tags).unwrap();
+        
+        // Update tag with new value
+        let new_tags = vec![
+            Tag { key: "Environment".to_string(), value: "Production".to_string() },
+        ];
+        manager.tag_resource("TestTable", new_tags).unwrap();
+        
+        // List tags to verify
+        let tags = manager.list_tags_of_resource("TestTable").unwrap();
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].key, "Environment");
+        assert_eq!(tags[0].value, "Production");
+    }
+
+    #[test]
+    fn test_untag_nonexistent_tag() {
+        let (manager, _temp) = setup_test_manager();
+        let req = create_test_request("TestTable");
+        
+        manager.create_table(&req).unwrap();
+        
+        // Add a tag
+        let tags = vec![
+            Tag { key: "Environment".to_string(), value: "Test".to_string() },
+        ];
+        manager.tag_resource("TestTable", tags).unwrap();
+        
+        // Try to remove a non-existent tag (should not fail)
+        manager.untag_resource("TestTable", vec!["NonExistent".to_string()]).unwrap();
+        
+        // Verify original tag still exists
+        let tags = manager.list_tags_of_resource("TestTable").unwrap();
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].key, "Environment");
     }
 }
 
