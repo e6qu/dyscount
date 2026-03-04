@@ -11,7 +11,7 @@
 |---------------|------------|---------------|--------|
 | **Python** | 53/61 (87%) | 372 tests | ✅ Production-ready |
 | **Go** | 50/61 (82%) | 183 tests | ✅ Feature Complete |
-| **Rust** | 37/61 (61%) | 88 tests | 🚧 M3 Phase 2 |
+| **Rust** | 47/61 (77%) | 99 tests | 🚧 M3 Phase 3 |
 | **Zig** | 16/61 (26%) | 19 tests | ⚠️ Basic Data Plane |
 
 **Total API Coverage**: 53/61 DynamoDB operations (87%)
@@ -137,7 +137,7 @@
 
 ## 3. Rust Implementation Analysis
 
-### ✅ Implemented (37 operations)
+### ✅ Implemented (47 operations)
 
 | Category | Operations |
 |----------|------------|
@@ -152,15 +152,18 @@
 | PITR | UpdateContinuousBackups, DescribeContinuousBackups, RestoreTableToPointInTime |
 | PartiQL | ExecuteStatement, BatchExecuteStatement |
 | Import/Export | ExportTableToPointInTime, DescribeExport, ListExports, ImportTable, DescribeImport, ListImports |
+| Streams | ListStreams, DescribeStream, GetShardIterator, GetRecords |
+| Global Tables | CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, DeleteGlobalTable, UpdateGlobalTableSettings |
 
 *Tagging operations are stubs
 
-### 🚫 Missing (24 operations)
+### 🚫 Missing (14 operations)
 
 Critical gaps:
-1. ❌ **Streams** - ListStreams, DescribeStream, GetShardIterator, GetRecords (4)
-2. ❌ **Global Tables** - CreateGlobalTable, UpdateGlobalTable, DescribeGlobalTable, ListGlobalTables, DeleteGlobalTable, UpdateGlobalTableSettings, DescribeGlobalTableSettings, UpdateReplication (8)
-3. ❌ **Misc** - ConditionCheck (standalone), Kinesis streaming (4), Contributor Insights (2), Resource Policies (3) - not needed for local
+1. ❌ **Tagging** - Full implementation (currently stubs)
+2. ❌ **Global Tables** - DescribeGlobalTableSettings, UpdateReplication (2)
+3. ❌ **Limits** - DescribeLimits (1)
+4. ❌ **Misc** - ConditionCheck (standalone), Kinesis streaming (4), Contributor Insights (2), Resource Policies (3) - not needed for local
 
 ---
 
@@ -221,7 +224,7 @@ Critical gaps:
 | PITR (3 ops) | ✅ | ✅ | ✅ | ❌ |
 | PartiQL (2 ops) | ✅ | ✅ | ✅ | ❌ |
 | Import/Export (6 ops) | ✅ | ✅ | ✅ | ❌ |
-| Streams (4 ops) | ✅ | ✅ | ❌ | ❌ |
+| Streams (4 ops) | ✅ | ✅ | ✅ | ❌ |
 | Global Tables (6 ops) | ❌ | ✅ | ❌ | ❌ |
 
 **Legend**: ✅ Full | ⚠️ Partial | ❌ Missing

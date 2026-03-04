@@ -1,6 +1,6 @@
 # Rust Implementation Status
 
-**Status:** M2 Phase 1 Complete
+**Status:** M3 Phase 3 Complete
 
 ## Overview
 
@@ -8,20 +8,21 @@ Rust implementation using Axum framework with SQLite backend.
 
 ## Summary
 
-- **Operations**: 34/61 (56%)
-- **Tests**: 85 passing
+- **Operations**: 47/61 (77%)
+- **Tests**: 99 passing
 - **M1 Foundation**: ✅ Complete
 - **M2 Phase 1**: ✅ Complete (UpdateTable, Batch, TTL, ConditionExpressions)
 - **M2 Phase 2**: ✅ Complete (Transactions)
-- **M3 Phase 1**: ✅ Complete (Backup/Restore)
-- **M3 Phase 2**: ✅ Complete (PITR)
+- **M3 Phase 1**: ✅ Complete (Backup/Restore, PITR)
+- **M3 Phase 2**: ✅ Complete (PartiQL, Import/Export, FilterExpression)
+- **M3 Phase 3**: ✅ Complete (Streams, Global Tables)
 
-## Implemented Operations (34/61)
+## Implemented Operations (47/61)
 
-### Control Plane (9 operations)
+### Control Plane (10 operations)
 | Operation | Status | Notes |
 |-----------|--------|-------|
-| CreateTable | ✅ | Full GSI/LSI support |
+| CreateTable | ✅ | Full GSI/LSI support + Streams |
 | DeleteTable | ✅ | |
 | ListTables | ✅ | Basic implementation |
 | DescribeTable | ✅ | |
@@ -30,6 +31,7 @@ Rust implementation using Axum framework with SQLite backend.
 | TagResource | ⚠️ | Stub only |
 | UntagResource | ⚠️ | Stub only |
 | ListTagsOfResource | ⚠️ | Stub only |
+| DescribeLimits | ❌ | Not implemented |
 
 ### Data Plane (5 operations)
 | Operation | Status | Notes |
@@ -38,8 +40,8 @@ Rust implementation using Axum framework with SQLite backend.
 | PutItem | ✅ | ReturnValues + ConditionExpression |
 | UpdateItem | ✅ | UpdateExpression + ConditionExpression |
 | DeleteItem | ✅ | ReturnValues + ConditionExpression |
-| Query | ✅ | Basic implementation |
-| Scan | ✅ | Basic implementation |
+| Query | ✅ | With FilterExpression |
+| Scan | ✅ | With FilterExpression |
 
 ### Batch Operations (2/2) ✅
 | Operation | Status | Notes |
@@ -47,11 +49,11 @@ Rust implementation using Axum framework with SQLite backend.
 | BatchGetItem | ✅ | Up to 100 items |
 | BatchWriteItem | ✅ | Up to 25 items |
 
-### TTL (2/2) ✅
+### Transactions (2/2) ✅
 | Operation | Status | Notes |
 |-----------|--------|-------|
-| UpdateTimeToLive | ✅ | Enable/disable TTL |
-| DescribeTimeToLive | ✅ | Get TTL status |
+| TransactGetItems | ✅ | Up to 100 items |
+| TransactWriteItems | ✅ | Put/Update/Delete/ConditionCheck |
 
 ### Condition Expressions ✅
 | Feature | Status |
@@ -67,7 +69,29 @@ Rust implementation using Axum framework with SQLite backend.
 |---------|--------|
 | Query filtering | ✅ |
 | Scan filtering | ✅ |
-| Response counts (count/scanned_count) | ✅ |
+| Response counts | ✅ |
+
+### TTL (2/2) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| UpdateTimeToLive | ✅ | Enable/disable TTL |
+| DescribeTimeToLive | ✅ | Get TTL status |
+
+### Backup/Restore (5/5) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| CreateBackup | ✅ | On-demand backups |
+| DescribeBackup | ✅ | Get backup details |
+| ListBackups | ✅ | List all backups |
+| DeleteBackup | ✅ | Delete backup |
+| RestoreTableFromBackup | ✅ | Restore from backup |
+
+### PITR (3/3) ✅
+| Operation | Status | Notes |
+|-----------|--------|-------|
+| UpdateContinuousBackups | ✅ | Enable/disable PITR |
+| DescribeContinuousBackups | ✅ | Get PITR status |
+| RestoreTableToPointInTime | ✅ | Point-in-time restore |
 
 ### PartiQL (2/2) ✅
 | Operation | Status | Notes |
@@ -85,37 +109,23 @@ Rust implementation using Axum framework with SQLite backend.
 | DescribeImport | ✅ | Get import details |
 | ListImports | ✅ | List all imports |
 
-### Transactions (2/2) ✅
+### Streams (4/4) ✅
 | Operation | Status | Notes |
 |-----------|--------|-------|
-| TransactGetItems | ✅ | Up to 100 items |
-| TransactWriteItems | ✅ | Put, Update, Delete, ConditionCheck |
+| ListStreams | ✅ | List streams with table filter |
+| DescribeStream | ✅ | Get stream details |
+| GetShardIterator | ✅ | All iterator types |
+| GetRecords | ✅ | Read stream records |
 
-### Backup/Restore (5/5) ✅
+### Global Tables (6/6) ✅
 | Operation | Status | Notes |
 |-----------|--------|-------|
-| CreateBackup | ✅ | On-demand backups |
-| DescribeBackup | ✅ | Get backup details |
-| ListBackups | ✅ | List all backups |
-| DeleteBackup | ✅ | Delete backup |
-| RestoreTableFromBackup | ✅ | Restore from backup |
-
-### Import/Export (6/6) ✅
-| Operation | Status | Notes |
-|-----------|--------|-------|
-| ExportTableToPointInTime | ✅ | DynamoDB JSON format to local directory |
-| DescribeExport | ✅ | Get export task details |
-| ListExports | ✅ | List all export tasks |
-| ImportTable | ✅ | Import from DynamoDB JSON format |
-| DescribeImport | ✅ | Get import task details |
-| ListImports | ✅ | List all import tasks |
-
-### PITR (3/3) ✅
-| Operation | Status | Notes |
-|-----------|--------|-------|
-| UpdateContinuousBackups | ✅ | Enable/disable PITR |
-| DescribeContinuousBackups | ✅ | Get PITR status |
-| RestoreTableToPointInTime | ✅ | Point-in-time restore |
+| CreateGlobalTable | ✅ | Create with replicas |
+| UpdateGlobalTable | ✅ | Add/remove replicas |
+| DescribeGlobalTable | ✅ | Get details |
+| ListGlobalTables | ✅ | List all |
+| DeleteGlobalTable | ✅ | Delete global table |
+| UpdateGlobalTableSettings | ✅ | Update settings |
 
 ## Test Summary
 
@@ -123,51 +133,47 @@ Rust implementation using Axum framework with SQLite backend.
 |----------|-------|
 | Models | 5 |
 | Storage | 34 |
-| Items | 20 |
+| Items | 23 |
 | Handlers | 6 |
 | Integration | 3 |
 | Expression | 5 |
-| **Total** | **88** |
+| PartiQL | 6 |
+| Import/Export | 6 |
+| Streams | 3 |
+| Global Tables | 8 |
+| **Total** | **99** |
 
-## Recent Additions (Import/Export)
+## Recent Additions (Batch 4)
 
-1. **ExportTableToPointInTime** - Export table to DynamoDB JSON format
-2. **DescribeExport** - Get export task details
-3. **ListExports** - List all export tasks
-4. **ImportTable** - Import table from DynamoDB JSON format
-5. **DescribeImport** - Get import task details
-6. **ListImports** - List all import tasks
+### Streams (4 operations)
+1. **ListStreams** - List all streams with table filter
+2. **DescribeStream** - Get stream details including shards
+3. **GetShardIterator** - Get iterator for reading records
+4. **GetRecords** - Read records from stream shards
 
-## Recent Additions (Batch 3)
-
-### PartiQL (2 operations)
-1. **ExecuteStatement** - Execute PartiQL queries (SELECT, INSERT, UPDATE, DELETE)
-2. **BatchExecuteStatement** - Execute multiple PartiQL statements
-
-### Import/Export (6 operations)
-3. **ExportTableToPointInTime** - Export table to DynamoDB JSON format
-4. **DescribeExport** - Get export task details
-5. **ListExports** - List all export tasks
-6. **ImportTable** - Import table from DynamoDB JSON format
-7. **DescribeImport** - Get import task details
-8. **ListImports** - List all import tasks
-
-### FilterExpression
-9. **Query with FilterExpression** - Server-side filtering for queries
-10. **Scan with FilterExpression** - Server-side filtering for scans
+### Global Tables (6 operations)
+5. **CreateGlobalTable** - Create global table with replicas
+6. **UpdateGlobalTable** - Add/remove replicas
+7. **DescribeGlobalTable** - Get global table details
+8. **ListGlobalTables** - List all global tables
+9. **DeleteGlobalTable** - Delete global table
+10. **UpdateGlobalTableSettings** - Update global table settings
 
 ## Remaining Work
 
-### M2 Phase 2
-- TransactGetItems (full implementation)
-- TransactWriteItems (full implementation)
+### Missing Operations (14)
 
-### M3 Advanced
-- ✅ Backup/Restore (5 operations) - Complete
-- ✅ PITR (3 operations) - Complete
-- PartiQL (2 operations)
-- Streams (4 operations)
-- ✅ Import/Export (6 operations) - Complete
+| Category | Operations | Priority |
+|----------|------------|----------|
+| Tagging | TagResource, UntagResource, ListTagsOfResource | Low (stubs exist) |
+| Limits | DescribeLimits | Low |
+| Global Tables | DescribeGlobalTableSettings, UpdateReplication | Low |
+| Misc | ConditionCheck (standalone) | Low |
+| Kinesis | 4 operations | Not needed |
+| Insights | 2 operations | Not needed |
+| Policies | 3 operations | Not needed |
+
+**Note**: Most remaining operations are either stubs (tagging), low priority, or not needed for local development (Kinesis, Insights, Policies).
 
 ## See Also
 

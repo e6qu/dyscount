@@ -3,11 +3,13 @@
 //! This is the main entry point for the Rust implementation of Dyscount.
 
 mod expression;
+mod global_tables;
 mod handlers;
 mod items;
 mod models;
 mod partiql;
 mod storage;
+mod stream_manager;
 
 use axum::{
     routing::{get, post},
@@ -18,9 +20,11 @@ use std::sync::Arc;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
+use crate::global_tables::GlobalTableManager;
 use crate::handlers::{dynamodb_handler, health_check, AppState};
 use crate::items::ItemManager;
 use crate::storage::TableManager;
+use crate::stream_manager::StreamManager;
 
 /// Default configuration
 const DEFAULT_HOST: &str = "127.0.0.1";
@@ -74,11 +78,22 @@ async fn main() {
             .expect("Failed to initialize table manager")
     );
 
+    // Initialize stream manager
+    let stream_manager = Arc::new(
+        StreamManager::new(&config.data_directory, &config.namespace)
+    );
+
     // Initialize item manager
-    let item_manager = Arc::new(ItemManager::new(table_manager.clone()));
+    let item_manager = Arc::new(ItemManager::new(table_manager.clone(), stream_manager.clone()));
+
+    // Initialize global table manager
+    let global_table_manager = Arc::new(
+        GlobalTableManager::new(&config.data_directory, &config.namespace, table_manager.clone())
+            .expect("Failed to initialize global table manager")
+    );
 
     // Create application state
-    let app_state = AppState { table_manager, item_manager };
+    let app_state = AppState { table_manager, item_manager, stream_manager, global_table_manager };
 
     // Build router
     let app = Router::new()
@@ -117,8 +132,14 @@ mod integration_tests {
         let table_manager = Arc::new(
             TableManager::new(&temp_dir, "test").unwrap()
         );
-        let item_manager = Arc::new(ItemManager::new(table_manager.clone()));
-        let app_state = AppState { table_manager, item_manager };
+        let stream_manager = Arc::new(
+            StreamManager::new(&temp_dir, "test")
+        );
+        let item_manager = Arc::new(ItemManager::new(table_manager.clone(), stream_manager.clone()));
+        let global_table_manager = Arc::new(
+            GlobalTableManager::new(&temp_dir, "test", table_manager.clone()).unwrap()
+        );
+        let app_state = AppState { table_manager, item_manager, stream_manager, global_table_manager };
 
         Router::new()
             .route("/", post(dynamodb_handler))

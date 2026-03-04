@@ -3,6 +3,7 @@
 use crate::expression::{parse_condition_expression, ExpressionEvaluator};
 use crate::models::*;
 use crate::storage::{StorageError, TableManager};
+use crate::stream_manager::{StreamError, StreamManager};
 use rusqlite::{params, Connection};
 use serde_json;
 use std::collections::HashMap;
@@ -33,16 +34,80 @@ pub enum ItemError {
 /// Manages DynamoDB items in SQLite
 pub struct ItemManager {
     table_manager: Arc<TableManager>,
+    stream_manager: Arc<StreamManager>,
     connections: Mutex<HashMap<String, Connection>>,
 }
 
 impl ItemManager {
     /// Create a new ItemManager
-    pub fn new(table_manager: Arc<TableManager>) -> Self {
+    pub fn new(table_manager: Arc<TableManager>, stream_manager: Arc<StreamManager>) -> Self {
         Self {
             table_manager,
+            stream_manager,
             connections: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Extract key attributes from an item based on key schema
+    fn extract_key_attributes(
+        &self,
+        item: &Item,
+        key_schema: &[KeySchemaElement],
+    ) -> Item {
+        let mut key = Item::new();
+        for ks in key_schema {
+            if let Some(attr) = item.get(&ks.attribute_name) {
+                key.insert(ks.attribute_name.clone(), attr.clone());
+            }
+        }
+        key
+    }
+
+    /// Write a stream record for an item operation
+    fn write_stream_record(
+        &self,
+        table_name: &str,
+        event_name: &str,
+        keys: &Item,
+        new_image: Option<&Item>,
+        old_image: Option<&Item>,
+    ) -> Result<(), StreamError> {
+        // Check if stream is enabled for this table
+        let stream_spec = self.table_manager.get_stream_specification(table_name)?;
+        
+        if let Some(spec) = stream_spec {
+            if !spec.stream_enabled {
+                return Ok(());
+            }
+
+            let view_type = spec.stream_view_type.unwrap_or(StreamViewType::NewAndOldImages);
+            
+            // Generate stream ARN
+            let stream_arn = self.stream_manager.generate_stream_arn(
+                table_name,
+                &format!("{}", chrono::Utc::now().timestamp())
+            );
+
+            // Filter images based on view type
+            let (new_img, old_img) = match view_type {
+                StreamViewType::KeysOnly => (None, None),
+                StreamViewType::NewImage => (new_image, None),
+                StreamViewType::OldImage => (None, old_image),
+                StreamViewType::NewAndOldImages => (new_image, old_image),
+            };
+
+            self.stream_manager.write_stream_record(
+                &stream_arn,
+                table_name,
+                event_name,
+                &view_type,
+                keys,
+                new_img,
+                old_img,
+            )?;
+        }
+
+        Ok(())
     }
 
     /// Get or create a connection for a table
@@ -229,6 +294,19 @@ impl ItemManager {
             params![pk, sk, data, now, now],
         )?;
 
+        // Write stream record
+        let keys = self.extract_key_attributes(item, &metadata.key_schema);
+        let event_name = if existing_item.is_some() { "MODIFY" } else { "INSERT" };
+        if let Err(e) = self.write_stream_record(
+            table_name,
+            event_name,
+            &keys,
+            Some(item),
+            existing_item.as_ref(),
+        ) {
+            error!("Failed to write stream record: {}", e);
+        }
+
         Ok(if return_old { existing_item } else { None })
     }
 
@@ -298,6 +376,18 @@ impl ItemManager {
                 "DELETE FROM items WHERE pk = ? AND (sk IS NULL OR sk = '')",
                 params![pk],
             )?;
+        }
+
+        // Write stream record
+        let keys = self.extract_key_attributes(key, &metadata.key_schema);
+        if let Err(e) = self.write_stream_record(
+            table_name,
+            "REMOVE",
+            &keys,
+            None,
+            existing_item.as_ref(),
+        ) {
+            error!("Failed to write stream record: {}", e);
         }
 
         Ok(if return_old { existing_item } else { None })
@@ -385,6 +475,19 @@ impl ItemManager {
              data = excluded.data, updated_at = excluded.updated_at",
             params![pk, sk.as_deref(), data, now, now],
         )?;
+
+        // Write stream record
+        let keys = self.extract_key_attributes(key, &metadata.key_schema);
+        let event_name = if old_item.is_some() { "MODIFY" } else { "INSERT" };
+        if let Err(e) = self.write_stream_record(
+            table_name,
+            event_name,
+            &keys,
+            Some(&current_item),
+            old_item.as_ref(),
+        ) {
+            error!("Failed to write stream record: {}", e);
+        }
 
         let new_item = if return_values == "ALL_NEW" {
             Some(current_item)
@@ -1023,16 +1126,18 @@ impl ItemManager {
 mod tests {
     use super::*;
     use crate::expression::{parse_condition_expression, ExpressionEvaluator};
+    use crate::stream_manager::StreamManager;
     use std::collections::HashMap;
     use tempfile::TempDir;
 
-    fn setup_test_manager() -> (ItemManager, Arc<TableManager>, TempDir) {
+    fn setup_test_manager() -> (ItemManager, Arc<TableManager>, Arc<StreamManager>, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let table_manager = Arc::new(
             TableManager::new(temp_dir.path(), "test").unwrap()
         );
-        let item_manager = ItemManager::new(table_manager.clone());
-        (item_manager, table_manager, temp_dir)
+        let stream_manager = Arc::new(StreamManager::new(temp_dir.path(), "test"));
+        let item_manager = ItemManager::new(table_manager.clone(), stream_manager.clone());
+        (item_manager, table_manager, stream_manager, temp_dir)
     }
 
     fn create_test_table(tm: &TableManager, name: &str) {
@@ -1054,7 +1159,7 @@ mod tests {
 
     #[test]
     fn test_put_and_get_item() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         let item = {
@@ -1087,7 +1192,7 @@ mod tests {
 
     #[test]
     fn test_update_item() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1130,7 +1235,7 @@ mod tests {
 
     #[test]
     fn test_delete_item() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put item
@@ -1161,7 +1266,7 @@ mod tests {
 
     #[test]
     fn test_query() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put multiple items
@@ -1197,7 +1302,7 @@ mod tests {
 
     #[test]
     fn test_query_with_filter_expression() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put multiple items with different statuses
@@ -1261,7 +1366,7 @@ mod tests {
 
     #[test]
     fn test_scan() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put multiple items
@@ -1287,7 +1392,7 @@ mod tests {
 
     #[test]
     fn test_scan_with_filter_expression() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put multiple items with different categories
@@ -1346,7 +1451,7 @@ mod tests {
 
     #[test]
     fn test_filter_expression_with_functions() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put items with different attributes
@@ -1439,7 +1544,7 @@ mod tests {
 
     #[test]
     fn test_put_item_with_condition_success() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1482,7 +1587,7 @@ mod tests {
 
     #[test]
     fn test_put_item_with_condition_failure() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1527,7 +1632,7 @@ mod tests {
 
     #[test]
     fn test_update_item_with_condition_success() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1572,7 +1677,7 @@ mod tests {
 
     #[test]
     fn test_update_item_with_condition_failure() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1618,7 +1723,7 @@ mod tests {
 
     #[test]
     fn test_delete_item_with_condition_success() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1662,7 +1767,7 @@ mod tests {
 
     #[test]
     fn test_delete_item_with_condition_failure() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item
@@ -1710,7 +1815,7 @@ mod tests {
 
     #[test]
     fn test_attribute_exists_condition() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item with 'name' attribute
@@ -1761,7 +1866,7 @@ mod tests {
 
     #[test]
     fn test_attribute_not_exists_condition() {
-        let (im, tm, _temp) = setup_test_manager();
+        let (im, tm, _stream_manager, _temp) = setup_test_manager();
         create_test_table(&tm, "TestTable");
 
         // Put initial item without 'nickname' attribute

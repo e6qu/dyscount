@@ -360,6 +360,10 @@ pub struct DynamoDBRequest {
     pub update_expression: Option<String>,
     #[serde(rename = "ConditionExpression")]
     pub condition_expression: Option<String>,
+
+    // Stream operations
+    #[serde(rename = "StreamSpecification")]
+    pub stream_specification: Option<StreamSpecification>,
 }
 
 /// DynamoDB response wrapper
@@ -375,6 +379,14 @@ pub struct DynamoDBResponse {
     pub tags: Option<Vec<Tag>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoints: Option<Vec<Endpoint>>,
+
+    // Global Tables fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "GlobalTableDescription")]
+    pub global_table_description: Option<GlobalTableDescription>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "GlobalTables")]
+    pub global_tables: Option<Vec<GlobalTableSummary>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "LastEvaluatedGlobalTableName")]
+    pub last_evaluated_global_table_name: Option<String>,
 
     // Backup fields
     #[serde(skip_serializing_if = "Option::is_none", rename = "BackupDescription")]
@@ -425,6 +437,16 @@ pub struct DynamoDBResponse {
     pub import_description: Option<ImportDescription>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ImportSummaries")]
     pub import_summaries: Option<Vec<ImportSummary>>,
+
+    // Streams fields
+    #[serde(skip_serializing_if = "Option::is_none", rename = "Streams")]
+    pub streams: Option<Vec<Stream>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "StreamDescription")]
+    pub stream_description: Option<StreamDescription>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ShardIterator")]
+    pub shard_iterator: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "Records")]
+    pub records: Option<Vec<Record>>,
 }
 
 /// Endpoint information
@@ -1394,6 +1416,508 @@ pub struct ImportMetadata {
     pub end_time: Option<DateTime<Utc>>,
     pub failure_code: Option<String>,
     pub failure_message: Option<String>,
+}
+
+// ============== DynamoDB Streams Operations ==============
+
+/// Stream status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum StreamStatus {
+    #[serde(rename = "ENABLING")]
+    Enabling,
+    #[serde(rename = "ENABLED")]
+    Enabled,
+    #[serde(rename = "DISABLING")]
+    Disabling,
+    #[serde(rename = "DISABLED")]
+    Disabled,
+}
+
+impl std::fmt::Display for StreamStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StreamStatus::Enabling => write!(f, "ENABLING"),
+            StreamStatus::Enabled => write!(f, "ENABLED"),
+            StreamStatus::Disabling => write!(f, "DISABLING"),
+            StreamStatus::Disabled => write!(f, "DISABLED"),
+        }
+    }
+}
+
+/// Stream view type - determines what data is captured in stream records
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum StreamViewType {
+    #[serde(rename = "NEW_IMAGE")]
+    NewImage,
+    #[serde(rename = "OLD_IMAGE")]
+    OldImage,
+    #[serde(rename = "NEW_AND_OLD_IMAGES")]
+    NewAndOldImages,
+    #[serde(rename = "KEYS_ONLY")]
+    KeysOnly,
+}
+
+impl std::fmt::Display for StreamViewType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StreamViewType::NewImage => write!(f, "NEW_IMAGE"),
+            StreamViewType::OldImage => write!(f, "OLD_IMAGE"),
+            StreamViewType::NewAndOldImages => write!(f, "NEW_AND_OLD_IMAGES"),
+            StreamViewType::KeysOnly => write!(f, "KEYS_ONLY"),
+        }
+    }
+}
+
+/// Stream specification for creating/updating tables with streams
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StreamSpecification {
+    #[serde(rename = "StreamEnabled")]
+    pub stream_enabled: bool,
+    #[serde(rename = "StreamViewType")]
+    pub stream_view_type: Option<StreamViewType>,
+}
+
+/// Stream record summary (used in ListStreams response)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Stream {
+    #[serde(rename = "StreamArn")]
+    pub stream_arn: String,
+    #[serde(rename = "StreamLabel")]
+    pub stream_label: String,
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "StreamStatus")]
+    pub stream_status: String,
+}
+
+/// Sequence number range for a shard
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SequenceNumberRange {
+    #[serde(rename = "StartingSequenceNumber")]
+    pub starting_sequence_number: String,
+    #[serde(rename = "EndingSequenceNumber", skip_serializing_if = "Option::is_none")]
+    pub ending_sequence_number: Option<String>,
+}
+
+/// Shard - a partition of a stream
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Shard {
+    #[serde(rename = "ShardId")]
+    pub shard_id: String,
+    #[serde(rename = "ParentShardId", skip_serializing_if = "Option::is_none")]
+    pub parent_shard_id: Option<String>,
+    #[serde(rename = "SequenceNumberRange")]
+    pub sequence_number_range: SequenceNumberRange,
+}
+
+/// Stream description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StreamDescription {
+    #[serde(rename = "StreamArn")]
+    pub stream_arn: String,
+    #[serde(rename = "StreamLabel")]
+    pub stream_label: String,
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "StreamStatus")]
+    pub stream_status: String,
+    #[serde(rename = "StreamViewType")]
+    pub stream_view_type: StreamViewType,
+    #[serde(rename = "CreationDateTime")]
+    pub creation_date_time: DateTime<Utc>,
+    #[serde(rename = "Shards", skip_serializing_if = "Option::is_none")]
+    pub shards: Option<Vec<Shard>>,
+}
+
+/// Stream record data (the DynamoDB portion)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StreamRecord {
+    #[serde(rename = "ApproximateCreationDateTime")]
+    pub approximate_creation_date_time: DateTime<Utc>,
+    #[serde(rename = "Keys")]
+    pub keys: Item,
+    #[serde(rename = "NewImage", skip_serializing_if = "Option::is_none")]
+    pub new_image: Option<Item>,
+    #[serde(rename = "OldImage", skip_serializing_if = "Option::is_none")]
+    pub old_image: Option<Item>,
+    #[serde(rename = "SequenceNumber")]
+    pub sequence_number: String,
+    #[serde(rename = "SizeBytes")]
+    pub size_bytes: i64,
+    #[serde(rename = "StreamViewType")]
+    pub stream_view_type: StreamViewType,
+}
+
+/// Stream record wrapper (includes metadata)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Record {
+    #[serde(rename = "eventID")]
+    pub event_id: String,
+    #[serde(rename = "eventName")]
+    pub event_name: String, // INSERT, MODIFY, REMOVE
+    #[serde(rename = "eventVersion")]
+    pub event_version: String,
+    #[serde(rename = "awsRegion")]
+    pub aws_region: String,
+    #[serde(rename = "dynamodb")]
+    pub dynamodb: StreamRecord,
+    #[serde(rename = "eventSource")]
+    pub event_source: String,
+}
+
+/// Shard iterator type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ShardIteratorType {
+    #[serde(rename = "TRIM_HORIZON")]
+    TrimHorizon,
+    #[serde(rename = "LATEST")]
+    Latest,
+    #[serde(rename = "AT_SEQUENCE_NUMBER")]
+    AtSequenceNumber,
+    #[serde(rename = "AFTER_SEQUENCE_NUMBER")]
+    AfterSequenceNumber,
+    #[serde(rename = "AT_TIMESTAMP")]
+    AtTimestamp,
+}
+
+/// ListStreams request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListStreamsRequest {
+    #[serde(rename = "TableName", skip_serializing_if = "Option::is_none")]
+    pub table_name: Option<String>,
+    #[serde(rename = "ExclusiveStartStreamArn", skip_serializing_if = "Option::is_none")]
+    pub exclusive_start_stream_arn: Option<String>,
+    #[serde(rename = "Limit", skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i32>,
+}
+
+/// ListStreams response
+#[derive(Debug, Serialize)]
+pub struct ListStreamsResponse {
+    #[serde(rename = "Streams")]
+    pub streams: Vec<Stream>,
+    #[serde(rename = "LastEvaluatedStreamArn", skip_serializing_if = "Option::is_none")]
+    pub last_evaluated_stream_arn: Option<String>,
+}
+
+/// DescribeStream request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeStreamRequest {
+    #[serde(rename = "StreamArn")]
+    pub stream_arn: String,
+    #[serde(rename = "ExclusiveStartShardId", skip_serializing_if = "Option::is_none")]
+    pub exclusive_start_shard_id: Option<String>,
+    #[serde(rename = "Limit", skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i32>,
+}
+
+/// DescribeStream response
+#[derive(Debug, Serialize)]
+pub struct DescribeStreamResponse {
+    #[serde(rename = "StreamDescription")]
+    pub stream_description: StreamDescription,
+}
+
+/// GetShardIterator request
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetShardIteratorRequest {
+    #[serde(rename = "StreamArn")]
+    pub stream_arn: String,
+    #[serde(rename = "ShardId")]
+    pub shard_id: String,
+    #[serde(rename = "ShardIteratorType")]
+    pub shard_iterator_type: ShardIteratorType,
+    #[serde(rename = "SequenceNumber", skip_serializing_if = "Option::is_none")]
+    pub sequence_number: Option<String>,
+    #[serde(rename = "Timestamp", skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<DateTime<Utc>>,
+}
+
+/// GetShardIterator response
+#[derive(Debug, Serialize)]
+pub struct GetShardIteratorResponse {
+    #[serde(rename = "ShardIterator", skip_serializing_if = "Option::is_none")]
+    pub shard_iterator: Option<String>,
+}
+
+/// GetRecords request
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetRecordsRequest {
+    #[serde(rename = "ShardIterator")]
+    pub shard_iterator: String,
+    #[serde(rename = "Limit", skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i32>,
+}
+
+/// GetRecords response
+#[derive(Debug, Serialize)]
+pub struct GetRecordsResponse {
+    #[serde(rename = "Records")]
+    pub records: Vec<Record>,
+    #[serde(rename = "NextShardIterator", skip_serializing_if = "Option::is_none")]
+    pub next_shard_iterator: Option<String>,
+}
+
+/// Internal stream metadata stored in table metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamMetadata {
+    pub stream_arn: String,
+    pub stream_label: String,
+    pub table_name: String,
+    pub stream_status: String,
+    pub stream_view_type: StreamViewType,
+    pub creation_date_time: DateTime<Utc>,
+}
+
+/// Internal stream record stored in database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamRecordInternal {
+    pub sequence_number: String,
+    pub event_id: String,
+    pub event_name: String,
+    pub table_name: String,
+    pub stream_view_type: StreamViewType,
+    pub approximate_creation_date_time: DateTime<Utc>,
+    pub keys: Item,
+    pub new_image: Option<Item>,
+    pub old_image: Option<Item>,
+    pub size_bytes: i64,
+}
+
+// ============== Global Tables Operations ==============
+
+/// Global table status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum GlobalTableStatus {
+    #[serde(rename = "CREATING")]
+    Creating,
+    #[serde(rename = "ACTIVE")]
+    Active,
+    #[serde(rename = "DELETING")]
+    Deleting,
+    #[serde(rename = "UPDATING")]
+    Updating,
+}
+
+impl std::fmt::Display for GlobalTableStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GlobalTableStatus::Creating => write!(f, "CREATING"),
+            GlobalTableStatus::Active => write!(f, "ACTIVE"),
+            GlobalTableStatus::Deleting => write!(f, "DELETING"),
+            GlobalTableStatus::Updating => write!(f, "UPDATING"),
+        }
+    }
+}
+
+/// Replica status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ReplicaStatus {
+    #[serde(rename = "CREATING")]
+    Creating,
+    #[serde(rename = "CREATION_FAILED")]
+    CreationFailed,
+    #[serde(rename = "ACTIVE")]
+    Active,
+    #[serde(rename = "DELETING")]
+    Deleting,
+    #[serde(rename = "DELETION_FAILED")]
+    DeletionFailed,
+}
+
+impl std::fmt::Display for ReplicaStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReplicaStatus::Creating => write!(f, "CREATING"),
+            ReplicaStatus::CreationFailed => write!(f, "CREATION_FAILED"),
+            ReplicaStatus::Active => write!(f, "ACTIVE"),
+            ReplicaStatus::Deleting => write!(f, "DELETING"),
+            ReplicaStatus::DeletionFailed => write!(f, "DELETION_FAILED"),
+        }
+    }
+}
+
+/// Replica definition (for create/update)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Replica {
+    #[serde(rename = "RegionName")]
+    pub region_name: String,
+}
+
+/// Replica description (for describe/list responses)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReplicaDescription {
+    #[serde(rename = "RegionName")]
+    pub region_name: String,
+    #[serde(rename = "ReplicaStatus")]
+    pub replica_status: String,
+    #[serde(rename = "KMSMasterKeyId", skip_serializing_if = "Option::is_none")]
+    pub kms_master_key_id: Option<String>,
+}
+
+/// Global table (simplified representation)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GlobalTable {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "ReplicationGroup")]
+    pub replication_group: Vec<Replica>,
+}
+
+/// Global table description
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GlobalTableDescription {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "GlobalTableStatus")]
+    pub global_table_status: String,
+    #[serde(rename = "GlobalTableArn", skip_serializing_if = "Option::is_none")]
+    pub global_table_arn: Option<String>,
+    #[serde(rename = "CreationDateTime")]
+    pub creation_date_time: DateTime<Utc>,
+    #[serde(rename = "ReplicationGroup")]
+    pub replication_group: Vec<ReplicaDescription>,
+}
+
+/// CreateGlobalTable request
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateGlobalTableRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "ReplicationGroup")]
+    pub replication_group: Vec<Replica>,
+}
+
+/// CreateGlobalTable response
+#[derive(Debug, Serialize)]
+pub struct CreateGlobalTableResponse {
+    #[serde(rename = "GlobalTableDescription")]
+    pub global_table_description: GlobalTableDescription,
+}
+
+/// UpdateGlobalTable request
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateGlobalTableRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "ReplicaUpdates")]
+    pub replica_updates: Vec<ReplicaUpdate>,
+}
+
+/// UpdateGlobalTable response
+#[derive(Debug, Serialize)]
+pub struct UpdateGlobalTableResponse {
+    #[serde(rename = "GlobalTableDescription")]
+    pub global_table_description: GlobalTableDescription,
+}
+
+/// DescribeGlobalTable request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DescribeGlobalTableRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+}
+
+/// DescribeGlobalTable response
+#[derive(Debug, Serialize)]
+pub struct DescribeGlobalTableResponse {
+    #[serde(rename = "GlobalTableDescription")]
+    pub global_table_description: GlobalTableDescription,
+}
+
+/// ListGlobalTables request
+#[derive(Debug, Clone, Deserialize)]
+pub struct ListGlobalTablesRequest {
+    #[serde(rename = "ExclusiveStartGlobalTableName", skip_serializing_if = "Option::is_none")]
+    pub exclusive_start_global_table_name: Option<String>,
+    #[serde(rename = "Limit", skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i32>,
+}
+
+/// Global table summary for ListGlobalTables
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GlobalTableSummary {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "ReplicationGroup")]
+    pub replication_group: Vec<Replica>,
+}
+
+/// ListGlobalTables response
+#[derive(Debug, Serialize)]
+pub struct ListGlobalTablesResponse {
+    #[serde(rename = "GlobalTables")]
+    pub global_tables: Vec<GlobalTableSummary>,
+    #[serde(rename = "LastEvaluatedGlobalTableName", skip_serializing_if = "Option::is_none")]
+    pub last_evaluated_global_table_name: Option<String>,
+}
+
+/// DeleteGlobalTable request
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeleteGlobalTableRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+}
+
+/// DeleteGlobalTable response
+#[derive(Debug, Serialize)]
+pub struct DeleteGlobalTableResponse {
+    #[serde(rename = "GlobalTableDescription")]
+    pub global_table_description: GlobalTableDescription,
+}
+
+/// UpdateGlobalTableSettings request
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateGlobalTableSettingsRequest {
+    #[serde(rename = "GlobalTableName")]
+    pub global_table_name: String,
+    #[serde(rename = "GlobalTableBillingMode", skip_serializing_if = "Option::is_none")]
+    pub global_table_billing_mode: Option<String>,
+    #[serde(rename = "GlobalTableProvisionedWriteCapacityUnits", skip_serializing_if = "Option::is_none")]
+    pub global_table_provisioned_write_capacity: Option<i64>,
+    #[serde(rename = "GlobalTableProvisionedReadCapacityUnits", skip_serializing_if = "Option::is_none")]
+    pub global_table_provisioned_read_capacity: Option<i64>,
+}
+
+/// UpdateGlobalTableSettings response
+#[derive(Debug, Serialize)]
+pub struct UpdateGlobalTableSettingsResponse {
+    #[serde(rename = "GlobalTableDescription")]
+    pub global_table_description: GlobalTableDescription,
+}
+
+/// Replica update for UpdateGlobalTable
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReplicaUpdate {
+    #[serde(rename = "Create", skip_serializing_if = "Option::is_none")]
+    pub create: Option<CreateReplicaAction>,
+    #[serde(rename = "Delete", skip_serializing_if = "Option::is_none")]
+    pub delete: Option<DeleteReplicaAction>,
+}
+
+/// Create replica action
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CreateReplicaAction {
+    #[serde(rename = "RegionName")]
+    pub region_name: String,
+}
+
+/// Delete replica action
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DeleteReplicaAction {
+    #[serde(rename = "RegionName")]
+    pub region_name: String,
+}
+
+/// Internal global table metadata stored in database
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalTableMetadata {
+    pub global_table_id: String,
+    pub global_table_name: String,
+    pub global_table_arn: String,
+    pub global_table_status: String,
+    pub creation_date_time: DateTime<Utc>,
+    pub replicas: Vec<ReplicaDescription>,
 }
 
 #[cfg(test)]
