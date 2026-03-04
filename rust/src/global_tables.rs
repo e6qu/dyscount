@@ -513,6 +513,193 @@ impl GlobalTableManager {
         self.describe_global_table(&req.global_table_name)
     }
 
+    /// Describe global table settings including replica settings
+    pub fn describe_global_table_settings(
+        &self,
+        global_table_name: &str,
+    ) -> Result<(String, Vec<ReplicaSettingsDescription>), GlobalTableError> {
+        let conn = self.get_metadata_connection()?;
+
+        // Get global table metadata
+        let (global_table_id, _global_table_arn, _creation_date_time, underlying_table_name): (
+            String,
+            String,
+            String,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT global_table_id, global_table_arn, creation_date_time, underlying_table_name 
+                 FROM global_tables WHERE global_table_name = ?",
+                [global_table_name],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                    ))
+                },
+            )
+            .map_err(|_| GlobalTableError::GlobalTableNotFound(global_table_name.to_string()))?;
+
+        // Get replica settings with detailed information
+        let replica_settings = self.get_replica_settings(&conn, &global_table_id, &underlying_table_name)?;
+
+        Ok((global_table_name.to_string(), replica_settings))
+    }
+
+    /// Update replication configuration for a global table
+    pub fn update_replication(
+        &self,
+        req: &UpdateReplicationRequest,
+    ) -> Result<GlobalTableDescription, GlobalTableError> {
+        let conn = self.get_metadata_connection()?;
+
+        // Get global table metadata
+        let (global_table_id, global_table_arn, creation_date_time, _): (
+            String,
+            String,
+            String,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT global_table_id, global_table_arn, creation_date_time, underlying_table_name 
+                 FROM global_tables WHERE global_table_name = ?",
+                [&req.global_table_name],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                    ))
+                },
+            )
+            .map_err(|_| GlobalTableError::GlobalTableNotFound(req.global_table_name.clone()))?;
+
+        // Process replica updates (similar to UpdateGlobalTable but with Update support)
+        for update in &req.replica_updates {
+            // Handle Create
+            if let Some(create) = &update.create {
+                // Check if replica already exists
+                let existing: Option<String> = conn
+                    .query_row(
+                        "SELECT replica_id FROM replicas WHERE global_table_id = ? AND region_name = ?",
+                        params![&global_table_id, &create.region_name],
+                        |row| row.get(0),
+                    )
+                    .ok();
+
+                if existing.is_some() {
+                    return Err(GlobalTableError::ReplicaAlreadyExists(
+                        create.region_name.clone(),
+                    ));
+                }
+
+                let replica_id = Uuid::new_v4().to_string();
+                conn.execute(
+                    "INSERT INTO replicas (replica_id, global_table_id, region_name, replica_status)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![replica_id, global_table_id, create.region_name, "ACTIVE"],
+                )?;
+            }
+
+            // Handle Delete
+            if let Some(delete) = &update.delete {
+                let result = conn.execute(
+                    "DELETE FROM replicas WHERE global_table_id = ? AND region_name = ?",
+                    params![&global_table_id, &delete.region_name],
+                )?;
+
+                if result == 0 {
+                    return Err(GlobalTableError::ReplicaNotFound(delete.region_name.clone()));
+                }
+            }
+
+            // Handle Update (simplified - just validates existence)
+            if let Some(update_action) = &update.update {
+                let existing: Option<String> = conn
+                    .query_row(
+                        "SELECT replica_id FROM replicas WHERE global_table_id = ? AND region_name = ?",
+                        params![&global_table_id, &update_action.region_name],
+                        |row| row.get(0),
+                    )
+                    .ok();
+
+                if existing.is_none() {
+                    return Err(GlobalTableError::ReplicaNotFound(update_action.region_name.clone()));
+                }
+                // In a full implementation, this would update KMS key, etc.
+            }
+        }
+
+        // Get updated replicas
+        let replicas = self.get_replicas(&conn, &global_table_id)?;
+
+        Ok(GlobalTableDescription {
+            global_table_name: req.global_table_name.clone(),
+            global_table_status: "ACTIVE".to_string(),
+            global_table_arn: Some(global_table_arn),
+            creation_date_time: DateTime::parse_from_rfc3339(&creation_date_time)
+                .map_err(|_| GlobalTableError::InvalidKey("Invalid date format".to_string()))?
+                .with_timezone(&Utc),
+            replication_group: replicas,
+        })
+    }
+
+    /// Helper: Get detailed replica settings
+    fn get_replica_settings(
+        &self,
+        conn: &Connection,
+        global_table_id: &str,
+        underlying_table_name: &str,
+    ) -> Result<Vec<ReplicaSettingsDescription>, GlobalTableError> {
+        let mut stmt = conn.prepare(
+            "SELECT region_name, replica_status FROM replicas WHERE global_table_id = ?"
+        )?;
+
+        let rows = stmt.query_map([global_table_id], |row| {
+            let region_name: String = row.get(0)?;
+            let replica_status: String = row.get(1)?;
+            
+            // Get the underlying table's billing mode for this replica
+            // In local implementation, all replicas share the same underlying table settings
+            let billing_mode = self.get_table_billing_mode(underlying_table_name);
+            
+            Ok(ReplicaSettingsDescription {
+                region_name,
+                replica_status,
+                replica_billing_mode_summary: Some(BillingModeSummary {
+                    billing_mode: billing_mode.clone(),
+                    last_update_to_pay_per_request_date_time: None,
+                }),
+                // For PAY_PER_REQUEST, these are None; for PROVISIONED, they would have values
+                replica_provisioned_read_capacity: if billing_mode == "PROVISIONED" { Some(5) } else { None },
+                replica_provisioned_write_capacity: if billing_mode == "PROVISIONED" { Some(5) } else { None },
+            })
+        })?;
+
+        let mut replica_settings = Vec::new();
+        for row in rows {
+            replica_settings.push(row?);
+        }
+
+        Ok(replica_settings)
+    }
+
+    /// Helper: Get table billing mode (simplified - checks underlying table)
+    fn get_table_billing_mode(&self, table_name: &str) -> String {
+        // Try to get the actual billing mode from the table
+        match self.table_manager.describe_table(table_name) {
+            Ok(metadata) => {
+                metadata.billing_mode_summary
+                    .map(|b| b.billing_mode)
+                    .unwrap_or_else(|| "PAY_PER_REQUEST".to_string())
+            }
+            Err(_) => "PAY_PER_REQUEST".to_string(), // Default
+        }
+    }
+
     /// Helper: Get replica descriptions for a global table
     fn get_replicas(
         &self,
@@ -778,6 +965,133 @@ mod tests {
 
         // Verify it's deleted
         let result = manager.describe_global_table("TestGlobalTable");
+        assert!(matches!(
+            result,
+            Err(GlobalTableError::GlobalTableNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_describe_global_table_settings() {
+        let (manager, _temp) = setup_test_manager();
+
+        // Create global table with two replicas
+        let req = CreateGlobalTableRequest {
+            global_table_name: "TestGlobalTable".to_string(),
+            replication_group: vec![
+                Replica {
+                    region_name: "us-east-1".to_string(),
+                },
+                Replica {
+                    region_name: "eu-west-1".to_string(),
+                },
+            ],
+        };
+        manager.create_global_table(&req).unwrap();
+
+        // Describe settings
+        let (name, settings) = manager.describe_global_table_settings("TestGlobalTable").unwrap();
+        assert_eq!(name, "TestGlobalTable");
+        assert_eq!(settings.len(), 2);
+        
+        // Verify each replica has settings
+        for setting in &settings {
+            assert_eq!(setting.replica_status, "ACTIVE");
+            assert!(setting.replica_billing_mode_summary.is_some());
+        }
+    }
+
+    #[test]
+    fn test_describe_global_table_settings_not_found() {
+        let (manager, _temp) = setup_test_manager();
+
+        let result = manager.describe_global_table_settings("NonExistent");
+        assert!(matches!(
+            result,
+            Err(GlobalTableError::GlobalTableNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn test_update_replication_add_replica() {
+        let (manager, _temp) = setup_test_manager();
+
+        // Create global table with one replica
+        let create_req = CreateGlobalTableRequest {
+            global_table_name: "TestGlobalTable".to_string(),
+            replication_group: vec![Replica {
+                region_name: "us-east-1".to_string(),
+            }],
+        };
+        manager.create_global_table(&create_req).unwrap();
+
+        // Add another replica using UpdateReplication
+        let update_req = UpdateReplicationRequest {
+            global_table_name: "TestGlobalTable".to_string(),
+            replica_updates: vec![ReplicaUpdateForReplication {
+                create: Some(CreateReplicaAction {
+                    region_name: "ap-southeast-1".to_string(),
+                }),
+                delete: None,
+                update: None,
+            }],
+        };
+
+        let desc = manager.update_replication(&update_req).unwrap();
+        assert_eq!(desc.replication_group.len(), 2);
+    }
+
+    #[test]
+    fn test_update_replication_delete_replica() {
+        let (manager, _temp) = setup_test_manager();
+
+        // Create global table with two replicas
+        let create_req = CreateGlobalTableRequest {
+            global_table_name: "TestGlobalTable".to_string(),
+            replication_group: vec![
+                Replica {
+                    region_name: "us-east-1".to_string(),
+                },
+                Replica {
+                    region_name: "eu-west-1".to_string(),
+                },
+            ],
+        };
+        manager.create_global_table(&create_req).unwrap();
+
+        // Delete one replica using UpdateReplication
+        let update_req = UpdateReplicationRequest {
+            global_table_name: "TestGlobalTable".to_string(),
+            replica_updates: vec![ReplicaUpdateForReplication {
+                create: None,
+                delete: Some(DeleteReplicaAction {
+                    region_name: "eu-west-1".to_string(),
+                }),
+                update: None,
+            }],
+        };
+
+        let desc = manager.update_replication(&update_req).unwrap();
+        assert_eq!(desc.replication_group.len(), 1);
+        assert_eq!(desc.replication_group[0].region_name, "us-east-1");
+    }
+
+    #[test]
+    fn test_update_replication_not_found() {
+        let (manager, _temp) = setup_test_manager();
+
+        let update_req = UpdateReplicationRequest {
+            global_table_name: "NonExistent".to_string(),
+            replica_updates: vec![ReplicaUpdateForReplication {
+                create: Some(CreateReplicaAction {
+                    region_name: "us-east-1".to_string(),
+                }),
+                delete: None,
+                update: None,
+            }],
+        };
+
+        let result = manager.update_replication(&update_req);
         assert!(matches!(
             result,
             Err(GlobalTableError::GlobalTableNotFound(_))

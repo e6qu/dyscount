@@ -322,6 +322,30 @@ pub async fn dynamodb_handler(
             })?;
             handle_update_global_table_settings(state, request).await
         }
+        "DescribeGlobalTableSettings" => {
+            let request: DescribeGlobalTableSettingsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_global_table_settings(state, request).await
+        }
+        "UpdateReplication" => {
+            let request: UpdateReplicationRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_update_replication(state, request).await
+        }
         // TTL operations
         "UpdateTimeToLive" => {
             let request: UpdateTimeToLiveRequest = serde_json::from_slice(&body).map_err(|e| {
@@ -446,6 +470,30 @@ pub async fn dynamodb_handler(
             })?;
             handle_transact_write_items(state, request).await
         }
+        "ConditionCheck" => {
+            let request: ConditionCheckRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_condition_check(state, request).await
+        }
+        "DescribeLimits" => {
+            let _request: DescribeLimitsRequest = serde_json::from_slice(&body).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse::validation_exception(format!(
+                        "Invalid request body: {}",
+                        e
+                    ))),
+                )
+            })?;
+            handle_describe_limits().await
+        }
         // All other operations use DynamoDBRequest
         _ => {
             let request: DynamoDBRequest = serde_json::from_slice(&body).map_err(|e| {
@@ -470,6 +518,7 @@ pub async fn dynamodb_handler(
                 "UntagResource" => handle_untag_resource(state, request).await,
                 "ListTagsOfResource" => handle_list_tags_of_resource(state, request).await,
                 "DescribeEndpoints" => handle_describe_endpoints().await,
+                "DescribeLimits" => handle_describe_limits().await,
                 // Data plane operations
                 "GetItem" => handle_get_item(state, request).await,
                 "PutItem" => handle_put_item(state, request).await,
@@ -693,7 +742,7 @@ async fn handle_update_table(
 
 /// Handle TagResource operation
 async fn handle_tag_resource(
-    _state: AppState,
+    state: AppState,
     request: DynamoDBRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
     let resource_arn = request.resource_arn.ok_or_else(|| {
@@ -703,20 +752,47 @@ async fn handle_tag_resource(
         )
     })?;
 
-    let _table_name = extract_table_name_from_arn(&resource_arn).ok_or_else(|| {
+    let table_name = extract_table_name_from_arn(&resource_arn).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse::validation_exception("Invalid resource ARN")),
         )
     })?;
 
-    info!("TagResource not yet implemented");
-    Ok(Json(DynamoDBResponse::default()))
+    let tags = request.tags.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception("Tags are required")),
+        )
+    })?;
+
+    match state.table_manager.tag_resource(&table_name, tags) {
+        Ok(()) => {
+            info!("Tagged table: {}", table_name);
+            Ok(Json(DynamoDBResponse::default()))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to tag table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 /// Handle UntagResource operation
 async fn handle_untag_resource(
-    _state: AppState,
+    state: AppState,
     request: DynamoDBRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
     let resource_arn = request.resource_arn.ok_or_else(|| {
@@ -726,20 +802,47 @@ async fn handle_untag_resource(
         )
     })?;
 
-    let _table_name = extract_table_name_from_arn(&resource_arn).ok_or_else(|| {
+    let table_name = extract_table_name_from_arn(&resource_arn).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse::validation_exception("Invalid resource ARN")),
         )
     })?;
 
-    info!("UntagResource not yet implemented");
-    Ok(Json(DynamoDBResponse::default()))
+    let tag_keys = request.tag_keys.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::validation_exception("TagKeys are required")),
+        )
+    })?;
+
+    match state.table_manager.untag_resource(&table_name, tag_keys) {
+        Ok(()) => {
+            info!("Untagged table: {}", table_name);
+            Ok(Json(DynamoDBResponse::default()))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to untag table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 /// Handle ListTagsOfResource operation
 async fn handle_list_tags_of_resource(
-    _state: AppState,
+    state: AppState,
     request: DynamoDBRequest,
 ) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
     let resource_arn = request.resource_arn.ok_or_else(|| {
@@ -749,18 +852,38 @@ async fn handle_list_tags_of_resource(
         )
     })?;
 
-    let _table_name = extract_table_name_from_arn(&resource_arn).ok_or_else(|| {
+    let table_name = extract_table_name_from_arn(&resource_arn).ok_or_else(|| {
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse::validation_exception("Invalid resource ARN")),
         )
     })?;
 
-    info!("ListTagsOfResource not yet implemented");
-    Ok(Json(DynamoDBResponse {
-        tags: Some(Vec::new()),
-        ..Default::default()
-    }))
+    match state.table_manager.list_tags_of_resource(&table_name) {
+        Ok(tags) => {
+            info!("Listed tags for table {}: {} tags found", table_name, tags.len());
+            Ok(Json(DynamoDBResponse {
+                tags: Some(tags),
+                ..Default::default()
+            }))
+        }
+        Err(StorageError::TableNotFound(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    table_name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to list tags for table {}: {}", table_name, e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
 }
 
 /// Handle DescribeEndpoints operation
@@ -2512,6 +2635,171 @@ async fn handle_update_global_table_settings(
             ))
         }
     }
+}
+
+/// Handle DescribeGlobalTableSettings operation
+async fn handle_describe_global_table_settings(
+    state: AppState,
+    request: DescribeGlobalTableSettingsRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.describe_global_table_settings(&request.global_table_name) {
+        Ok((global_table_name, replica_settings)) => {
+            info!(
+                "Described global table settings: {} with {} replicas",
+                global_table_name,
+                replica_settings.len()
+            );
+            Ok(Json(DynamoDBResponse {
+                table_description: Some(TableMetadata {
+                    table_name: global_table_name.clone(),
+                    table_arn: None,
+                    table_id: None,
+                    table_status: "ACTIVE".to_string(),
+                    key_schema: vec![],
+                    attribute_definitions: vec![],
+                    item_count: 0,
+                    table_size_bytes: 0,
+                    creation_date_time: chrono::Utc::now(),
+                    billing_mode_summary: None,
+                    provisioned_throughput: None,
+                    global_secondary_indexes: None,
+                    local_secondary_indexes: None,
+                    tags: None,
+                }),
+                replica_settings: Some(replica_settings),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableNotFound(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Global table not found: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to describe global table settings: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle UpdateReplication operation
+async fn handle_update_replication(
+    state: AppState,
+    request: UpdateReplicationRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    match state.global_table_manager.update_replication(&request) {
+        Ok(global_table_description) => {
+            info!(
+                "Updated replication for global table: {}",
+                global_table_description.global_table_name
+            );
+            Ok(Json(DynamoDBResponse {
+                global_table_description: Some(global_table_description),
+                ..Default::default()
+            }))
+        }
+        Err(GlobalTableError::GlobalTableNotFound(name)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Global table not found: {}",
+                    name
+                ))),
+            ))
+        }
+        Err(GlobalTableError::ReplicaAlreadyExists(region)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Replica already exists in region: {}",
+                    region
+                ))),
+            ))
+        }
+        Err(GlobalTableError::ReplicaNotFound(region)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::validation_exception(format!(
+                    "Replica not found in region: {}",
+                    region
+                ))),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to update replication: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle ConditionCheck operation
+async fn handle_condition_check(
+    state: AppState,
+    request: ConditionCheckRequest,
+) -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let condition_expression = request.condition_expression;
+    let expression_names = request.expression_attribute_names.as_ref();
+    let expression_values = request.expression_attribute_values.as_ref();
+
+    match state.item_manager.condition_check(
+        &request.table_name,
+        &request.key,
+        &condition_expression,
+        expression_names,
+        expression_values,
+    ) {
+        Ok(()) => {
+            // ConditionCheck returns empty response on success
+            Ok(Json(DynamoDBResponse::default()))
+        }
+        Err(ItemError::Storage(StorageError::TableNotFound(_))) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::resource_not_found(format!(
+                    "Table not found: {}",
+                    request.table_name
+                ))),
+            ))
+        }
+        Err(ItemError::ConditionCheckFailed(_)) => {
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::conditional_check_failed(
+                    "The conditional request failed",
+                )),
+            ))
+        }
+        Err(e) => {
+            error!("Failed to condition check: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse::internal_server_error(e.to_string())),
+            ))
+        }
+    }
+}
+
+/// Handle DescribeLimits operation
+async fn handle_describe_limits() -> Result<Json<DynamoDBResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Return default limits for local implementation
+    // These are the maximum allowed values for DynamoDB Local
+    Ok(Json(DynamoDBResponse {
+        account_max_read_capacity_units: Some(100000),
+        account_max_write_capacity_units: Some(100000),
+        table_max_read_capacity_units: Some(100000),
+        table_max_write_capacity_units: Some(100000),
+        ..Default::default()
+    }))
 }
 
 #[cfg(test)]
